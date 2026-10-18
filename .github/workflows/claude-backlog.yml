@@ -1,0 +1,49 @@
+# Place at: .github/workflows/claude-backlog.yml
+# Runs Claude Code on a schedule to work through BACKLOG.md.
+# Each run works on a branch and opens a PR. Emil reviews and merges.
+# Verify input names against https://github.com/anthropics/claude-code-action before first run.
+
+name: Claude backlog worker
+
+on:
+  schedule:
+    - cron: "15 6 * * *"    # 08:15 CEST
+    - cron: "15 18 * * *"   # 20:15 CEST
+  workflow_dispatch:
+
+concurrency:
+  group: claude-backlog
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45      # protects your free Actions minutes
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # or, pay-per-use instead of subscription:
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Read CLAUDE.md, SPEC.md and BACKLOG.md.
+            Follow the "Unattended runs" rules in CLAUDE.md exactly.
+            Work the next unblocked backlog item(s), then open or update the PR.
+          claude_args: "--max-turns 60"
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
