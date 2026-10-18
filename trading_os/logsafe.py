@@ -35,7 +35,7 @@ def run_guarded(main: Callable[[], int], log_dir: Path | None, job: str) -> int:
         if log_dir is not None:
             log_dir.mkdir(parents=True, exist_ok=True)
             stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H%M%SZ")
-            path = log_dir / f"{stamp}_{job}.log"
+            path = log_dir / f"{stamp}_{job.lower()}.log"
             path.write_text("".join(traceback.format_exception(exc)), encoding="utf-8")
             status(f"{job}: full traceback saved to the data repo")
         return 1
