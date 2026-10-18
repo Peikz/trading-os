@@ -262,6 +262,13 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    EP screens (EP-PM, EP-Day, EP-AH) also lowered to price ≥ $1 and market cap ≥ $50M.
    Exception: the Market Light count screen keeps price > $5 (its thresholds were calibrated on that exact screen).
 4. Massive free-tier behaviour for the 2-year backfill (5 calls/min → ~2 hours, run once).
+6. ~~Volume windows in Phase 1~~ — resolved 18 Oct 2026 by Emil: TradingView exposes 10/30/60/90-day
+   average volume only. Until Massive history exists (Phase 2), RVOL = volume / 60-day average volume
+   and every "20-day average" uses the 30-day field. TradingView's own 10-day relative volume is stored
+   as an extra column. Each row records the basis used (`rvol_basis`).
+7. ~~Which EP hits push~~ — resolved 18 Oct 2026 by Emil: every hit is saved; only hits that also pass
+   the alert tier (§4) are pushed. The others are saved with `tier=log`, `pushed=false`.
+8. ~~ADRs~~ — resolved 18 Oct 2026 by Emil: ADRs stay in the universe, with the symbol type stored as a column.
 
 ## 12. References
 
