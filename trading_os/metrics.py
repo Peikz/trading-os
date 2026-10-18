@@ -1,0 +1,71 @@
+"""Metric definitions (SPEC §5).
+
+Phase 1 computes metrics from TradingView fields. Where TradingView's window differs from SPEC,
+the proxy comes from config (SPEC §11.6) and the basis is stored on every row.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from collections.abc import Mapping
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pandas as pd
+
+from trading_os.tv import canonical
+
+NEW_YORK = ZoneInfo("America/New_York")
+
+
+def dollar_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """close × volume."""
+    return close * volume
+
+
+def close_location(close: pd.Series, high: pd.Series, low: pd.Series) -> pd.Series:
+    """(close − low) / (high − low); NaN when the day has no range."""
+    day_range = (high - low).where(high > low)
+    return (close - low) / day_range
+
+
+def average_excluding_today(avg_with_today: pd.Series, volume: pd.Series, days: int) -> pd.Series:
+    """Mean of the previous `days − 1` sessions, from a `days`-session mean that includes today.
+
+    TradingView's average_volume_Nd_calc includes today (docs/fields.md).
+    """
+    prior = (days * avg_with_today - volume) / (days - 1)
+    return prior.where(prior > 0)
+
+
+def relative_volume(volume: pd.Series, avg_excluding_today: pd.Series) -> pd.Series:
+    """Today's volume / average volume excluding today."""
+    return volume / avg_excluding_today
+
+
+def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.DataFrame:
+    """Add the metrics the Phase 1 EOD scans need. Returns a new frame."""
+    out = df.copy()
+    days = int(proxies["rvol_avg_days"])
+    rvol_base = average_excluding_today(
+        out[canonical(str(proxies["rvol_avg_volume"]))], out["volume"], days
+    )
+    out["dollar_volume"] = dollar_volume(out["close"], out["volume"])
+    out["close_loc"] = close_location(out["close"], out["high"], out["low"])
+    out["rvol50"] = relative_volume(out["volume"], rvol_base).replace([np.inf, -np.inf], np.nan)
+    out["rvol_basis"] = f"tv_avg{days}d_excl_today"
+    out["avg_volume_20d"] = out[canonical(str(proxies["avg_volume_20d"]))]
+    out["avg_dollar_volume_20d"] = out[canonical(str(proxies["avg_dollar_volume_20d"]))]
+    out["avg20_basis"] = f"tv:{proxies['avg_volume_20d']}"
+    return out
+
+
+def earnings_flag(
+    earnings_date_last: pd.Series, session: dt.date, previous_session: dt.date
+) -> pd.Series:
+    """True when the last earnings release fell on the signal session or the session before.
+
+    Covers both before-open releases (signal day) and after-close releases (prior session).
+    """
+    release_day = earnings_date_last.dt.tz_convert(NEW_YORK).dt.date
+    return release_day.isin([session, previous_session]).fillna(False).astype(bool)
