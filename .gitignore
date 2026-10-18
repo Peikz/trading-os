@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+
+# Data never lives in this public repo (SPEC §2)
+data/
+data-repo/
+*.parquet
+*.xlsx
+
+# Local-only guide
+START-HERE.md
