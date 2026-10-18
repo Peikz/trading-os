@@ -34,6 +34,10 @@ def is_session(schedule: Schedule, day: dt.date) -> bool:
     return bool(_calendar(schedule.calendar).is_session(pd.Timestamp(day)))
 
 
+def previous_session(schedule: Schedule, session: dt.date) -> dt.date:
+    return _calendar(schedule.calendar).previous_session(pd.Timestamp(session)).date()
+
+
 def in_window(schedule: Schedule, slot: str, now: dt.datetime) -> bool:
     """True when `now` is inside the slot's New York window on a trading day."""
     local = ny_time(schedule, now)
