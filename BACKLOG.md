@@ -5,21 +5,21 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ## Phase 1 — Core scans
 
 ### Setup
-- [ ] Emil: create public repo `trading-os` (add SPEC.md, CLAUDE.md, BACKLOG.md, `.github/workflows/claude-backlog.yml`) and private repo `trading-os-data`
+- [x] Emil: create public repo `trading-os` (add SPEC.md, CLAUDE.md, BACKLOG.md, `.github/workflows/claude-backlog.yml`) and private repo `trading-os-data` — done 18 Oct via gh; backlog worker disabled until START-HERE Step 6
 - [ ] Emil: fine-grained PAT with contents read/write on `trading-os-data` only → secret `DATA_REPO_TOKEN` in `trading-os`
-- [ ] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules)
-- [ ] Project skeleton: `pyproject.toml`, `ruff`, `pytest`, package layout per CLAUDE.md
-- [ ] `config/scans.yaml` with every threshold from SPEC.md §4 and §6 (Phase 1 scans)
-- [ ] Market calendar + New York time guard (premarket / eod windows, holidays)
+- [ ] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules) — built in `eod.yml`, waiting for the first Actions run
+- [x] Project skeleton: `pyproject.toml`, `ruff`, `pytest`, package layout per CLAUDE.md
+- [x] `config/scans.yaml` with every threshold from SPEC.md §4 and §6 (Phase 1 scans)
+- [x] Market calendar + New York time guard (premarket / eod windows, holidays)
 
 ### Data
-- [ ] TradingView client wrapper: verify field names (SPEC §11.1), print samples, document in `docs/fields.md`
-- [ ] Universe builder: exclusions + logged/alert tiers (SPEC §4)
-- [ ] Metrics module with unit tests (SPEC §5) — Phase 1 uses TradingView fields where they exist
-- [ ] Parquet writer (append-only, partitioned per SPEC §7) + xlsx export
+- [x] TradingView client wrapper: verify field names (SPEC §11.1), print samples, document in `docs/fields.md`
+- [x] Universe builder: exclusions + logged/alert tiers (SPEC §4)
+- [ ] Metrics module with unit tests (SPEC §5) — Phase 1 uses TradingView fields where they exist — partial: dollar volume, close location, RVOL (today removed), 20-day proxies, earnings flag. Rest comes with the scans that need them
+- [x] Parquet writer (append-only, partitioned per SPEC §7) + xlsx export
 
 ### Scans — EOD
-- [ ] EP-Day
+- [ ] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run
 - [ ] EP9M
 - [ ] Momentum Burst up / down
 - [ ] Parabolic Short / Long
@@ -36,12 +36,12 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Growth Bucket 1 and 2 (record quarters checked)
 
 ### Delivery
-- [ ] ntfy notifications (one message per job + failure message)
-- [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/`
+- [ ] ntfy notifications (one message per job + failure message) — built; ticks after the first real push
+- [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — `eod.yml` done; premarket and weekly come with their scans
 - [ ] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2)
 
 ### Validation
-- [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens
+- [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens — started with 16 Oct
 - [ ] 10 consecutive trading days without manual intervention → Phase 1 done
 
 ## Phase 2 — Breakouts and history
@@ -67,7 +67,11 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ---
 
 ## Questions for Emil
+- Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" column (10-day base) and have "Primary listing" switched on? Both change which names show up. The system uses a 59-day RVOL and keeps ADRs and second share classes; `docs/validation.md` in the data repo shows both RVOL columns.
+- EP-Day hits are ranked by gap % (largest first) and the `[earnings]` flag means the last earnings release fell on the signal session or the session before. SPEC doesn't specify either; OK?
 
 ## Blocked
+- 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet. The first Actions run of `eod.yml` waits on them (Emil).
 
 ## Session log
+- 2026-10-18: Repos created; skeleton, config, clock guard, TradingView client (fields verified, see `docs/fields.md`), universe tiers, Phase 1 metrics subset, EP-Day, store, ntfy, `eod.py`, `eod.yml`. Local forced run on 16 Oct data OK. Next: secrets, then the first Actions run of `eod.yml`.
