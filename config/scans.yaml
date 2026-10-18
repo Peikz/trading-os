@@ -12,7 +12,7 @@ universe:                                   # SPEC §4
   market: america
   include_types: [stock, dr]                # common stock + ADRs (SPEC §11.8)
   exclude_exchanges: [OTC]
-  exclude_subtypes: [preferred, unit, warrant, right, etf, etn]
+  exclude_typespecs: [preferred, unit, warrant, right, etf, etn]
   logged:
     price_min: 0.50
     market_cap_min: 50_000_000
@@ -24,7 +24,8 @@ universe:                                   # SPEC §4
     signal_dollar_volume_min: 5_000_000     # SWVL guard, EOD signals
 
 proxies:                                    # SPEC §11.6, Phase 1 only (until Massive history)
-  rvol_avg_volume: average_volume_60d_calc  # SPEC defines RVOL on 50 days, excluding today
+  rvol_avg_volume: average_volume_60d_calc  # SPEC: 50 days excl. today. TV's average includes
+  rvol_avg_days: 60                         # today, so metrics removes it: (60*avg - vol) / 59
   avg_volume_20d: average_volume_30d_calc
   avg_dollar_volume_20d: AvgValue.Traded_30d
 

@@ -26,7 +26,7 @@ UNIVERSE_KEYS = {
     "market",
     "include_types",
     "exclude_exchanges",
-    "exclude_subtypes",
+    "exclude_typespecs",
     "logged",
     "alert",
 }
@@ -37,7 +37,7 @@ ALERT_TIER_KEYS = {
     "avg_volume_20d_min",
     "signal_dollar_volume_min",
 }
-PROXY_KEYS = {"rvol_avg_volume", "avg_volume_20d", "avg_dollar_volume_20d"}
+PROXY_KEYS = {"rvol_avg_volume", "rvol_avg_days", "avg_volume_20d", "avg_dollar_volume_20d"}
 SCHEDULE_KEYS = {"timezone", "calendar", "windows_et"}
 MARKET_LIGHT_KEYS = {
     "qqq": {"symbol", "sma_windows", "slope_lookback"},
