@@ -1,0 +1,117 @@
+# Trading OS — every threshold lives here (SPEC §1.5). Code holds no magic numbers.
+# Change a value only on Emil's decision (CLAUDE.md, hard rules).
+#
+# Units: percentages are percent numbers (10 = 10 %), money is USD, volume is shares.
+# Key suffixes: *_min means >=, *_gt means >, *_below means <, *_max means <=.
+# Slots: pm (pre-market job), eod (end-of-day job), weekly (Sunday job).
+# Actions: push = saved + phone notification, log = saved only. Every scan is always saved.
+
+version: 1
+
+universe:                                   # SPEC §4
+  market: america
+  include_types: [stock, dr]                # common stock + ADRs (SPEC §11.8)
+  exclude_exchanges: [OTC]
+  exclude_subtypes: [preferred, unit, warrant, right, etf, etn]
+  logged:
+    price_min: 0.50
+    market_cap_min: 50_000_000
+    avg_dollar_volume_20d_min: 500_000
+  alert:
+    price_min: 1.00
+    market_cap_min: 50_000_000
+    avg_volume_20d_min: 500_000
+    signal_dollar_volume_min: 5_000_000     # SWVL guard, EOD signals
+
+proxies:                                    # SPEC §11.6, Phase 1 only (until Massive history)
+  rvol_avg_volume: average_volume_60d_calc  # SPEC defines RVOL on 50 days, excluding today
+  avg_volume_20d: average_volume_30d_calc
+  avg_dollar_volume_20d: AvgValue.Traded_30d
+
+schedule:                                   # SPEC §3
+  timezone: America/New_York
+  calendar: XNYS
+  windows_et:
+    pm: ["07:15", "07:55"]
+    eod: ["16:15", "17:30"]
+
+scans:
+  # --- Pre-market (SPEC §6.1) ---
+  ep_pm:
+    {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
+     pm_change_min_pct: 10, price_min: 1.00, pm_volume_min: 50_000, market_cap_min: 50_000_000}
+  ep9m_early:
+    {enabled: true, phase: 1, slot: pm, action: push,
+     pm_volume_min: 500_000, pm_gap_min_pct: 4}
+  watchlist_gappers:
+    {enabled: true, phase: 1, slot: pm, action: push,
+     lists: [bo_watch, ep_watch], pm_gap_min_pct: 2}
+
+  # --- End of day (SPEC §6.2) ---
+  ep_day:
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
+     gap_min_pct: 10, rvol_min: 3, volume_min: 300_000, price_min: 1.00, market_cap_min: 50_000_000}
+  ep_ah:                                    # toggle, default OFF
+    {enabled: false, phase: 1, slot: eod, action: push, push_tier: alert,
+     ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000}
+  ep9m:
+    {enabled: true, phase: 1, slot: eod, action: push,
+     volume_min: 9_000_000, chg_min_pct: 4}
+  mb_up:
+    {enabled: true, phase: 1, slot: eod, action: log,
+     chg_min_pct: 4, volume_min: 100_000, volume_gt_prior: true, close_loc_min: 0.70}
+  mb_down:
+    {enabled: true, phase: 1, slot: eod, action: log,
+     chg_max_pct: -4, volume_min: 100_000, volume_gt_prior: true}
+  parabolic_short:
+    {enabled: true, phase: 1, slot: eod, action: log,
+     lookback_days_max: 10, large_cap_min: 1_000_000_000,
+     gain_min_pct_large_cap: 50, gain_min_pct_small_cap: 200, consec_up_min: 3}
+  parabolic_long:
+    {enabled: true, phase: 1, slot: eod, action: log,
+     lookback_days_max: 10, drop_min_pct: 30, consec_down_min: 3}
+  breadth:                                  # one line in the EOD push
+    {enabled: true, phase: 1, slot: eod, action: push,
+     universe_price_min: 5, universe_volume_min: 100_000,
+     ratio_windows: [5, 10], quarter_move_pct: 25, ma_windows: [20, 40, 50]}
+  universe_snapshot:
+    {enabled: true, phase: 1, slot: eod, action: log}
+
+  # --- Weekly (SPEC §6.3) ---
+  qm_gainers:
+    {enabled: true, phase: 1, slot: weekly, action: push,
+     top_pct: 2, return_windows: [22, 63, 126], adr_min_pct: 4,
+     avg_dollar_volume_20d_min: 10_000_000, price_gt: 5}
+  growth_bucket_1:
+    {enabled: true, phase: 1, slot: weekly, action: push,
+     price_gt: 10, avg_volume_gt: 100_000, rev_growth_q_min_pct: 40,
+     quarters_to_check: 2, annual_revenue_gt: 25_000_000}
+  growth_bucket_2:
+    {enabled: true, phase: 1, slot: weekly, action: push,
+     price_gt: 10, avg_volume_gt: 200_000, eps_growth_q_min_pct: 40,
+     rev_growth_q_min_pct: 20, quarters_to_check: 2}
+
+market_light:                               # SPEC §6.5 — owner's rules, do not change
+  qqq:
+    symbol: NASDAQ:QQQ
+    sma_windows: [10, 20, 50]
+    slope_lookback: 5                       # "SMA20 lower than 5 sessions ago"
+  breadth:
+    strong_ratio10_min: 1.5
+    weak_ratio10_below: 1.0
+    thrust_ratio5_gt: 2.0
+    quarter_move_pct: 25
+  scan_count:                               # this screen must not change
+    country: USA
+    price_gt: 5
+    avg_volume_gt: 500_000
+    perf_3m_min_pct: 50
+    above_sma: 20
+  thresholds:                               # first matching light wins: STOP, RED, GREEN, YELLOW
+    stop_count_below: 5
+    red_count_below: 15
+    green_count_min: 50
+
+notify:                                     # SPEC §8
+  server: https://ntfy.sh
+  max_tickers_per_scan: 10
