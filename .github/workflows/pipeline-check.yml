@@ -1,0 +1,33 @@
+# Manual end-to-end check of the scan jobs on GitHub's runners: TradingView access, Linux
+# dependencies, charts and reports. Forced runs with --no-push into a throwaway folder; needs
+# no secrets and writes nothing anywhere. Logs show counts and status only.
+
+name: Pipeline check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --no-dev
+      - name: EOD (forced, no push)
+        run: uv run --frozen --no-dev python scripts/eod.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+      - name: Pre-market (forced, no push)
+        run: uv run --frozen --no-dev python scripts/premarket.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+      - name: Weekly (forced, no push)
+        run: uv run --frozen --no-dev python scripts/weekly.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+      - name: Files written (counts only)
+        run: |
+          echo "parquet: $(find "$RUNNER_TEMP/data" -name '*.parquet' | wc -l)"
+          echo "charts:  $(find "$RUNNER_TEMP/data" -name '*.png' | wc -l)"
+          echo "reports: $(find "$RUNNER_TEMP/data" -name '*.md' | wc -l)"
