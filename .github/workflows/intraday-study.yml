@@ -1,0 +1,64 @@
+# Minute bars for the entry/exit study of every strategy (Emil, 19 Oct 2026). Only stock-days
+# not asked for before are fetched; files go to the private data repo as assets of the
+# "intraday-minutes" release, not into git (about 1.5 GB). Manual runs only.
+# This repo is public: the job prints counts only.
+
+name: Intraday study minutes
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "stop fetching after N minutes (the next run resumes)"
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  minutes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Stock-days already asked for
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p minutes
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view intraday-minutes -R "$REPO" >/dev/null 2>&1 || gh release create intraday-minutes -R "$REPO" --title "Intraday study minute bars" --notes "Minute bars for the entry/exit study (Alpaca). Per month and run: bars plus the stock-days asked for." >/dev/null
+          gh release download intraday-minutes -R "$REPO" -D minutes -p '*.asked.parquet' 2>/dev/null || true
+          echo "files already there: $(ls minutes | wc -l)"
+          touch minutes/.start
+
+      - name: Fetch
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir data-repo --fetch minutes --minutes "${{ inputs.minutes }}"
+
+      - name: Upload new files
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          new=$(find minutes -name '*_*.parquet' -newer minutes/.start | sort)
+          [ -z "$new" ] && { echo "nothing new"; exit 0; }
+          gh release upload intraday-minutes $new -R "$REPO" --clobber
+          echo "uploaded: $(echo "$new" | wc -l) files"

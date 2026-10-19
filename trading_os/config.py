@@ -44,6 +44,7 @@ TOP_LEVEL_KEYS = {
     "context",
     "ep_history",
     "exits",
+    "intraday_study",
     "sec",
     "report",
     "stats",
@@ -107,6 +108,7 @@ EXIT_KEYS = {
     "target_days",
     "max_days",
 }
+INTRADAY_STUDY_KEYS = {"gap_superset_pct", "ep9m_volume_superset", "pace_fraction"}
 EP_HISTORY_KEYS = {
     "neglect_band_pct",
     "match_days",
@@ -295,6 +297,7 @@ class Config:
     ep_history: Mapping[str, Any]
     sec: Mapping[str, Any]
     exits: Mapping[str, Any]
+    intraday_study: Mapping[str, Any]
     report: Mapping[str, Any]
     stats: Mapping[str, Any]
     notify: Mapping[str, Any]
@@ -349,6 +352,7 @@ def parse_config(raw: Any) -> Config:
     _check_keys("ep_history", raw["ep_history"], EP_HISTORY_KEYS)
     _check_keys("sec", raw["sec"], SEC_KEYS)
     _check_keys("exits", raw["exits"], EXIT_KEYS)
+    _check_keys("intraday_study", raw["intraday_study"], INTRADAY_STUDY_KEYS)
     _check_keys("report", raw["report"], REPORT_KEYS)
     _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
@@ -373,6 +377,7 @@ def parse_config(raw: Any) -> Config:
         ep_history=_freeze(raw["ep_history"]),
         sec=_freeze(raw["sec"]),
         exits=_freeze(raw["exits"]),
+        intraday_study=_freeze(raw["intraday_study"]),
         report=_freeze(raw["report"]),
         stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),
