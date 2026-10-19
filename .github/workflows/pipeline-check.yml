@@ -1,6 +1,7 @@
 # Manual end-to-end check of the scan jobs on GitHub's runners: TradingView access, Linux
-# dependencies, charts and reports. Forced runs with --no-push into a throwaway folder; needs
-# no secrets and writes nothing anywhere. Logs show counts and status only.
+# dependencies, charts and reports. Forced runs into a throwaway folder: writes nothing anywhere
+# and needs no secrets. With `push`, the EOD job also sends its message to ntfy (NTFY_TOPIC).
+# Logs show counts and status only.
 
 name: Pipeline check
 

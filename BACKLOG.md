@@ -38,7 +38,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ### Delivery
 - [ ] ntfy notifications (one message per job + failure message) — built; ticks after the first real push
 - [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday)
-- [ ] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2)
+- [x] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2) — added 19 Oct; a test push from GitHub (`Pipeline check` with push) was accepted by ntfy
 
 ### Validation
 - [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens — started with 16 Oct; `scripts/compare_screen.py` diffs a run against a TradingView CSV export and appends the table (with the reason for each difference) to `docs/validation.md`
