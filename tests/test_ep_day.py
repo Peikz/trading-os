@@ -57,6 +57,7 @@ def test_ranked_by_gap(scan):
 
 
 def test_run_scans_picks_enabled_eod_scans():
-    results = run_scans(pd.DataFrame([row("X")]), load_config(), "eod")
-    assert list(results) == ["ep_day"]
-    assert run_scans(pd.DataFrame([row("X")]), load_config(), "pm") == {}
+    full = row("X", chg_pct=5.0, prev_volume=100_000, close_loc=0.8, ah_change_pct=0.0, ah_volume=0)
+    results = run_scans(pd.DataFrame([full]), load_config(), "eod")
+    assert list(results) == ["ep_day", "ep9m", "mb_up", "mb_down"]  # ep_ah is off by default
+    assert run_scans(pd.DataFrame([full]), load_config(), "pm") == {}

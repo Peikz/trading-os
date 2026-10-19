@@ -42,7 +42,7 @@ scans:
     {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
      pm_change_min_pct: 10, price_min: 1.00, pm_volume_min: 50_000, market_cap_min: 50_000_000}
   ep9m_early:
-    {enabled: true, phase: 1, slot: pm, action: push,
+    {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
      pm_volume_min: 500_000, pm_gap_min_pct: 4}
   watchlist_gappers:
     {enabled: true, phase: 1, slot: pm, action: push,
@@ -55,8 +55,8 @@ scans:
   ep_ah:                                    # toggle, default OFF
     {enabled: false, phase: 1, slot: eod, action: push, push_tier: alert,
      ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000}
-  ep9m:
-    {enabled: true, phase: 1, slot: eod, action: push,
+  ep9m:                                     # EP scan: alert tier pushes (SPEC §11.7)
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
      volume_min: 9_000_000, chg_min_pct: 4}
   mb_up:
     {enabled: true, phase: 1, slot: eod, action: log,

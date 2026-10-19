@@ -23,9 +23,22 @@ SCAN_LABELS = {
     "ep_day": "EP-Day",
     "ep_ah": "EP-AH",
     "ep9m": "EP9M",
+    "mb_up": "MB up",
+    "mb_down": "MB down",
+    "parabolic_short": "Parabolic short",
+    "parabolic_long": "Parabolic long",
     "qm_gainers": "QM gainers",
     "growth_bucket_1": "Growth 1",
     "growth_bucket_2": "Growth 2",
+}
+
+# The percent shown on each line: the move that triggered the scan.
+PCT_COLUMNS = {
+    "ep_pm": "pm_change_pct",
+    "ep9m_early": "pm_gap_pct",
+    "ep_day": "gap_pct",
+    "ep_ah": "ah_change_pct",
+    "ep9m": "chg_pct",
 }
 
 
@@ -50,10 +63,10 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
     return selected
 
 
-def format_hit(row: Mapping[str, Any]) -> str:
-    """`TICKER  +14.2%  RVOL 5.1  $82M  [earnings]` (gap %, RVOL, dollar volume)."""
+def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct") -> str:
+    """`TICKER  +14.2%  RVOL 5.1  $82M  [earnings]` (scan's move %, RVOL, dollar volume)."""
     line = (
-        f"{row['ticker']}  {row['gap_pct']:+.1f}%  RVOL {row['rvol50']:.1f}  "
+        f"{row['ticker']}  {row[pct_column]:+.1f}%  RVOL {row['rvol50']:.1f}  "
         f"{_money(row['dollar_volume'])}"
     )
     if bool(row.get("earnings_flag", False)):
@@ -78,7 +91,8 @@ def build_message(
             blocks.append(f"{label}: no alerts{suffix}")
             continue
         header = f"{label}: {len(chosen)} alert" + (f" of {total} hits" if total else "")
-        lines = [format_hit(row) for row in chosen.to_dict("records")]
+        pct_column = PCT_COLUMNS.get(name, "chg_pct")
+        lines = [format_hit(row, pct_column) for row in chosen.to_dict("records")]
         blocks.append("\n".join([header, *lines]))
     return Message(title=title, body="\n\n".join(blocks) or "No pushing scans ran.")
 

@@ -43,6 +43,8 @@ def test_format_hit_matches_spec():
     assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $82M  [earnings]"
     row |= {"dollar_volume": 2.34e9, "earnings_flag": False}
     assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $2.3B"
+    # EP9M shows the day's change instead of the gap.
+    assert notify.format_hit(row | {"chg_pct": 6.0}, "chg_pct").startswith("ABCD  +6.0%")
 
 
 def test_select_for_push_alert_tier_and_limit():

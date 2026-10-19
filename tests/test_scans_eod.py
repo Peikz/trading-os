@@ -1,0 +1,77 @@
+"""EP9M, Momentum Burst and EP-AH: each threshold on its edge, then one step past it."""
+
+import pandas as pd
+import pytest
+
+from trading_os.config import load_config
+from trading_os.scans.ep import ep9m, ep_ah
+from trading_os.scans.momentum import mb_down, mb_up
+
+
+@pytest.fixture(scope="module")
+def scans():
+    return load_config().scans
+
+
+def run(fn, scan, *rows):
+    return fn(pd.DataFrame(list(rows)), scan)["ticker"].tolist()
+
+
+def ep9m_row(ticker, **kw):
+    return {"ticker": ticker, "volume": 9_000_000, "chg_pct": 4.0} | kw
+
+
+def test_ep9m(scans):
+    s = scans["ep9m"]
+    assert run(ep9m, s, ep9m_row("EDGE")) == ["EDGE"]
+    assert run(ep9m, s, ep9m_row("LOWV", volume=8_999_999)) == []
+    assert run(ep9m, s, ep9m_row("SLOW", chg_pct=3.99)) == []
+    # Ranked by volume, largest first; MA position plays no part.
+    ranked = run(ep9m, s, ep9m_row("A", volume=10_000_000), ep9m_row("B", volume=30_000_000))
+    assert ranked == ["B", "A"]
+
+
+def mb_row(ticker, **kw):
+    base = {"ticker": ticker, "chg_pct": 4.0, "volume": 100_000, "prev_volume": 99_999}
+    return base | {"close_loc": 0.70} | kw
+
+
+def test_mb_up(scans):
+    s = scans["mb_up"]
+    assert run(mb_up, s, mb_row("EDGE")) == ["EDGE"]
+    assert run(mb_up, s, mb_row("SLOW", chg_pct=3.99)) == []
+    assert run(mb_up, s, mb_row("THIN", volume=99_999, prev_volume=50_000)) == []
+    assert run(mb_up, s, mb_row("FLAT", prev_volume=100_000)) == []  # volume must beat prior day
+    assert run(mb_up, s, mb_row("WEAK", close_loc=0.69)) == []
+    assert run(mb_up, s, mb_row("NOPV", prev_volume=float("nan"))) == []
+
+
+def test_mb_down(scans):
+    s = scans["mb_down"]
+    down = {"chg_pct": -4.0, "close_loc": 0.0}
+    assert run(mb_down, s, mb_row("EDGE", **down)) == ["EDGE"]
+    assert run(mb_down, s, mb_row("SOFT", **(down | {"chg_pct": -3.99}))) == []
+    assert run(mb_down, s, mb_row("FLAT", **down, prev_volume=100_000)) == []
+    # No close-location rule on the way down; biggest drop ranks first.
+    ranked = run(
+        mb_down,
+        s,
+        mb_row("A", chg_pct=-5.0, close_loc=0.9),
+        mb_row("B", chg_pct=-12.0, close_loc=0.9),
+    )
+    assert ranked == ["B", "A"]
+
+
+def ah_row(ticker, **kw):
+    base = {"ticker": ticker, "ah_change_pct": 8.0, "close": 1.0, "market_cap": 50_000_000}
+    return base | {"ah_volume": 50_000} | kw
+
+
+def test_ep_ah(scans):
+    s = scans["ep_ah"]
+    assert s.enabled is False
+    assert run(ep_ah, s, ah_row("EDGE")) == ["EDGE"]
+    assert run(ep_ah, s, ah_row("SMALL", ah_change_pct=7.99)) == []
+    assert run(ep_ah, s, ah_row("THIN", ah_volume=49_999)) == []
+    assert run(ep_ah, s, ah_row("SUB1", close=0.99)) == []
+    assert run(ep_ah, s, ah_row("TINY", market_cap=49_999_999)) == []
