@@ -23,13 +23,13 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run
 - [ ] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run
 - [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive, or our own EOD snapshots). History-source question below still open
-- [ ] Breadth line + Market Light count — needs a decision, see Questions
+- [ ] Breadth line + Market Light count — built: breadth row daily (`data/breadth/`), two push lines, light from the owner's table; Sunday scan count (`data/market_light_count/`). Light shows once QQQ's 5-session SMA20 slope and 10 days of counts exist; defaults 1, 4, 5 in Questions
 - [ ] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run
 
 ### Scans — pre-market
 - [ ] EP-PM — built, `premarket.py` + `premarket.yml`; smoke-tested locally; ticks after the first Actions run
-- [ ] EP9M early warning — needs a decision, see Questions
-- [ ] Watchlist gappers (empty watchlist OK until Phase 2) — same gap question as EP9M early warning
+- [ ] EP9M early warning — built (default 3 in Questions); ticks after the first Actions run
+- [ ] Watchlist gappers (empty watchlist OK until Phase 2) — built on the watchlists below (defaults 3, 6); ticks after the first Actions run
 
 ### Scans — weekly
 - [ ] Qullamaggie 1/3/6M gainers — built, `weekly.py` + `weekly.yml`; run locally on the week to 16 Oct (73 hits); ticks after the first Actions run
@@ -51,7 +51,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built: `history_metrics.py` (all SPEC §5, hand-computed tests, 10k tickers × 260 sessions in ~4 s) on `history.py` bars (Massive, else our EOD snapshots). Not wired into the jobs yet: switch from TradingView proxies once history covers 205 sessions
 - [ ] Base detection B2 (configurable heuristic, store intermediates) — built: `breakouts.py` (pivot = base's highest high, zigzag contractions, depths/lows/volume ratios stored); unspecified parameters marked (proposed) in `config/scans.yaml` `breakout:`; waits for history and the 20-hit hand audit
 - [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5
-- [ ] Watchlists: EP-Watch → BO-Watch flow
+- [ ] Watchlists: EP-Watch → BO-Watch flow — built: append-only event log (`data/watchlists/`), add/refresh/move/trigger/expire (default 6 in Questions)
 - [ ] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS needs weights (see Questions)
 - [ ] Hand audit of 20 random breakout hits
 
@@ -67,21 +67,30 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ---
 
 ## Questions for Emil
-- Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" column (10-day base) and have "Primary listing" switched on? Both change which names show up. The system uses a 59-day RVOL and keeps ADRs and second share classes; `docs/validation.md` in the data repo shows both RVOL columns.
-- EP-Day hits are ranked by gap % (largest first) and the `[earnings]` flag means the last earnings release fell on the signal session or the session before. SPEC doesn't specify either; OK?
-- **History for Parabolic, breadth ratios and Market Light.** TradingView serves only the last 2 prior bars (`close[1]`, `close[2]`; `[3]` and beyond are empty). Parabolic needs 10-day gains and 3+ consecutive days, breadth needs 5- and 10-day up/down ratios, and Market Light needs "SMA20 lower than 5 sessions ago". Options: (a) build that history from our own daily universe snapshots, so those parts start working after 5-10 sessions; (b) bring the Massive key forward for a small backfill now; (c) leave them for Phase 2. Recommendation: (a). It's point-in-time by construction and needs nothing from you.
-- **EP9M pushes alert tier only.** I applied SPEC §11.7 ("only alert-tier EP hits push") to EP9M. That means a quiet stock averaging under 500K shares that suddenly trades 9M won't push (it's still saved). Keep that, or push every EP9M hit?
-- **"Gap" in the pre-market scans.** For EP9M early warning (gap >= 4 %) and watchlist gappers (gap >= 2 %): is gap the pre-market price vs prior close (`premarket_change`), or TradingView's "Pre-market Gap" (`premarket_gap`, the first pre-market print vs prior close)? Not built until you say.
-- EP-PM uses the prior close for its price >= $1 floor (same price the alert tier uses). OK?
-- **QM gainers:** the top 2 % is taken over the whole logged-tier universe (~4,000 names), and the ADR / dollar-volume / price floors apply after that, so the list is "top 2 % of the market that also passes the floors". Returns use TradingView's Perf.1M/3M/6M and ADR % uses TradingView's 14-day ADR / close (same nearest-field rule as the volume windows). OK?
-- **Growth buckets:** "avg volume" uses the same 30-day field as the other 20-day averages, and "annual revenue" is trailing-12-month revenue. OK?
-- **Market Light scan count** (Sunday): which average-volume field does your TradingView screen use for "average volume > 500K": 10, 30, 60 or 90 days? Since that screen must not change, it isn't built until you say.
 
-- **CATS score** (Phase 2): SPEC lists the parts (growth-bucket hit + recent MB/EP + RVOL trend − extension penalty) but no weights or windows. What should they be?
+You asked me to keep going without you, so each open choice below runs on a default. Each one
+is a single line in `config/scans.yaml` (marked "proposed") or a small code note. Say the
+word and I flip it.
 
-- **Breakout parameters SPEC leaves open** (marked (proposed) in config): a pullback counts once price comes back >= 1 ADR $ (`swing_adr_mult`); at least 2 contractions; "quiet volume" = base average volume below the 50-day average at the base's start; B4 right side = last 5 sessions with range < 1.5 x ADR $ and volume below the 50-day average. Confirm or change during the 20-hit audit.
-- **Breakout trigger:** it fires on B5 alone and stores B1-B4 for your grade, so C-grade breakouts push too (on random data ~0.6 % of names trigger daily). Push only names that were on BO-Watch (B1-B4 all true yesterday), or at least N of B1-B4?
-- **Breakout push tier:** I applied the alert tier to both breakout scans, the same as EP (SPEC §11.7). OK?
+| # | Choice | Default now running | Where |
+|---|---|---|---|
+| 1 | History for Parabolic, breadth ratios, Market Light | Our own EOD snapshots, plus Massive bars once you add `MASSIVE_API_KEY` (both feed the same loader) | `history.py` |
+| 2 | EP9M push tier | Alert tier only (a quiet stock that suddenly trades 9M is saved, not pushed) | `ep9m.push_tier` |
+| 3 | Pre-market "gap" (EP9M early, watchlist gappers) | `premarket_change` = current pre-market price vs prior close | `pm_gap_basis` |
+| 4 | Market Light scan count: average-volume window | 30-day TradingView average | `market_light.scan_count.avg_volume_field` |
+| 5 | Breadth up count | Stockbee style: up >= 4 % on volume above the prior day (no close-location rule) | `breadth.up_count_rule` |
+| 6 | Watchlist rules | EP-Watch from EP-Day and EP-PM alert hits, expires after 63 sessions; BO-Watch expires after 10 sessions without B1-B4 | `watchlists:` |
+| 7 | Breakout parameters SPEC leaves open | Swing >= 1 ADR $, >= 2 contractions, quiet volume = base avg below 50-day avg, right side = 5 sessions < 1.5 x ADR $ | `breakout:` |
+| 8 | Breakout trigger | Fires on B5 alone, B1-B4 stored for your grade (C grades push too) | `history_scans.py` |
+| 9 | Breakout and EP push tier | Alert tier, same as EP-Day (SPEC §11.7) | `push_tier` |
+| 10 | EP-PM price floor | Prior close | `scans/ep.py` |
+| 11 | QM gainers | Top 2 % over the whole logged-tier universe, then the floors; TradingView Perf.1M/3M/6M and ADR(14)/close | `proxies:` |
+| 12 | Growth buckets | 30-day average volume; annual revenue = trailing 12 months | `growth_bucket_*` |
+| 13 | EP-Day ranking and `[earnings]` flag | Largest gap first; earnings on the signal session or the one before | `scans/ep.py` |
+
+Still open (no default possible):
+- Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
+- **CATS score** (Phase 2): SPEC lists the parts (growth-bucket hit + recent MB/EP + RVOL trend − extension penalty) but no weights or windows.
 
 ## Blocked
 - 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet. The first Actions runs of `eod.yml` and `premarket.yml` wait on them (Emil).
@@ -96,3 +105,4 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - 2026-10-19 (later): Before-shot charts (Phase 3) wired into the EOD and pre-market jobs; a chart failure is logged and never fails the run.
 - 2026-10-19 (later): Breakout B1-B5 detector (Phase 2) with BO-Watch and trigger scans, breakout fields stored in candidates, breakout lines in the push. 10k tickers in ~3 s. Proposed parameters listed under Questions.
 - 2026-10-19 (later): Validation helper (TradingView CSV vs run, with reasons) and DuckDB views builder.
+- 2026-10-19 (later): On Emil's 'continue without me': EP9M early warning, breadth line + Market Light, watchlists + watchlist gappers, all on documented defaults (Questions table). Every Phase 1 scan is now built; waiting on secrets for the first Actions runs.
