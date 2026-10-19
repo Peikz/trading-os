@@ -302,6 +302,14 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    B5-only triggers are still saved with their B-flags (for the audit and the stats); the push counts
    how many were held back. Later the same day Emil asked to see them too: the top 5 B5-only triggers
    follow as one line each with their B-flags, no size or facts (`partial_top_n`).
+13. ~~EP history~~ — decided 19 Oct 2026 by Emil: every EP-Day and EP9M rule hit in the 2-year Massive
+   bars becomes a study row for the EPStudyDatabase ("Found Forward? = No"): point-in-time features (gap,
+   RVOL, ADR, months sideways, move before, 6-month/52-week high, 200d, the market that day) and outcomes
+   after 1 day, 1 week, 1 month, a quarter, half a year and a year (return, best/worst point, stop hit, R)
+   plus trailing exits under the 10/20-day MA. Entry and stop as the live EP alert. EPS/sales growth and
+   earnings timing are inferred from TradingView's quarterly history (no past report dates exist there).
+   The five sheet criteria are yes/no facts; the grade stays the human's. Stored in the data repo
+   (`data/ep_history/`, an EP Log-ordered xlsx in `data/exports/`) and on the dashboard's EP history page.
 
 ## 12. References
 

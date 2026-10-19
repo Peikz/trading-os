@@ -42,6 +42,7 @@ TOP_LEVEL_KEYS = {
     "charts",
     "sizing",
     "context",
+    "ep_history",
     "report",
     "stats",
     "notify",
@@ -94,6 +95,15 @@ OUTCOME_KEYS = {"horizons"}
 CHART_KEYS = {"sessions"}
 REPORT_KEYS = {"max_rows_per_scan"}
 SIZING_KEYS = {"ep_stop_max_adr", "pm_stop_adr", "min_stop_adr", "fx_symbol"}
+EP_HISTORY_KEYS = {
+    "neglect_band_pct",
+    "match_days",
+    "c1_gap_min_pct",
+    "c2_rvol_min",
+    "c3_growth_min_pct",
+    "c4_neglect_min_months",
+    "c5_stop_adr_max",
+}
 CONTEXT_KEYS = {
     "max_per_scan",
     "news_max_tickers",
@@ -270,6 +280,7 @@ class Config:
     charts: Mapping[str, Any]
     sizing: Mapping[str, Any]
     context: Mapping[str, Any]
+    ep_history: Mapping[str, Any]
     report: Mapping[str, Any]
     stats: Mapping[str, Any]
     notify: Mapping[str, Any]
@@ -321,6 +332,7 @@ def parse_config(raw: Any) -> Config:
     _check_keys("sizing", raw["sizing"], SIZING_KEYS)
     _check_numbers("sizing", raw["sizing"])
     _check_keys("context", raw["context"], CONTEXT_KEYS)
+    _check_keys("ep_history", raw["ep_history"], EP_HISTORY_KEYS)
     _check_keys("report", raw["report"], REPORT_KEYS)
     _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
@@ -342,6 +354,7 @@ def parse_config(raw: Any) -> Config:
         charts=_freeze(raw["charts"]),
         sizing=_freeze(raw["sizing"]),
         context=_freeze(raw["context"]),
+        ep_history=_freeze(raw["ep_history"]),
         report=_freeze(raw["report"]),
         stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),

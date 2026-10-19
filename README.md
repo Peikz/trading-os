@@ -79,6 +79,15 @@ Two more local helpers (both print tickers, so never in Actions):
   trades flat to flat, linked to their signal, with R-multiples. See `docs/powerbi.md` for
   Power BI on top.
 
+## EP history
+
+`scripts/ep_history.py --data-dir ../trading-os-data` replays the EP-Day and EP9M rules over the
+Massive bars and writes one row per EP: what was known that day (gap, RVOL, ADR, months sideways,
+the move before, the market) and what happened after (1 day, 1 week, 1 month, a quarter, half a
+year, a year; R with the live entry and stop; exits under the 10/20-day MA). The xlsx in
+`data/exports/` has the EPStudyDatabase's EP Log columns first, ready to import as its own tab.
+The dashboard's EP history page filters and groups it and charts any event with what came after.
+
 ## Dashboard
 
 A private web app over your local clone of the data repo: today's market and pushed scans

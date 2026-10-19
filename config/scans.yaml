@@ -241,6 +241,17 @@ context:                                    # facts under pushed EPs/breakouts (
   spy_symbol: "AMEX:SPY"                    # market header next to QQQ
   vix_symbol: "CBOE:VIX"
 
+ep_history:                                 # EP study over the Massive bars (Emil, 19 Oct 2026)
+  neglect_band_pct: 25                      # (proposed) "sideways" = closes within ±25 % of the
+                                            # pre-gap close; counted back in months of 21 sessions
+  match_days: 10                            # (proposed) a gap within 10 days of the expected
+                                            # report (quarterly rhythm) counts as an earnings EP
+  c1_gap_min_pct: 10                        # EPStudyDatabase's five hard criteria
+  c2_rvol_min: 3
+  c3_growth_min_pct: 50                     # EPS or sales growth YoY
+  c4_neglect_min_months: 3
+  c5_stop_adr_max: 1.5
+
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25
 

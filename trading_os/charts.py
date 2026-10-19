@@ -36,20 +36,26 @@ def before_shot(
     sessions: int,
     pivot: float | None = None,
     order_stop: float | None = None,
+    after: int = 0,
 ) -> Path | None:
-    """Draw one ticker's bars (session_date, open, high, low, close, volume) up to the signal.
+    """Draw one ticker's bars (session_date, open, high, low, close, volume) up to the signal,
+    plus `after` sessions past it (the EP history study shows what happened next).
 
     Returns None when there are no bars to draw. Never overwrites an existing chart.
     """
     if path.exists():
         return path
-    data = bars[bars["session_date"] <= signal_session].sort_values("session_date")
-    if data.empty:
+    ordered = bars.sort_values("session_date")
+    before = ordered[ordered["session_date"] <= signal_session]
+    if before.empty:
         return None
+    later = ordered[ordered["session_date"] > signal_session].head(after)
+    data = pd.concat([before, later])
     closes = data["close"].astype(float)
     mas = {w: closes.rolling(w).mean() for w in MA_COLORS}
-    data = data.tail(sessions).reset_index(drop=True)
-    mas = {w: ma.tail(sessions).reset_index(drop=True) for w, ma in mas.items()}
+    keep = sessions + len(later)
+    data = data.tail(keep).reset_index(drop=True)
+    mas = {w: ma.tail(keep).reset_index(drop=True) for w, ma in mas.items()}
     x = np.arange(len(data))
 
     fig, (ax, vol) = plt.subplots(
