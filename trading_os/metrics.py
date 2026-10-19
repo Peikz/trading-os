@@ -119,3 +119,44 @@ def earnings_flag(
     """
     release_day = earnings_date_last.dt.tz_convert(NEW_YORK).dt.date
     return release_day.isin([session, previous_session]).fillna(False).astype(bool)
+
+
+# SPEC §11.6: TradingView proxies apply "until Massive history exists". Once a row has the
+# full-history value (history_metrics, joined as hist_*), that value replaces the proxy.
+# Groups switch together so a row never mixes bases (e.g. ADR % from history, ADR $ from TV).
+# The proxy is kept as <metric>_proxy for audit; the basis column says which one is used.
+HISTORY_GROUPS = [
+    ("rvol_basis", "history_50d_excl_today", {"rvol50": "hist_rvol50"}),
+    (
+        "adr_basis",
+        "history_20d",
+        {
+            "adr20_pct": "hist_adr20_pct",
+            "adr20_usd": "hist_adr20_usd",
+            "dist_ma10_adr": "hist_dist_ma10_adr",
+        },
+    ),
+    ("returns_basis", "history", {f"ret_{d}": f"hist_ret_{d}" for d in (22, 63, 126)}),
+    (
+        "avg20_basis",
+        "history_20d",
+        {
+            "avg_volume_20d": "hist_avg_volume_20d",
+            "avg_dollar_volume_20d": "hist_avg_dollar_volume_20d",
+        },
+    ),
+]
+
+
+def prefer_history(df: pd.DataFrame) -> pd.DataFrame:
+    """Use the exact SPEC §5 value wherever full history has it; keep the proxy beside it."""
+    out = df.copy()
+    for basis, label, columns in HISTORY_GROUPS:
+        if not set(columns.values()) <= set(out.columns):
+            continue
+        use = pd.concat([out[h].notna() for h in columns.values()], axis=1).all(axis=1)
+        for metric, hist in columns.items():
+            out[f"{metric}_proxy"] = out[metric]
+            out[metric] = out[hist].where(use, out[metric])
+        out[basis] = pd.Series(out[basis], index=out.index).astype("object").where(~use, label)
+    return out

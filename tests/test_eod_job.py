@@ -3,7 +3,8 @@
 import pandas as pd
 import pytest
 
-from trading_os import job, tv
+from trading_os import clock, history, job, tv
+from trading_os.config import load_config
 
 
 def run_eod(argv):
@@ -160,3 +161,33 @@ def test_push_failure_still_saves_data(tmp_path, capsys, sent, monkeypatch):
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     candidates = pd.read_parquet(run_dir / "candidates.parquet")
     assert candidates["pushed"].tolist() == [False]
+
+
+def test_eod_uses_exact_rvol_once_history_exists(tmp_path, capsys, sent):
+    cfg = load_config()
+    session = clock.session_date(cfg.schedule, "eod", pd.Timestamp.now(tz="UTC").to_pydatetime())
+    past = clock.sessions_back(cfg.schedule, session, 56)[:-1]  # 55 sessions before the run's
+    for day in past:
+        snap = pd.DataFrame(
+            {
+                "run_ts": [pd.Timestamp(f"{day} 20:17", tz="UTC")] * 2,
+                "session_date": [pd.Timestamp(day)] * 2,
+                "ticker": [GAPPER, QUIET],
+                "open": [10.0, 11.0],
+                "high": [10.5, 11.5],
+                "low": [9.5, 10.5],
+                "close": [10.0, 11.0],
+                "volume": [750_000.0, 900_000.0],
+            }
+        )
+        path = history.universe_snapshot_path(tmp_path, day)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        snap.to_parquet(path, index=False)
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
+    out = capsys.readouterr().out
+    assert "exact RVOL on 2 rows" in out
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    cands = pd.read_parquet(run_dir / "candidates.parquet")
+    row = cands[cands["scan"] == "ep_day"].iloc[0]
+    assert row["rvol_basis"] == "history_50d_excl_today"
+    assert row["rvol50"] == pytest.approx(3_000_000 / 750_000)  # today's volume / prior 50-day mean

@@ -103,7 +103,9 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         df = metrics.add_growth_metrics(df)
     if slot in ("eod", "weekly"):
         df, covered = enrich.attach_history(df, args.data_dir, cfg, session)
-        status(f"History: {covered} of {LOOKBACK_SESSIONS} sessions available")
+        df = metrics.prefer_history(df)
+        exact = int((df["rvol_basis"] == "history_50d_excl_today").sum())
+        status(f"History: {covered} of {LOOKBACK_SESSIONS} sessions; exact RVOL on {exact} rows")
     previous = clock.previous_session(cfg.schedule, session)
     df["earnings_flag"] = metrics.earnings_flag(df["earnings_date_last"], session, previous)
     uni = universe.build_universe(df, cfg.universe, slot)

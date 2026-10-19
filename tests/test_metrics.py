@@ -122,3 +122,43 @@ def test_add_growth_metrics_drops_arrays():
     assert out["rev_growth_q_prev"].iloc[0] == pytest.approx(50.0)
     assert out["eps_growth_q_prev"].iloc[0] == pytest.approx(100.0)
     assert "revenue_q_hist" not in out.columns and "eps_q_hist" not in out.columns
+
+
+def test_prefer_history_switches_whole_groups_per_row():
+    nan = float("nan")
+    df = pd.DataFrame(
+        {
+            "rvol50": [2.9, 2.9],
+            "hist_rvol50": [3.0, nan],  # row 2 has too little history
+            "rvol_basis": "tv_avg60d_excl_today",
+            "adr20_pct": [5.0, 5.0],
+            "adr20_usd": [0.5, 0.5],
+            "dist_ma10_adr": [1.0, 1.0],
+            "hist_adr20_pct": [6.0, 6.0],
+            "hist_adr20_usd": [0.6, 0.6],
+            "hist_dist_ma10_adr": [
+                0.8,
+                nan,
+            ],  # row 2: one ADR value missing -> whole group stays TV
+            "adr_basis": "tv:ADR/close",
+            "ret_22": [10.0, 10.0],
+            "ret_63": [20.0, 20.0],
+            "ret_126": [30.0, 30.0],
+            "hist_ret_22": [11.0, 11.0],
+            "hist_ret_63": [21.0, 21.0],
+            "hist_ret_126": [31.0, nan],
+            "returns_basis": "tv:Perf.1M/Perf.3M/Perf.6M",
+        }
+    )
+    out = metrics.prefer_history(df)
+    assert out["rvol50"].tolist() == [3.0, 2.9]
+    assert out["rvol_basis"].tolist() == ["history_50d_excl_today", "tv_avg60d_excl_today"]
+    assert out["rvol50_proxy"].tolist() == [2.9, 2.9]
+    assert out["adr20_pct"].tolist() == [6.0, 5.0] and out["adr_basis"].tolist() == [
+        "history_20d",
+        "tv:ADR/close",
+    ]
+    assert out["ret_126"].tolist() == [31.0, 30.0]
+    assert out["ret_22"].tolist() == [11.0, 10.0]  # row 2 keeps TV for all three returns
+    # avg20 group skipped: no hist columns in this frame
+    assert "avg_volume_20d_proxy" not in out

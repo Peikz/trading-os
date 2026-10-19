@@ -23,6 +23,8 @@ HIST_COLUMNS = [
     "ret_22",
     "ret_63",
     "ret_126",
+    "avg_volume_20d",
+    "avg_dollar_volume_20d",
     "ma10_rising",
     "ma20_rising",
     "ma50_rising",

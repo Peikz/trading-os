@@ -15,7 +15,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ### Data
 - [x] TradingView client wrapper: verify field names (SPEC §11.1), print samples, document in `docs/fields.md`
 - [x] Universe builder: exclusions + logged/alert tiers (SPEC §4)
-- [ ] Metrics module with unit tests (SPEC §5) — Phase 1 uses TradingView fields where they exist — partial: dollar volume, close location, RVOL (today removed), 20-day proxies, MA position, ADR % and distance from MA10 in ADR (TradingView ADR proxy), returns (Perf.1M/3M/6M proxy), previous-quarter growth, pre-market dollar volume, earnings flag. MA rising and consecutive days need more history than TradingView serves (see Questions)
+- [x] Metrics module with unit tests (SPEC §5) — Phase 1 uses TradingView fields where they exist; every §5 metric now has a hand-computed test (`metrics.py`, `history_metrics.py`), and the exact values replace the proxies per row once history exists
 - [x] Parquet writer (append-only, partitioned per SPEC §7) + xlsx export
 
 ### Scans — EOD
@@ -48,7 +48,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [x] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items) — added 19 Oct; `Massive check` workflow OK: 12,630 tickers on the latest session, history back to 2024-10-28 (older days answer 403, so the window is capped at 720 days)
 - [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; waits for `MASSIVE_API_KEY`
 - [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
-- [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built: `history_metrics.py` (all SPEC §5, hand-computed tests, 10k tickers × 260 sessions in ~4 s) on `history.py` bars (Massive, else our EOD snapshots). Not wired into the jobs yet: switch from TradingView proxies once history covers 205 sessions
+- [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built and wired: `prefer_history` swaps in exact RVOL / ADR / returns / 20-day averages per row (whole groups, proxy kept as `*_proxy`, basis columns updated); end-to-end tested on 55 stored sessions; activates with the backfill
 - [ ] Base detection B2 (configurable heuristic, store intermediates) — built: `breakouts.py` (pivot = base's highest high, zigzag contractions, depths/lows/volume ratios stored); unspecified parameters marked (proposed) in `config/scans.yaml` `breakout:`; waits for history and the 20-hit hand audit
 - [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5
 - [ ] Watchlists: EP-Watch → BO-Watch flow — built: append-only event log (`data/watchlists/`), add/refresh/move/trigger/expire (default 6 in Questions)
@@ -114,3 +114,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Phase 3 EPStudyDatabase writer (off until configured); Phase 4 journal (fills import, trades, R, signal links), DuckDB journal view and Power BI notes; Phase 5 private Streamlit dashboard, checked page by page on demo data.
 - 2026-10-19 (later): Breadth also runs pre-market (Emil): today's Market Light, last close's breadth, pre-market movers and QQQ pre-market at the top of the pre-market push (SPEC §6.1, §11.9). Dashboard shows them; smoke test covers every page. Tailscale chosen for phone access; start script added.
 - 2026-10-19 (later): Massive key verified live; backfill window capped by date with 403 skip; breakout audit replay ready for after the backfill.
+- 2026-10-19 (later): Exact history metrics replace the TradingView proxies row by row as soon as history exists (SPEC §11.6 note); Phase 1 metrics item ticked.
