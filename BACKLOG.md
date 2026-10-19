@@ -45,7 +45,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] 10 consecutive trading days without manual intervention → Phase 1 done
 
 ## Phase 2 — Breakouts and history
-- [ ] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items)
+- [x] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items) — added 19 Oct; `Massive check` workflow OK: 12,630 tickers on the latest session, history back to 2024-10-28 (older days answer 403, so the window is capped at 720 days)
 - [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; waits for `MASSIVE_API_KEY`
 - [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
 - [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built: `history_metrics.py` (all SPEC §5, hand-computed tests, 10k tickers × 260 sessions in ~4 s) on `history.py` bars (Massive, else our EOD snapshots). Not wired into the jobs yet: switch from TradingView proxies once history covers 205 sessions
@@ -53,7 +53,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5
 - [ ] Watchlists: EP-Watch → BO-Watch flow — built: append-only event log (`data/watchlists/`), add/refresh/move/trigger/expire (default 6 in Questions)
 - [ ] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS built as a column on gainers and tight bases with proposed weights (default 14)
-- [ ] Hand audit of 20 random breakout hits
+- [ ] Hand audit of 20 random breakout hits — `scripts/audit_breakouts.py` replays B1-B5 over the Massive history and writes `docs/breakout_audit_<date>.md` (charts + checklist) in the data repo; runs right after the backfill
 
 ## Phase 3 — Outcomes and journal
 - [ ] Outcomes job (5/10/20/60 days) — built: `outcomes.py`, `outcomes.yml` (22:00 UTC weekdays); hand-computed tests; runs on EOD snapshots until Massive history exists
@@ -97,7 +97,7 @@ Still open (no default possible):
 - Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
 
 ## Blocked
-- 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet. The first Actions runs of `eod.yml` and `premarket.yml` wait on them (Emil).
+- 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet (`MASSIVE_API_KEY` is in). The first Actions runs and the backfill wait on them (Emil).
 
 ## Session log
 - 2026-10-18: Repos created; skeleton, config, clock guard, TradingView client (fields verified, see `docs/fields.md`), universe tiers, Phase 1 metrics subset, EP-Day, store, ntfy, `eod.py`, `eod.yml`. Local forced run on 16 Oct data OK. Next: secrets, then the first Actions run of `eod.yml`.
@@ -113,3 +113,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Markdown report per run (`reports/` in the data repo, charts inline, readable in the GitHub app); CATS column; weekly outcome statistics (`reports/stats/`). Forced runs now keep charts in their manual folder.
 - 2026-10-19 (later): Phase 3 EPStudyDatabase writer (off until configured); Phase 4 journal (fills import, trades, R, signal links), DuckDB journal view and Power BI notes; Phase 5 private Streamlit dashboard, checked page by page on demo data.
 - 2026-10-19 (later): Breadth also runs pre-market (Emil): today's Market Light, last close's breadth, pre-market movers and QQQ pre-market at the top of the pre-market push (SPEC §6.1, §11.9). Dashboard shows them; smoke test covers every page. Tailscale chosen for phone access; start script added.
+- 2026-10-19 (later): Massive key verified live; backfill window capped by date with 403 skip; breakout audit replay ready for after the backfill.
