@@ -99,8 +99,18 @@ def compute(
     `sessions` is the contiguous history the windows run over; `keep` limits the output to
     some of them (the EOD job only needs the latest), which keeps memory small.
     """
-    windows = windows or ScanWindows()
     g, tickers = grids(bars, sessions)
+    return compute_from_grids(g, tickers, sessions, keep, windows)
+
+
+def compute_from_grids(
+    g: dict[str, np.ndarray],
+    tickers: pd.Index,
+    sessions: list[dt.date],
+    keep: list[dt.date] | None = None,
+    windows: ScanWindows | None = None,
+) -> pd.DataFrame:
+    windows = windows or ScanWindows()
     o, h, lo, c, v = (g[f] for f in PRICE_FIELDS)
     pc = shift(c, 1)
     m: dict[str, np.ndarray] = {"open": o, "high": h, "low": lo, "close": c, "volume": v}

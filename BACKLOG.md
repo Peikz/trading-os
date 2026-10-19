@@ -49,8 +49,8 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; waits for `MASSIVE_API_KEY`
 - [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
 - [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built: `history_metrics.py` (all SPEC §5, hand-computed tests, 10k tickers × 260 sessions in ~4 s) on `history.py` bars (Massive, else our EOD snapshots). Not wired into the jobs yet: switch from TradingView proxies once history covers 205 sessions
-- [ ] Base detection B2 (configurable heuristic, store intermediates)
-- [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger
+- [ ] Base detection B2 (configurable heuristic, store intermediates) — built: `breakouts.py` (pivot = base's highest high, zigzag contractions, depths/lows/volume ratios stored); unspecified parameters marked (proposed) in `config/scans.yaml` `breakout:`; waits for history and the 20-hit hand audit
+- [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5
 - [ ] Watchlists: EP-Watch → BO-Watch flow
 - [ ] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS needs weights (see Questions)
 - [ ] Hand audit of 20 random breakout hits
@@ -79,6 +79,10 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 - **CATS score** (Phase 2): SPEC lists the parts (growth-bucket hit + recent MB/EP + RVOL trend − extension penalty) but no weights or windows. What should they be?
 
+- **Breakout parameters SPEC leaves open** (marked (proposed) in config): a pullback counts once price comes back >= 1 ADR $ (`swing_adr_mult`); at least 2 contractions; "quiet volume" = base average volume below the 50-day average at the base's start; B4 right side = last 5 sessions with range < 1.5 x ADR $ and volume below the 50-day average. Confirm or change during the 20-hit audit.
+- **Breakout trigger:** it fires on B5 alone and stores B1-B4 for your grade, so C-grade breakouts push too (on random data ~0.6 % of names trigger daily). Push only names that were on BO-Watch (B1-B4 all true yesterday), or at least N of B1-B4?
+- **Breakout push tier:** I applied the alert tier to both breakout scans, the same as EP (SPEC §11.7). OK?
+
 ## Blocked
 - 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet. The first Actions runs of `eod.yml` and `premarket.yml` wait on them (Emil).
 
@@ -90,3 +94,4 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - 2026-10-19 (later): Phase 2/3 groundwork on Emil's go-ahead: bars store + loader, Massive client and resumable backfill (+ daily catch-up), SPEC §5 metrics on full history, outcomes job. All tested offline; none needs a decision. Waiting on: secrets, Massive key, Questions.
 - 2026-10-19 (later): History metrics wired into EOD and weekly jobs as `hist_*` columns; Parabolic Short/Long and tight bases built on them (0 hits until history accumulates). Live forced EOD run OK in ~10 s.
 - 2026-10-19 (later): Before-shot charts (Phase 3) wired into the EOD and pre-market jobs; a chart failure is logged and never fails the run.
+- 2026-10-19 (later): Breakout B1-B5 detector (Phase 2) with BO-Watch and trigger scans, breakout fields stored in candidates, breakout lines in the push. 10k tickers in ~3 s. Proposed parameters listed under Questions.

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from trading_os import clock, history
+from trading_os import breakouts, clock, history
 from trading_os import history_metrics as hm
 from trading_os.config import Config
 
@@ -73,9 +73,15 @@ def attach_history(
     past = history.load_bars(data_dir, sessions[:-1])
     covered = int(past["session_date"].nunique()) + 1
     bars = pd.concat([past, todays_bars(df, session)], ignore_index=True)
-    metrics = hm.compute(bars, sessions, keep=[session], windows=scan_windows(cfg))
+    grids, tickers = hm.grids(bars, sessions)
+    metrics = hm.compute_from_grids(
+        grids, tickers, sessions, keep=[session], windows=scan_windows(cfg)
+    )
     joined = metrics[["ticker", *HIST_COLUMNS]].rename(
         columns={c: f"hist_{c}" for c in HIST_COLUMNS}
     )
+    bases = breakouts.detect(grids, tickers, sessions, cfg.breakout)
+    if not bases.empty:
+        joined = joined.merge(bases.drop(columns=["session_date"]), on="ticker", how="left")
     joined["ticker"] = joined["ticker"].astype(df["ticker"].dtype)
     return df.merge(joined, on="ticker", how="left"), covered

@@ -55,3 +55,54 @@ def tight_bases(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
         & (out["hist_avg_volume_short"] < out["hist_avg_volume_long"])
     )
     return ranked(out, hit, "tightness_adr", ascending=True)
+
+
+_WATCH = {
+    "pivot": "bo_pivot",
+    "order_stop": "bo_order_stop",
+    "risk_adr": "bo_risk_adr",
+    "base_len": "bo_base_len",
+    "contraction_depths": "bo_contraction_depths",
+    "b1": "bo_b1",
+    "b2": "bo_b2",
+    "b3": "bo_b3",
+    "b4": "bo_b4",
+}
+_TRIGGER = {
+    "pivot": "trig_pivot",
+    "order_stop": "trig_order_stop",
+    "risk_adr": "trig_risk_adr",
+    "base_len": "trig_base_len",
+    "contraction_depths": "trig_contraction_depths",
+    "b1": "trig_b1",
+    "b2": "trig_b2",
+    "b3": "trig_b3",
+    "b4": "trig_b4",
+    "b5": "trig_b5",
+}
+
+
+def _with_breakout_fields(hits: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
+    """Copy the detector's columns into the candidates' SPEC §7 breakout fields."""
+    for target, source in mapping.items():
+        hits[target] = hits.get(source, pd.NA)
+    return hits
+
+
+def breakout_watch(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """B1-B4 all pass on the base ending today: a BO-Watch name. Tightest right side first."""
+    if "bo_b1" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype="int64"))
+    hit = _mask(df["bo_b1"] & df["bo_b2"] & df["bo_b3"] & df["bo_b4"])
+    hits = ranked(df, hit, "bo_right_side_range_adr", ascending=True)
+    hits = _with_breakout_fields(hits, _WATCH)
+    hits["b5"] = pd.NA
+    return hits
+
+
+def breakout_trigger(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """B5 at the close against yesterday's base; B1-B4 stored for the human's grade."""
+    if "trig_b5" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype="int64"))
+    hits = ranked(df, _mask(df["trig_b5"]), "trig_rvol")
+    return _with_breakout_fields(hits, _TRIGGER)

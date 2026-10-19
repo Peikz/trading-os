@@ -171,6 +171,9 @@ def build_candidates(
                 "pushed": hits["ticker"].isin(sent).to_numpy(),
             }
         )
+        for column in [*_PHASE2_FLOAT, *_PHASE2_BOOL, "contraction_depths"]:
+            if column in hits:
+                rows[column] = hits[column].to_numpy()
         for column in AUDIT_COLUMNS:
             rows[column] = hits[column].to_numpy() if column in hits else pd.NA
         frames.append(rows)
@@ -183,12 +186,14 @@ def build_candidates(
     for column in ("rank", "growth_quarters_checked"):
         out[column] = pd.to_numeric(out[column], errors="coerce").astype("Int64")
     # Breakout fields (Phase 2) stay empty for EP scans, so the schema is stable from day one.
-    for column in _PHASE2_FLOAT:
-        out[column] = pd.Series(pd.NA, index=out.index, dtype="Float64")
-    for column in _PHASE2_BOOL:
-        out[column] = pd.Series(pd.NA, index=out.index, dtype="boolean")
-    for column in ("contraction_depths", "notes"):
-        out[column] = pd.Series(pd.NA, index=out.index, dtype="string")
+    for column, dtype in [
+        *[(c, "Float64") for c in _PHASE2_FLOAT],
+        *[(c, "boolean") for c in _PHASE2_BOOL],
+        ("contraction_depths", "string"),
+        ("notes", "string"),
+    ]:
+        values = out[column] if column in out else pd.Series(pd.NA, index=out.index)
+        out[column] = values.astype("object").where(values.notna(), pd.NA).astype(dtype)
     out = stamp(out, ctx)
     ordered = [c for c in SPEC_CANDIDATE_COLUMNS if c in out.columns]
     return out[ordered + [c for c in out.columns if c not in ordered]]

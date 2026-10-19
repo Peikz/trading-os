@@ -28,10 +28,26 @@ TOP_LEVEL_KEYS = {
     "schedule",
     "scans",
     "market_light",
+    "breakout",
     "history",
     "outcomes",
     "charts",
     "notify",
+}
+BREAKOUT_KEYS = {
+    "prior_move_min_pct",
+    "prior_move_max_days",
+    "base_min_days",
+    "base_max_days",
+    "contraction_ratio_max",
+    "min_contractions",
+    "swing_adr_mult",
+    "base_volume_ratio_max",
+    "right_side_days",
+    "right_side_range_adr_max",
+    "trigger_range_adr_min",
+    "trigger_rvol_min",
+    "stop_adr_mult",
 }
 HISTORY_KEYS = {
     "massive_base_url",
@@ -108,6 +124,8 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "quarter_move_pct",
         "ma_windows",
     },
+    "breakout_watch": {"push_tier"},
+    "breakout_trigger": {"push_tier"},
     "universe_snapshot": set(),
     "qm_gainers": {
         "top_pct",
@@ -178,6 +196,7 @@ class Config:
     schedule: Schedule
     scans: Mapping[str, ScanConfig]
     market_light: Mapping[str, Any]
+    breakout: Mapping[str, Any]
     history: Mapping[str, Any]
     outcomes: Mapping[str, Any]
     charts: Mapping[str, Any]
@@ -213,6 +232,8 @@ def parse_config(raw: Any) -> Config:
         _check_keys(f"market_light.{section}", market_light[section], keys)
         _check_numbers(f"market_light.{section}", market_light[section])
 
+    _check_keys("breakout", raw["breakout"], BREAKOUT_KEYS)
+    _check_numbers("breakout", raw["breakout"])
     _check_keys("history", raw["history"], HISTORY_KEYS)
     _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
     _check_keys("charts", raw["charts"], CHART_KEYS)
@@ -225,6 +246,7 @@ def parse_config(raw: Any) -> Config:
         schedule=_parse_schedule(raw["schedule"]),
         scans=MappingProxyType(_parse_scans(raw["scans"])),
         market_light=_freeze(market_light),
+        breakout=_freeze(raw["breakout"]),
         history=_freeze(raw["history"]),
         outcomes=_freeze(raw["outcomes"]),
         charts=_freeze(raw["charts"]),

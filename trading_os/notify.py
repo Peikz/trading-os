@@ -27,6 +27,8 @@ SCAN_LABELS = {
     "mb_down": "MB down",
     "parabolic_short": "Parabolic short",
     "parabolic_long": "Parabolic long",
+    "breakout_watch": "BO-Watch",
+    "breakout_trigger": "Breakout",
     "qm_gainers": "QM gainers",
     "growth_bucket_1": "Growth 1",
     "growth_bucket_2": "Growth 2",
@@ -98,6 +100,24 @@ def format_weekly(row: Mapping[str, Any], scan: str) -> str:
     return f"{t}  EPS {_pair(row['eps_growth_q'], row['eps_growth_q_prev'])}  rev {rev}"
 
 
+def format_breakout(row: Mapping[str, Any], scan: str) -> str:
+    """Pivot, order stop and risk in ADR; the B-flags are for the human's grade."""
+    flags = "".join(
+        str(i) if bool(row.get(f"b{i}")) else "-"
+        for i in range(1, 6 if scan == "breakout_trigger" else 5)
+    )
+    line = (
+        f"{row['ticker']}  pivot {row['pivot']:.2f}  stop {row['order_stop']:.2f}  "
+        f"risk {row['risk_adr']:.1f} ADR  B{flags}"
+    )
+    if scan == "breakout_trigger":
+        line = (
+            f"{row['ticker']}  {row['chg_pct']:+.1f}%  RVOL {row['trig_rvol']:.1f}  "
+            + line[len(row["ticker"]) + 2 :]
+        )
+    return line
+
+
 def build_message(
     ctx: RunContext,
     results: Mapping[str, pd.DataFrame],
@@ -124,6 +144,8 @@ def build_message(
         records = chosen.to_dict("records")
         if ctx.slot == "weekly":
             lines = [format_weekly(row, name) for row in records]
+        elif name.startswith("breakout_"):
+            lines = [format_breakout(row, name) for row in records]
         else:
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
             lines = [format_hit(row, pct_column, ctx.slot) for row in records]

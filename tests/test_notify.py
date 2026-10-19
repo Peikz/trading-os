@@ -94,3 +94,25 @@ def test_send_posts_json(monkeypatch):
     assert calls["json"]["topic"] == "topic-x"
     assert calls["json"]["title"] == "t" and calls["json"]["message"] == "b"
     assert calls["checked"]
+
+
+def test_breakout_lines_show_pivot_stop_risk_and_flags():
+    row = {
+        "ticker": "BRKO",
+        "pivot": 15.12,
+        "order_stop": 14.88,
+        "risk_adr": 1.0,
+        "b1": True,
+        "b2": True,
+        "b3": False,
+        "b4": True,
+        "b5": True,
+        "chg_pct": 6.8,
+        "trig_rvol": 2.5,
+    }
+    assert notify.format_breakout(row, "breakout_watch") == (
+        "BRKO  pivot 15.12  stop 14.88  risk 1.0 ADR  B12-4"
+    )
+    assert notify.format_breakout(row, "breakout_trigger") == (
+        "BRKO  +6.8%  RVOL 2.5  pivot 15.12  stop 14.88  risk 1.0 ADR  B12-45"
+    )

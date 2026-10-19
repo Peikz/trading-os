@@ -83,6 +83,10 @@ scans:
     {enabled: true, phase: 1, slot: eod, action: push,
      universe_price_min: 5, universe_volume_min: 100_000,
      ratio_windows: [5, 10], quarter_move_pct: 25, ma_windows: [20, 40, 50]}
+  breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
+  breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   universe_snapshot:
     {enabled: true, phase: 1, slot: eod, action: log}
 
@@ -124,6 +128,24 @@ market_light:                               # SPEC §6.5 — owner's rules, do n
     stop_count_below: 5
     red_count_below: 15
     green_count_min: 50
+
+breakout:                                   # SPEC §6.4. (proposed) = default, confirm in
+                                            # the hand audit of 20 hits (SPEC §9, Phase 2)
+  prior_move_min_pct: 30                    # B1: up >= 30 %
+  prior_move_max_days: 63                   # B1: within 1-3 months
+  base_min_days: 10                         # B2: 2-8 weeks
+  base_max_days: 40
+  contraction_ratio_max: 0.85               # B2: each pullback <= 0.85 x the previous
+  min_contractions: 2                       # B2 (proposed)
+  swing_adr_mult: 1.0                       # B2 (proposed): a pullback counts once price
+                                            # comes back up >= 1 ADR $ from its low
+  base_volume_ratio_max: 1.0                # B2 "quiet volume" (proposed): base average volume
+                                            # below the 50-day average at the base's start
+  right_side_days: 5                        # B4: last 5-10 days (proposed: 5)
+  right_side_range_adr_max: 1.5             # B4 (proposed): right-side range < 1.5 x ADR $
+  trigger_range_adr_min: 1.0                # B5: day range > ADR $
+  trigger_rvol_min: 1.5                     # B5: RVOL >= 1.5
+  stop_adr_mult: 1.0                        # order stop = max(last contraction low, pivot - 1 x ADR $)
 
 history:                                    # Phase 2: Massive (formerly Polygon.io) grouped daily bars
   massive_base_url: https://api.massive.com
