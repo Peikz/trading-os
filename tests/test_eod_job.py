@@ -141,3 +141,18 @@ def test_weekly_run_fetches_history_and_stores_no_arrays(tmp_path, capsys, sent,
     assert universe.set_index("ticker").loc[GAPPER, "rev_growth_q_prev"] == pytest.approx(40.0)
     [message] = sent
     assert message.title.startswith("Trading OS · Weekly ")
+
+
+def test_push_failure_still_saves_data(tmp_path, capsys, sent, monkeypatch):
+    def down(server, topic, msg):
+        raise job.requests.ConnectionError("ntfy down")
+
+    monkeypatch.setattr(job.notify, "send", down)
+    monkeypatch.setattr(job, "NTFY_RETRY_WAIT_S", 0)
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 1
+    out, _ = capsys.readouterr()
+    assert "Push: FAILED (ConnectionError), saving data anyway" in out
+    assert "EOD: FAILED (PushFailed)" in out
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    candidates = pd.read_parquet(run_dir / "candidates.parquet")
+    assert candidates["pushed"].tolist() == [False]

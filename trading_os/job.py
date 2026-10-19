@@ -12,10 +12,20 @@ import datetime as dt
 import os
 from pathlib import Path
 
+import requests
+
 from trading_os import clock, metrics, notify, store, tv, universe
 from trading_os.config import load_config
 from trading_os.logsafe import run_guarded, status
+from trading_os.retry import once_more
 from trading_os.scans import run_scans
+
+TV_RETRY_WAIT_S = 30
+NTFY_RETRY_WAIT_S = 10
+
+
+class PushFailed(RuntimeError):
+    """ntfy could not be reached; the run's data was still saved."""
 
 
 def parse_args(description: str, argv: list[str] | None = None) -> argparse.Namespace:
@@ -63,7 +73,11 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     )
     status(f"{label}: session {session}, run_kind {ctx.run_kind}, forced {ctx.forced}")
 
-    raw = tv.fetch_universe(cfg.universe, with_history=slot == "weekly")
+    raw = once_more(
+        lambda: tv.fetch_universe(cfg.universe, with_history=slot == "weekly"),
+        label="TradingView",
+        wait_s=TV_RETRY_WAIT_S,
+    )
     status(f"TradingView: {len(raw)} rows")
     df = metrics.add_phase1_metrics(raw, cfg.proxies)
     if slot == "weekly":
@@ -76,18 +90,30 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = run_scans(uni, cfg, slot)
     selected = notify.select_for_push(results, cfg)
     pushed: dict[str, set[str]] = {}
+    push_error: requests.RequestException | None = None
     if args.no_push:
         status("Push: skipped (--no-push)")
     else:
-        notify.send(cfg.notify["server"], topic, notify.build_message(ctx, results, selected, cfg))
-        pushed = {name: set(hits["ticker"]) for name, hits in selected.items()}
-        status("Push: sent")
+        message = notify.build_message(ctx, results, selected, cfg)
+        try:
+            once_more(
+                lambda: notify.send(cfg.notify["server"], topic, message),
+                label="ntfy",
+                wait_s=NTFY_RETRY_WAIT_S,
+            )
+            pushed = {name: set(hits["ticker"]) for name, hits in selected.items()}
+            status("Push: sent")
+        except requests.RequestException as exc:
+            push_error = exc
+            status(f"Push: FAILED ({type(exc).__name__}), saving data anyway")
 
     candidates = store.build_candidates(results, ctx, pushed)
     store.write_run(args.data_dir, ctx, uni, candidates)
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
+    if push_error is not None:
+        raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
 
