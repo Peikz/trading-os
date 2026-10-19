@@ -152,3 +152,49 @@ def test_pivot_watch_sizing_buys_now_over_the_pivot():
         42.10,
         "order stop, buy-stop at pivot",
     )
+
+
+def test_index_lines_show_nasdaq_next_to_spy():
+    quote = {"chg_pct": 0.0, "pm_change_pct": 0.2} | {f"sma{w}": 1.0 for w in (10, 20, 50, 200)}
+    quotes = {
+        "spy": quote | {"close": 767.59, "chg_pct": 0.57},
+        "qqq": quote | {"close": 709.8, "chg_pct": -1.24, "sma10": 720.0, "sma20": 715.0},
+        "vix": quote | {"close": 18.58, "chg_pct": -7.07},
+    }
+    row = breadth.index_fields(quotes)
+    assert breadth.index_lines(row) == [
+        "SPY 767.59 🟢 +0.6% · QQQ 709.80 🔴 -1.2%",
+        "VIX 18.6 -7.1%",
+        "SPY above MA10, 20, 50, 200",
+        "QQQ above MA50, 200 · below 10, 20",
+    ]
+    # Pre-market: QQQ's change is already on the movers line.
+    assert breadth.index_lines(row, premarket=True) == ["SPY pre-market 🟢 +0.2% · VIX 18.6 -7.1%"]
+
+
+def test_qqq_sma20_comes_from_the_daily_bars_until_runs_have_stored_it(tmp_path):
+    import datetime as dt
+
+    from trading_os import clock, history
+    from trading_os.config import load_config
+
+    cfg = load_config()
+    days = clock.sessions_back(cfg.schedule, dt.date(2026, 10, 16), 20)
+    for i, day in enumerate(days):
+        path = history.bars_path(tmp_path, "massive", day)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            {
+                "session_date": [day, day],
+                "ticker": ["QQQ", "SPY"],
+                "open": [1.0, 1.0],
+                "high": [1.0, 1.0],
+                "low": [1.0, 1.0],
+                "close": [100.0 + i, 5.0],
+                "volume": [1.0, 1.0],
+            }
+        ).to_parquet(path)
+    sma = breadth.qqq_sma20_from_bars(tmp_path, cfg.schedule, days[-1], "NASDAQ:QQQ")
+    assert sma == pytest.approx(109.5)  # mean of 100..119
+    short = breadth.qqq_sma20_from_bars(tmp_path, cfg.schedule, days[-2], "NASDAQ:QQQ")
+    assert short != short  # NaN: only 19 of the 20 sessions have bars

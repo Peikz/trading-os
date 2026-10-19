@@ -216,12 +216,18 @@ def _with_breakout_levels(uni: pd.DataFrame, data_dir: Path, cfg, state, session
 
 
 def _index_quotes(cfg) -> dict:
-    """SPY and VIX for the market header. Auxiliary: missing quotes just drop the line."""
+    """SPY, QQQ (Nasdaq 100) and VIX for the market header. Auxiliary: a missing quote just
+    drops its part of the line."""
+    symbols = {
+        "spy": cfg.context["spy_symbol"],
+        "qqq": cfg.market_light["qqq"]["symbol"],
+        "vix": cfg.context["vix_symbol"],
+    }
     quotes = {}
-    for name in ("spy", "vix"):
+    for name, symbol in symbols.items():
         try:
             quotes[name] = once_more(
-                lambda n=name: tv.fetch_index(cfg.context[f"{n}_symbol"]),
+                lambda s=symbol: tv.fetch_index(s),
                 label="TradingView",
                 wait_s=TV_RETRY_WAIT_S,
             )

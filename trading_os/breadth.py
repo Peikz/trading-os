@@ -174,6 +174,18 @@ def stored_qqq_sma20(data_dir: Path, session: dt.date) -> float:
     return float(pd.read_parquet(path, columns=["qqq_sma20"]).iloc[0]["qqq_sma20"])
 
 
+def qqq_sma20_from_bars(data_dir: Path, schedule, session: dt.date, symbol: str) -> float:
+    """QQQ's 20-day SMA on `session` from the daily bars in the data repo: the slope input of
+    the QQQ trend before five EOD runs have stored it (Emil, 20 Oct 2026)."""
+    ticker = symbol.split(":")[-1]
+    sessions = clock.sessions_back(schedule, session, 20)
+    bars = history.load_bars(Path(data_dir), sessions)
+    closes = bars.loc[bars["ticker"] == ticker, ["session_date", "close"]].drop_duplicates(
+        "session_date"
+    )
+    return float(closes["close"].mean()) if len(closes) == 20 else float("nan")
+
+
 def breadth_row(
     uni: pd.DataFrame,
     qqq: Mapping[str, float],
@@ -205,6 +217,8 @@ def breadth_row(
     lookback = ml["qqq"]["slope_lookback"]
     before = clock.sessions_back(cfg.schedule, session, lookback + 1)[0]
     sma20_before = stored_qqq_sma20(data_dir, before)
+    if np.isnan(sma20_before):
+        sma20_before = qqq_sma20_from_bars(data_dir, cfg.schedule, before, ml["qqq"]["symbol"])
     trend = qqq_trend(qqq["close"], qqq["sma10"], qqq["sma20"], qqq["sma50"], sma20_before)
     state = breadth_state(ratios[10], ratios[5], up25, down25, ml["breadth"])
     count, count_date = latest_scan_count(data_dir, session)
@@ -316,20 +330,41 @@ def _ma_side(row: Mapping[str, Any], name: str) -> str:
     return " · ".join(parts)
 
 
+def _known(value) -> bool:
+    return value is not None and not pd.isna(value)
+
+
 def index_lines(row: Mapping[str, Any], premarket: bool = False) -> list[str]:
-    """`SPY 767.59 +0.6% · VIX 18.6 -7.1%`, then (at the close) SPY against its MAs."""
-    parts, spy = [], row.get("spy_close")
-    if spy is not None and not pd.isna(spy):
-        change = row["spy_pm_change_pct"] if premarket else row["spy_chg_pct"]
-        label = "SPY pre-market" if premarket else f"SPY {spy:.2f}"
-        parts.append(f"{label} {_signed(change)}".rstrip())
-    vix = row.get("vix_close")
-    if vix is not None and not pd.isna(vix):
+    """At the close: `SPY 767.59 +0.6% · QQQ 709.80 +0.8%`, `VIX 18.6 -7.1%`, then SPY and
+    QQQ against their MAs (Nasdaq added by Emil, 20 Oct 2026). Pre-market: SPY's change and
+    VIX (QQQ's pre-market change is already on the movers line)."""
+    spy, qqq, vix = (row.get(f"{n}_close") for n in ("spy", "qqq", "vix"))
+    vix_text = None
+    if _known(vix):
         change = row.get("vix_chg_pct")
-        parts.append(f"VIX {vix:.1f}" + ("" if pd.isna(change) else f" {change:+.1f}%"))
-    lines = [" · ".join(parts)] if parts else []
-    if not premarket and spy is not None and not pd.isna(spy):
-        lines.append(f"SPY {_ma_side(row, 'spy')}")
+        vix_text = f"VIX {vix:.1f}" + ("" if not _known(change) else f" {change:+.1f}%")
+    if premarket:
+        parts = (
+            [f"SPY pre-market {_signed(row['spy_pm_change_pct'])}".rstrip()] if _known(spy) else []
+        )
+        parts += [vix_text] if vix_text else []
+        return [" · ".join(parts)] if parts else []
+    prices = []
+    for name, close in (("SPY", spy), ("QQQ", qqq)):
+        if _known(close):
+            change = row.get(f"{name.lower()}_chg_pct")
+            prices.append(
+                f"{name} {close:.2f} {_signed(change) if _known(change) else ''}".rstrip()
+            )
+    if len(prices) == 2:  # both indexes: VIX gets its own line (phone width)
+        lines = [" · ".join(prices), *([vix_text] if vix_text else [])]
+    else:
+        parts = prices + ([vix_text] if vix_text else [])
+        lines = [" · ".join(parts)] if parts else []
+    for name, close in (("spy", spy), ("qqq", qqq)):
+        side = _ma_side(row, name) if _known(close) else ""
+        if side:
+            lines.append(f"{name.upper()} {side}")
     return lines
 
 
