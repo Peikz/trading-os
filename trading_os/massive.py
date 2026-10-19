@@ -17,6 +17,11 @@ from trading_os.history import BAR_COLUMNS
 
 GROUPED_DAILY = "/v2/aggs/grouped/locale/us/market/stocks/{day}"
 NEWS = "/v2/reference/news"
+MINUTE_AGGS = "/v2/aggs/ticker/{ticker}/range/1/minute/{start}/{end}"
+TICKERS = "/v3/reference/tickers"
+TICKER_DETAILS = "/v3/reference/tickers/{ticker}"
+SHORT_INTEREST = "/stocks/v1/short-interest"
+RATE_LIMIT_PAUSE_S = 60
 _FIELD_MAP = {
     "T": "ticker",
     "o": "open",
@@ -66,6 +71,7 @@ class MassiveClient:
         *,
         session: requests.Session | None = None,
         timeout: float = 30,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not api_key:
             raise ValueError("Massive API key is empty")
@@ -74,6 +80,7 @@ class MassiveClient:
         self._limiter = limiter
         self._http = session or requests.Session()
         self._timeout = timeout
+        self._sleep = sleep
 
     def grouped_daily(self, day: dt.date, *, adjusted: bool = True) -> pd.DataFrame:
         """All US stocks' bars for `day`, in the history bars shape. Empty if none yet."""
@@ -89,6 +96,86 @@ class MassiveClient:
         if body.get("status") not in _OK_STATUSES:
             raise MassiveError(f"grouped daily {day}: status {body.get('status')!r}")
         return to_bars(body.get("results") or [], day, bool(body.get("adjusted", adjusted)))
+
+    def _get(self, url: str, params: dict | None = None) -> dict:
+        """One rate-limited GET (a full `next_url` or a path); a 429 waits a minute, once."""
+        for attempt in (1, 2):
+            self._limiter.wait()
+            full = url if url.startswith("http") else self._base + url
+            response = self._http.get(
+                full, params=params or {}, headers=self._headers, timeout=self._timeout
+            )
+            if response.status_code == 429 and attempt == 1:
+                self._sleep(RATE_LIMIT_PAUSE_S)
+                continue
+            response.raise_for_status()
+            return response.json()
+        raise MassiveError("rate limited twice")
+
+    def _pages(self, path: str, params: dict, max_pages: int) -> list[dict]:
+        """Results across `next_url` pages (each page is one call)."""
+        body, out = self._get(path, params), []
+        out += body.get("results") or []
+        for _ in range(max_pages - 1):
+            if not body.get("next_url"):
+                break
+            body = self._get(body["next_url"])
+            out += body.get("results") or []
+        return out
+
+    def minute_bars(self, ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
+        """1-minute bars, pre- and post-market included, `start` to `end` (one call)."""
+        body = self._get(
+            MINUTE_AGGS.format(ticker=ticker, start=start.isoformat(), end=end.isoformat()),
+            {"adjusted": "true", "sort": "asc", "limit": 50_000},
+        )
+        rows = body.get("results") or []
+        frame = pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v", "vw", "n"])
+        frame = frame.rename(columns={**_FIELD_MAP, "t": "ts"}).drop(columns=["T"], errors="ignore")
+        frame["ts"] = pd.to_datetime(frame["ts"], unit="ms", utc=True)
+        frame.insert(0, "ticker", ticker)
+        return frame
+
+    def tickers(self, *, active: bool, max_pages: int = 60) -> list[dict]:
+        """The stock ticker list (1,000 a page), active or delisted: type, exchange, CIK."""
+        params = {"market": "stocks", "active": "true" if active else "false", "limit": 1000}
+        return self._pages(TICKERS, params, max_pages)
+
+    def short_interest(self, ticker: str, max_pages: int = 5) -> list[dict]:
+        """FINRA short interest history (settlement date, shares short, days to cover)."""
+        return self._pages(SHORT_INTEREST, {"ticker": ticker, "limit": 50_000}, max_pages)
+
+    def ticker_details(self, ticker: str, day: dt.date) -> dict:
+        """Details as of `day`: market cap, shares outstanding, list date, SIC, CIK."""
+        return (
+            self._get(TICKER_DETAILS.format(ticker=ticker), {"date": day.isoformat()}).get(
+                "results"
+            )
+            or {}
+        )
+
+    def news_between(self, ticker: str, start: str, end: str, limit: int = 10) -> list[dict]:
+        """Headlines published between two ISO timestamps, oldest first."""
+        body = self._get(
+            NEWS,
+            {
+                "ticker": ticker,
+                "published_utc.gte": start,
+                "published_utc.lte": end,
+                "order": "asc",
+                "sort": "published_utc",
+                "limit": limit,
+            },
+        )
+        return [
+            {
+                "title": item.get("title", ""),
+                "publisher": (item.get("publisher") or {}).get("name", ""),
+                "published_utc": item.get("published_utc", ""),
+                "url": item.get("article_url", ""),
+            }
+            for item in body.get("results") or []
+        ]
 
     def probe(self, path: str, params: dict | None = None) -> tuple[int, int]:
         """(HTTP status, number of results) for an endpoint; to see what the plan includes."""
