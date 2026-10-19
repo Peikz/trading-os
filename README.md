@@ -18,6 +18,7 @@ the jobs print counts and status only, because Actions logs here are public.
 | Weekly | `weekly.yml` | Sunday | Qullamaggie 1/3/6M gainers, Growth Bucket 1 and 2, tight bases |
 | Outcomes | `outcomes.yml` | after the EOD job | 5/10/20/60-session outcomes of past signals |
 | Backfill | `backfill.yml` | daily catch-up, or manual | Massive grouped-daily bars (needs `MASSIVE_API_KEY`) |
+| Keepalive | `keepalive.yml` | 1st of each month | Re-enables the scheduled workflows (GitHub disables them after 60 idle days) |
 
 Scans that need daily history (Parabolic, breakouts, tight bases) find nothing until enough
 sessions of bars exist, from Massive or from the jobs' own EOD snapshots. Pushed candidates
@@ -74,3 +75,6 @@ Set as GitHub Actions secrets on this repo, never in code:
 | `MASSIVE_API_KEY` | price history, Phase 2 |
 
 No TradingView credentials are used or stored.
+
+`DATA_REPO_TOKEN` expires after the period you chose (1 year suggested). When it does, the jobs
+fail with a failure push; create a new token the same way and replace the secret.

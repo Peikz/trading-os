@@ -1,0 +1,27 @@
+# GitHub disables scheduled workflows in a repo with no activity for 60 days. Data commits
+# go to the private data repo, so this repo can look idle while the jobs run fine. Once a
+# month, re-enable every scheduled workflow through the API (no commits, no data).
+
+name: Keepalive
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for wf in eod.yml premarket.yml weekly.yml outcomes.yml backfill.yml keepalive.yml; do
+            gh workflow enable "$wf" -R "$REPO" && echo "enabled $wf"
+          done
