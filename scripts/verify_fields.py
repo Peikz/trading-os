@@ -19,6 +19,7 @@ import pandas as pd
 
 from trading_os import tv
 from trading_os.config import load_config
+from trading_os.metrics import yoy_growth
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "fields.md"
 
@@ -37,6 +38,10 @@ NOTES = {
     "adr14_usd_tv": "price units, 14-day average day range (not SPEC's ADR(20) %)",
     "earnings_date_last": "unix seconds -> UTC timestamp",
     "earnings_date_next": "unix seconds -> UTC timestamp",
+    "country": "company country (Market Light scan count: Country USA)",
+    "revenue_ttm": "USD, trailing 12 months",
+    "revenue_q_hist": "weekly job only: reported quarterly revenue, latest first",
+    "eps_q_hist": "weekly job only: diluted EPS per quarter, latest first",
     "rev_growth_q": "percent, latest fiscal quarter YoY",
     "eps_growth_q": "percent, latest fiscal quarter YoY (diluted EPS)",
     "pm_change_pct": "percent, pre-market vs prior close",
@@ -55,9 +60,13 @@ FINDINGS = [
     "`average_volume_Nd_calc` includes today. RVOL removes it: (N x avg - volume) / (N - 1).",
     "Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]`. `close[1]` matches "
     "close - change_abs, so `[1]` is the previous daily bar.",
-    "`revenues_fq_h` and `earnings_per_share_diluted_fq_h` hold ~32 quarters of history, so "
-    "previous-quarter YoY growth is computable (SPEC §11.2). `total_revenue_yoy_growth_fq_h` "
-    "does not exist.",
+    "Quarterly history: `total_revenue_fq_h` (reported revenue) and "
+    "`earnings_per_share_diluted_fq_h` hold 32 quarters, latest first, so previous-quarter YoY "
+    "growth is computable (SPEC §11.2). Index 0 vs 4 reproduces TradingView's latest-quarter YoY "
+    "(EPS with |year-ago| as the base). `revenues_fq_h` is the analyst-estimates series (oldest "
+    "first, forecasts appended) and is not used.",
+    "Offsets beyond `[2]` (e.g. `close[5]`, `SMA20[5]`) come back empty: TradingView serves only "
+    "two prior bars, not enough for 10-day returns, MA slopes or 5/10-day breadth ratios.",
 ]
 
 PROBE_FIELDS = [
@@ -79,12 +88,13 @@ def main() -> None:
     cfg = load_config()
     pd.set_option("display.width", 220, "display.max_columns", 60)
 
-    total, raw = tv.build_universe_query(cfg.universe).get_scanner_data(timeout=30)
+    fields = list(tv.FIELDS.values()) + list(tv.HISTORY_FIELDS.values())
+    total, raw = tv.build_universe_query(cfg.universe, fields).get_scanner_data(timeout=40)
     print(f"universe: matched {total}, returned {len(raw)}")
     df = tv.normalize(raw)
 
     stats = []
-    for canon, field in tv.FIELDS.items():
+    for canon, field in (tv.FIELDS | tv.HISTORY_FIELDS).items():
         column = "ticker" if canon == "symbol" else canon
         series = df[column]
         stats.append(
@@ -152,6 +162,12 @@ def run_checks(df: pd.DataFrame) -> list[str]:
         "Conclusion: average_volume_Nd_calc includes today; metrics.py removes it for RVOL."
     )
 
+    rev0 = df["revenue_q_hist"].map(lambda h: yoy_growth(h, 0, abs_base=False))
+    eps0 = df["eps_q_hist"].map(lambda h: yoy_growth(h, 0, abs_base=True))
+    out.append(_agreement("rev_growth_q vs revenue_q_hist[0] / [4]", df["rev_growth_q"], rev0, 0.1))
+    out.append(
+        _agreement("eps_growth_q vs eps_q_hist[0] vs [4] (|base|)", df["eps_growth_q"], eps0, 0.5)
+    )
     dollar = df["close"] * df["volume"]
     out.append(
         "avg_dollar_volume_30d_tv / (close x avg_volume_30d_tv): median "

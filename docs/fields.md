@@ -13,7 +13,8 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 - `gap` and `change` are percent and match open and close against close - change_abs.
 - `average_volume_Nd_calc` includes today. RVOL removes it: (N x avg - volume) / (N - 1).
 - Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]`. `close[1]` matches close - change_abs, so `[1]` is the previous daily bar.
-- `revenues_fq_h` and `earnings_per_share_diluted_fq_h` hold ~32 quarters of history, so previous-quarter YoY growth is computable (SPEC §11.2). `total_revenue_yoy_growth_fq_h` does not exist.
+- Quarterly history: `total_revenue_fq_h` (reported revenue) and `earnings_per_share_diluted_fq_h` hold 32 quarters, latest first, so previous-quarter YoY growth is computable (SPEC §11.2). Index 0 vs 4 reproduces TradingView's latest-quarter YoY (EPS with |year-ago| as the base). `revenues_fq_h` is the analyst-estimates series (oldest first, forecasts appended) and is not used.
+- Offsets beyond `[2]` (e.g. `close[5]`, `SMA20[5]`) come back empty: TradingView serves only two prior bars, not enough for 10-day returns, MA slopes or 5/10-day breadth ratios.
 
 ## Fields used by the jobs
 
@@ -24,6 +25,7 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 | `type` | `type` | str | 100.0 |  |
 | `typespecs` | `typespecs` | str | 100.0 |  |
 | `is_primary` | `is_primary` | bool | 100.0 |  |
+| `country` | `country` | str | 100.0 | company country (Market Light scan count: Country USA) |
 | `sector` | `sector` | str | 100.0 |  |
 | `industry` | `industry` | str | 100.0 |  |
 | `open` | `open` | float64 | 100.0 |  |
@@ -57,11 +59,15 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 | `earnings_date_next` | `earnings_release_next_date` | datetime64[s, UTC] | 87.5 | unix seconds -> UTC timestamp |
 | `rev_growth_q` | `total_revenue_yoy_growth_fq` | float64 | 81.6 | percent, latest fiscal quarter YoY |
 | `eps_growth_q` | `earnings_per_share_diluted_yoy_growth_fq` | float64 | 81.3 | percent, latest fiscal quarter YoY (diluted EPS) |
+| `revenue_ttm` | `total_revenue_ttm` | float64 | 93.6 | USD, trailing 12 months |
 | `pm_change_pct` | `premarket_change` | float64 | 53.8 | percent, pre-market vs prior close |
 | `pm_gap_pct` | `premarket_gap` | float64 | 53.8 | percent |
 | `pm_volume` | `premarket_volume` | float64 | 53.8 |  |
+| `pm_price` | `premarket_close` | float64 | 53.8 | last pre-market price |
 | `ah_change_pct` | `postmarket_change` | float64 | 91.9 | percent, post-market vs close |
 | `ah_volume` | `postmarket_volume` | float64 | 91.9 |  |
+| `revenue_q_hist` | `total_revenue_fq_h` | object | 97.6 | weekly job only: reported quarterly revenue, latest first |
+| `eps_q_hist` | `earnings_per_share_diluted_fq_h` | object | 97.6 | weekly job only: diluted EPS per quarter, latest first |
 
 ## Checks
 
@@ -72,6 +78,8 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 - rvol10_tv / (volume / avg_volume_10d_tv as given) on 62 rows with rvol10_tv > 5: median 1.786, p10 1.451, p90 3.197
 - rvol10_tv / (volume / avg_volume_10d_tv today removed) on 62 rows with rvol10_tv > 5: median 1.047, p10 0.932, p90 1.108
 - max volume / avg_volume_10d_tv: 9.1 (<= 10 means today is included). Conclusion: average_volume_Nd_calc includes today; metrics.py removes it for RVOL.
+- rev_growth_q vs revenue_q_hist[0] / [4]: 100.0% of 3692 rows within 0.1pp
+- eps_growth_q vs eps_q_hist[0] vs [4] (|base|): 100.0% of 3678 rows within 0.5pp
 - avg_dollar_volume_30d_tv / (close x avg_volume_30d_tv): median 1.022
 - rows with close x volume >= $5M: 2880
 - earnings_date_next range: 2026-10-19 .. 2027-05-24
@@ -85,7 +93,6 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 | `revenues_fq_h` | 100.0 | list[33] |
 | `earnings_per_share_diluted_fq_h` | 97.0 | list[32] |
 | `total_revenue_yoy_growth_fq_h` | 0.0 | - |
-| `premarket_close` | 97.5 | float64 |
 | `postmarket_close` | 100.0 | float64 |
 | `country` | 100.0 | str |
 | `Perf.W` | 100.0 | float64 |
