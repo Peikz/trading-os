@@ -41,6 +41,7 @@ NOTES = {
     "eps_growth_q": "percent, latest fiscal quarter YoY (diluted EPS)",
     "pm_change_pct": "percent, pre-market vs prior close",
     "pm_gap_pct": "percent",
+    "pm_price": "last pre-market price",
     "ah_change_pct": "percent, post-market vs close",
 }
 
@@ -65,7 +66,6 @@ PROBE_FIELDS = [
     "revenues_fq_h",
     "earnings_per_share_diluted_fq_h",
     "total_revenue_yoy_growth_fq_h",
-    "premarket_close",
     "postmarket_close",
     "country",
     "Perf.W",

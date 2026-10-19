@@ -63,12 +63,22 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
     return selected
 
 
-def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct") -> str:
-    """`TICKER  +14.2%  RVOL 5.1  $82M  [earnings]` (scan's move %, RVOL, dollar volume)."""
-    line = (
-        f"{row['ticker']}  {row[pct_column]:+.1f}%  RVOL {row['rvol50']:.1f}  "
-        f"{_money(row['dollar_volume'])}"
-    )
+def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct", slot: str = "eod") -> str:
+    """`TICKER  +14.2%  RVOL 5.1  $82M  [earnings]` (scan's move %, RVOL, dollar volume).
+
+    Pre-market lines show pre-market volume and dollar volume instead, since the day's
+    volume fields still hold the prior session then.
+    """
+    if slot == "pm":
+        line = (
+            f"{row['ticker']}  {row[pct_column]:+.1f}%  PM vol {row['pm_volume'] / 1e6:.1f}M  "
+            f"{_money(row['pm_dollar_volume'])}"
+        )
+    else:
+        line = (
+            f"{row['ticker']}  {row[pct_column]:+.1f}%  RVOL {row['rvol50']:.1f}  "
+            f"{_money(row['dollar_volume'])}"
+        )
     if bool(row.get("earnings_flag", False)):
         line += "  [earnings]"
     return line
@@ -92,7 +102,7 @@ def build_message(
             continue
         header = f"{label}: {len(chosen)} alert" + (f" of {total} hits" if total else "")
         pct_column = PCT_COLUMNS.get(name, "chg_pct")
-        lines = [format_hit(row, pct_column) for row in chosen.to_dict("records")]
+        lines = [format_hit(row, pct_column, ctx.slot) for row in chosen.to_dict("records")]
         blocks.append("\n".join([header, *lines]))
     return Message(title=title, body="\n\n".join(blocks) or "No pushing scans ran.")
 
@@ -108,6 +118,8 @@ def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> N
 
 
 def _money(value: float) -> str:
+    if value != value:  # NaN
+        return "$?"
     if value >= 1e9:
         return f"${value / 1e9:.1f}B"
     return f"${value / 1e6:.0f}M"

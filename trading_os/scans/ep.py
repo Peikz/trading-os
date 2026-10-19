@@ -13,6 +13,20 @@ def ranked(df: pd.DataFrame, hit: pd.Series, by: str, ascending: bool = False) -
     return hits.assign(rank=range(1, len(hits) + 1)).reset_index(drop=True)
 
 
+def ep_pm(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """EP-PM: pre-market move, pre-market volume, price and market-cap floors.
+
+    Price is the prior close (the alert tier's price). Ranked by pre-market change.
+    """
+    hit = (
+        (df["pm_change_pct"] >= scan["pm_change_min_pct"])
+        & (df["close"] >= scan["price_min"])
+        & (df["pm_volume"] >= scan["pm_volume_min"])
+        & (df["market_cap"] >= scan["market_cap_min"])
+    )
+    return ranked(df, hit, "pm_change_pct")
+
+
 def ep_day(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """EP-Day: gap, RVOL, volume, price and market-cap floors. Ranked by gap, largest first."""
     hit = (

@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from trading_os.config import load_config
-from trading_os.scans.ep import ep9m, ep_ah
+from trading_os.scans.ep import ep9m, ep_ah, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
 
 
@@ -75,3 +75,19 @@ def test_ep_ah(scans):
     assert run(ep_ah, s, ah_row("THIN", ah_volume=49_999)) == []
     assert run(ep_ah, s, ah_row("SUB1", close=0.99)) == []
     assert run(ep_ah, s, ah_row("TINY", market_cap=49_999_999)) == []
+
+
+def pm_row(ticker, **kw):
+    base = {"ticker": ticker, "pm_change_pct": 10.0, "close": 1.0, "pm_volume": 50_000}
+    return base | {"market_cap": 50_000_000} | kw
+
+
+def test_ep_pm(scans):
+    s = scans["ep_pm"]
+    assert s.slot == "pm"
+    assert run(ep_pm, s, pm_row("EDGE")) == ["EDGE"]
+    assert run(ep_pm, s, pm_row("SMALL", pm_change_pct=9.99)) == []
+    assert run(ep_pm, s, pm_row("THIN", pm_volume=49_999)) == []
+    assert run(ep_pm, s, pm_row("SUB1", close=0.99)) == []
+    assert run(ep_pm, s, pm_row("TINY", market_cap=49_999_999)) == []
+    assert run(ep_pm, s, pm_row("NOPM", pm_change_pct=float("nan"))) == []

@@ -7,12 +7,13 @@ from collections.abc import Callable
 import pandas as pd
 
 from trading_os.config import Config, ScanConfig
-from trading_os.scans.ep import ep9m, ep_ah, ep_day
+from trading_os.scans.ep import ep9m, ep_ah, ep_day, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
 
 ScanFn = Callable[[pd.DataFrame, ScanConfig], pd.DataFrame]
 
 REGISTRY: dict[str, ScanFn] = {
+    "ep_pm": ep_pm,
     "ep_day": ep_day,
     "ep_ah": ep_ah,
     "ep9m": ep9m,

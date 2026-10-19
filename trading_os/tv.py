@@ -59,6 +59,7 @@ FIELDS: dict[str, str] = {
     "pm_change_pct": "premarket_change",
     "pm_gap_pct": "premarket_gap",
     "pm_volume": "premarket_volume",
+    "pm_price": "premarket_close",
     "ah_change_pct": "postmarket_change",
     "ah_volume": "postmarket_volume",
 }

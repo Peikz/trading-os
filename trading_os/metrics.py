@@ -63,6 +63,7 @@ def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.Da
     out["avg_volume_20d"] = out[canonical(str(proxies["avg_volume_20d"]))]
     out["avg_dollar_volume_20d"] = out[canonical(str(proxies["avg_dollar_volume_20d"]))]
     out["avg20_basis"] = f"tv:{proxies['avg_volume_20d']}"
+    out["pm_dollar_volume"] = dollar_volume(out["pm_price"], out["pm_volume"])
     for window in MA_WINDOWS:
         out[f"above_ma{window}"] = above(out["close"], out[f"ma{window}"])
     return out
