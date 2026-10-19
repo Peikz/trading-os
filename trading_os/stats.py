@@ -40,6 +40,8 @@ def summarize(candidates: pd.DataFrame, outcomes: pd.DataFrame, min_signals: int
                 "mean_r": float(r.mean()) if len(r) else np.nan,
             }
         )
+    if not rows:
+        return pd.DataFrame()
     return pd.DataFrame(rows).sort_values(["scan", "tier", "horizon"]).reset_index(drop=True)
 
 

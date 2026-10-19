@@ -44,3 +44,7 @@ def test_markdown_and_empty_cases():
     empty = stats.to_markdown(pd.DataFrame(), dt.date(2026, 11, 1), 0, 5)
     assert "_Not enough outcomes yet._" in empty
     assert stats.summarize(pd.DataFrame(), pd.DataFrame(), 5).empty
+
+
+def test_all_groups_too_small_is_empty_not_an_error():
+    assert stats.summarize(*data(), min_signals=50).empty
