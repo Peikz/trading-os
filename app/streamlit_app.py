@@ -13,6 +13,7 @@ import argparse
 import datetime as dt
 import io
 import os
+import re
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -25,7 +26,7 @@ from trading_os import (
     charts,
     clock,
     dashboard,
-    ep_history,
+    exits,
     health,
     history,
     intraday_study,
@@ -61,8 +62,7 @@ PAGES = [
     "Graded signals",
     "Market",
     "Stats",
-    "EP history",
-    "Strategy history",
+    "History",
     "Entries & exits",
     "System health",
     "Validation",
@@ -124,9 +124,7 @@ def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
     root = Path(folder) / "data" / "bars"
     if not root.exists():
         return pd.DataFrame(columns=["session_date", "open", "high", "low", "close", "volume"])
-    table = ds.dataset(root, format="parquet").to_table(
-        filter=ds.field("ticker") == ticker
-    )
+    table = ds.dataset(root, format="parquet").to_table(filter=ds.field("ticker") == ticker)
     bars = table.to_pandas()
     bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
     return bars.drop_duplicates("session_date").sort_values("session_date")
@@ -256,6 +254,33 @@ def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
     )
     if drawn:
         st.image(str(drawn))
+
+
+EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
+
+
+@st.cache_data(ttl=600)
+def history_cached(folder: str) -> pd.DataFrame:
+    """The strategy history plus the EP study's alert-tier EP-Days as strategy `ep_day`, in
+    one shape: the EP study's returns become `pnl_*`, its planned entry and stop `entry` and
+    `stop`; its criteria and fundamentals columns come along for the EP filters."""
+    hist = strategy_cached(folder)
+    built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
+    if not built:
+        return hist
+    ep = read_parquet(str(built[-1]))
+    ep = ep[ep["is_ep_day"] & (ep["tier"] == "alert")].copy()
+    ep["session_date"] = pd.to_datetime(ep["session_date"]).dt.date
+    outcome = re.compile(r"^ret_\d+d$")  # outcomes only; ret_22 etc. are features
+    ep = ep.rename(columns={c: "pnl_" + c[4:] for c in ep.columns if outcome.match(c)})
+    ep = ep.assign(strategy="ep_day", side="long", entry=ep["plan_entry"], stop=ep["plan_stop"])
+    ep["criteria_met"] = ep[EP_FLAGS].fillna(False).astype(bool).sum(axis=1)
+    extra = ("gap_pct", "rvol50", "months_sideways", "earnings_inferred", "criteria_met")
+    extra += ("eps_growth_yoy", "sales_growth_yoy", *EP_FLAGS)
+    for column in extra:
+        if column not in hist:
+            hist = hist.assign(**{column: None})
+    return pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
 
 
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
@@ -706,176 +731,99 @@ elif page == "Stats":
     else:
         st.dataframe(table, hide_index=True, width="stretch")
 
-elif page == "EP history":
-    st.header("EP history")
-    built = sorted((data_dir / "data" / "ep_history").glob("ep_history_*.parquet"))
-    if not built:
-        st.info("No EP history yet. Build it with `scripts/ep_history.py` after the backfill.")
-        st.stop()
-    hist = read_parquet(str(built[-1]))
-    hist["session_date"] = pd.to_datetime(hist["session_date"]).dt.date
-    st.caption(
-        f"Bars up to {built[-1].stem[len('ep_history_') :]} · {len(hist):,} events. Facts only: "
-        "the criteria are yes/no and the grade is yours. Entry at the gap-day close, stop at the "
-        "low of day within the live ADR bounds. Earnings and growth are inferred from the "
-        "quarterly rhythm and exist only for stocks still listed; float is today's."
-    )
-    a, b, c = st.columns(3)
-    variants = a.multiselect("Variant", ["ep_day", "ep9m"], default=["ep_day"])
-    tiers = b.multiselect("Tier", ["alert", "log"], default=["alert"])
-    years = sorted({d.year for d in hist["session_date"]})
-    chosen_years = c.multiselect("Year", years, default=years)
-    a, b, c = st.columns(3)
-    gap_min = a.slider("Gap at least %", 0, 60, 10)
-    rvol_min = b.slider("RVOL at least", 0.0, 20.0, 3.0, 0.5)
-    months_min = c.slider("Months sideways at least", 0.0, 12.0, 0.0, 0.5)
-    a, b, c = st.columns(3)
-    earnings = a.selectbox("Earnings (inferred)", ["any", "yes", "no", "unknown"])
-    must = b.multiselect(
-        "Criteria that must pass", ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
-    )
-    states = c.multiselect("Breadth state that day", ["strong", "neutral", "weak"])
-
-    keep = (hist["is_ep_day"] & ("ep_day" in variants)) | (hist["is_ep9m"] & ("ep9m" in variants))
-    keep &= hist["tier"].isin(tiers) & hist["session_date"].map(lambda d: d.year).isin(chosen_years)
-    keep &= (hist["gap_pct"] >= gap_min) & (hist["rvol50"] >= rvol_min)
-    keep &= hist["months_sideways"] >= months_min
-    known = hist["earnings_inferred"] if "earnings_inferred" in hist else pd.Series(None)
-    if earnings == "yes":
-        keep &= known.eq(True)
-    elif earnings == "no":
-        keep &= known.eq(False)
-    elif earnings == "unknown":
-        keep &= known.isna()
-    for flag in must:
-        keep &= hist[flag].fillna(False).astype(bool)
-    if states:
-        keep &= hist["mkt_breadth_state"].isin(states)
-    view = hist[keep].copy()
-    flags = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
-    view["criteria_met"] = view[flags].fillna(False).astype(bool).sum(axis=1)
-    view["gap_bucket"] = pd.cut(
-        view["gap_pct"], [0, 15, 25, 50, 1e9], labels=["<15", "15-25", "25-50", "50+"]
-    )
-    view["rvol_bucket"] = pd.cut(
-        view["rvol50"], [0, 5, 10, 20, 1e9], labels=["<5", "5-10", "10-20", "20+"]
-    )
-    view["year"] = view["session_date"].map(lambda d: d.year)
-    st.subheader(f"{len(view):,} events")
-    group = st.selectbox(
-        "Group by",
-        [
-            "none",
-            "earnings_inferred",
-            "criteria_met",
-            "mkt_breadth_state",
-            "mkt_qqq_trend",
-            "gap_bucket",
-            "rvol_bucket",
-            "c4_neglect",
-            "above_ma200",
-            "year",
-        ],
-    )
-    table = ep_history.summary(view, None if group == "none" else group)
-    st.dataframe(
-        table.pivot_table(
-            index="group",
-            columns="horizon_d",
-            values=["n", "win_rate_pct", "median_ret_pct", "mean_r"],
-            observed=True,
-        ).round(2),
-        width="stretch",
-    )
-    trail = (
-        view.groupby(group if group != "none" else lambda _: "all", observed=True)[
-            ["r_trail_ma10", "r_trail_ma20", "days_trail_ma10", "days_trail_ma20"]
-        ]
-        .mean()
-        .round(2)
-    )
-    st.caption("Trailing exit at the first close under the 10-day / 20-day MA (mean R, mean days)")
-    st.dataframe(trail, width="stretch")
-    columns = [
-        "session_date",
-        "ticker",
-        "variant",
-        "gap_pct",
-        "rvol50",
-        "months_sideways",
-        "eps_growth_yoy",
-        "sales_growth_yoy",
-        "earnings_inferred",
-        "criteria_met",
-        "ret_5d",
-        "ret_21d",
-        "ret_63d",
-        "r_21d",
-        "r_trail_ma10",
-    ]
-    shown = view[[col for col in columns if col in view]].sort_values(
-        "session_date", ascending=False
-    )
-    st.dataframe(shown, hide_index=True, width="stretch", height=320)
-    labels = [f"{r.session_date} · {r.ticker}" for r in shown.head(500).itertuples()]
-    pick = st.selectbox("Chart", ["—", *labels])
-    if pick != "—":
-        day_text, ticker = pick.split(" · ")
-        event = view[(view["ticker"] == ticker) & (view["session_date"].astype(str) == day_text)]
-        row = event.iloc[0]
-        bars = ticker_bars(str(data_dir), ticker)
-        path = Path(CHART_CACHE) / f"ep_{ticker}_{day_text}.png"
-        drawn = charts.before_shot(
-            bars,
-            path,
-            title=f"{ticker} · EP {day_text} · then 63 sessions",
-            signal_session=row["session_date"],
-            sessions=120,
-            order_stop=row["plan_stop"],
-            after=63,
-        )
-        if drawn:
-            st.image(str(drawn))
-
-elif page == "Strategy history":
-    st.header("Strategy history")
-    hist = strategy_cached(str(data_dir))
+elif page == "History":
+    st.header("History")
+    hist = history_cached(str(data_dir))
     if hist.empty:
-        st.info("No strategy history yet. Build it with `scripts/strategy_history.py`.")
+        st.info(
+            "No history yet. Build it with `scripts/strategy_history.py` and "
+            "`scripts/ep_history.py`."
+        )
         st.stop()
     st.caption(
-        "Every alert-tier hit of each live scan over the Massive bars, the market that day and "
-        "what happened after. P&L is in the strategy's direction (shorts profit when it falls). "
-        "Entries at the signal close; stops as listed in `strategy_history.py`. Facts, not advice."
+        "Every alert-tier hit of each scan over the Massive bars (EP-Day from the EP study, "
+        "with its criteria), the market that day and what happened after. P&L is in the strategy's "
+        "direction (shorts profit when it falls). Entries at the signal close (EP-Day: the gap-day "
+        "close, stop at the day low within the live ADR bounds); other stops as in "
+        "`strategy_history.py`. Facts, not advice; the grade is yours."
     )
     names = sorted(hist["strategy"].unique())
-    picked = st.multiselect("Strategies", names, default=names)
-    view = hist[hist["strategy"].isin(picked)].copy()
+    a, b, c = st.columns(3)
+    picked = a.multiselect("Strategies", names, default=names, key="hist_strategies")
+    years = sorted({d.year for d in hist["session_date"]})
+    chosen_years = b.multiselect("Year", years, default=years, key="hist_years")
+    states = c.multiselect("Breadth state that day", ["strong", "neutral", "weak"], key="hist_mkt")
+    keep = hist["strategy"].isin(picked) & hist["session_date"].map(lambda d: d.year).isin(
+        chosen_years
+    )
+    if states:
+        keep &= hist["mkt_breadth_state"].isin(states)
+    ep_on = "ep_day" in picked
+    if ep_on:
+        with st.expander("EP-Day filters", expanded=False):
+            a, b, c = st.columns(3)
+            gap_min = a.slider("Gap at least %", 0, 60, 10)
+            rvol_min = b.slider("RVOL at least", 0.0, 20.0, 3.0, 0.5)
+            months_min = c.slider("Months sideways at least", 0.0, 12.0, 0.0, 0.5)
+            a, b = st.columns(2)
+            earnings = a.selectbox("Earnings (inferred)", ["any", "yes", "no", "unknown"])
+            must = b.multiselect("Criteria that must pass", EP_FLAGS)
+        ep = hist["strategy"] == "ep_day"
+        ok = (hist["gap_pct"] >= gap_min) & (hist["rvol50"] >= rvol_min)
+        ok &= hist["months_sideways"].fillna(0) >= months_min
+        known = hist["earnings_inferred"]
+        if earnings == "yes":
+            ok &= known.eq(True)
+        elif earnings == "no":
+            ok &= known.eq(False)
+        elif earnings == "unknown":
+            ok &= known.isna()
+        for flag in must:
+            ok &= hist[flag].fillna(False).astype(bool)
+        keep &= ~ep | ok
+    view = hist[keep].copy()
     view["year"] = view["session_date"].map(lambda d: d.year)
     view["price_bucket"] = pd.cut(
         view["close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
     )
-    group = st.selectbox(
-        "Split by",
-        ["none", "year", "mkt_breadth_state", "mkt_qqq_trend", "price_bucket", "above_ma200"],
-    )
-    table = strategy_history.summary(view, None if group == "none" else [group])
+    splits = ["none", "year", "mkt_breadth_state", "mkt_qqq_trend", "price_bucket", "above_ma200"]
+    if ep_on:
+        view["gap_bucket"] = pd.cut(
+            view["gap_pct"], [0, 15, 25, 50, 1e9], labels=["<15", "15-25", "25-50", "50+"]
+        )
+        view["rvol_bucket"] = pd.cut(
+            view["rvol50"], [0, 5, 10, 20, 1e9], labels=["<5", "5-10", "10-20", "20+"]
+        )
+        splits += ["earnings_inferred", "criteria_met", "gap_bucket", "rvol_bucket", "c4_neglect"]
+    group = st.selectbox("Split by", splits, key="hist_split")
+    by = None if group == "none" else [group]
+    st.subheader(f"{len(view):,} events")
+    table = strategy_history.summary(view, by)
     st.dataframe(table.round(2), hide_index=True, width="stretch")
-    one = st.selectbox("Events of", picked or names)
+    st.caption(
+        "win/med = share up and median % move after 1, 5, 21 and 63 sessions; R = mean R with the "
+        "stop (capped at 20); trails = out at the first close under the 10/20-day MA or EMA 9/21."
+    )
+    st.markdown("**Exits compared** (mean R with the stop; Qullamaggie and Stockbee management)")
+    compared = exits.compare(view[view["entry"].notna()], CFG.exits, ["strategy", *(by or [])])
+    st.dataframe(compared.round(2), hide_index=True, width="stretch")
+    one = st.selectbox("Events of", picked or names, key="hist_one")
     events = view[view["strategy"] == one].sort_values("session_date", ascending=False)
     columns = ["session_date", "ticker", "side", "entry", "stop", "stop_adr", "chg_pct"]
+    if one == "ep_day":
+        columns += ["gap_pct", "rvol50", "months_sideways", "eps_growth_yoy", "sales_growth_yoy"]
+        columns += ["earnings_inferred", "criteria_met"]
     columns += ["pnl_5d", "pnl_21d", "pnl_63d", "r_21d", "r_trail_ma20", "mkt_breadth_state"]
     st.dataframe(
         events[[c for c in columns if c in events]], hide_index=True, width="stretch", height=300
     )
     labels = [f"{r.session_date} · {r.ticker}" for r in events.head(500).itertuples()]
-    pick = st.selectbox("Chart", ["—", *labels], key="strategy_chart")
+    pick = st.selectbox("Chart", ["—", *labels], key="hist_chart")
     if pick != "—":
         day_text, ticker = pick.split(" · ")
         row = events[
             (events["ticker"] == ticker) & (events["session_date"].astype(str) == day_text)
-        ]
-        row = row.iloc[0]
+        ].iloc[0]
         path = Path(CHART_CACHE) / f"{one}_{ticker}_{day_text}.png"
         drawn = charts.before_shot(
             ticker_bars(str(data_dir), ticker),
