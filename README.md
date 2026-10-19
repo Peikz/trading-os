@@ -49,6 +49,13 @@ uv run python scripts/eod.py --data-dir ../trading-os-data --force --no-push
 `--force` writes to `data/manual/` and `--no-push` skips ntfy. `scripts/verify_fields.py`
 prints sample rows with tickers, so run it locally only, never in Actions.
 
+Two more local helpers (both print tickers, so never in Actions):
+
+- `scripts/compare_screen.py` diffs a run against a TradingView screener CSV export for the
+  Phase 1 validation, with the reason for every difference.
+- `scripts/build_duckdb.py` (`uv run --group analysis ...`) builds a views-only DuckDB file
+  over the data repo for ad-hoc queries and Power BI.
+
 ## Secrets
 
 Set as GitHub Actions secrets on this repo, never in code:

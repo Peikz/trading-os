@@ -41,7 +41,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2)
 
 ### Validation
-- [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens — started with 16 Oct
+- [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens — started with 16 Oct; `scripts/compare_screen.py` diffs a run against a TradingView CSV export and appends the table (with the reason for each difference) to `docs/validation.md`
 - [ ] 10 consecutive trading days without manual intervention → Phase 1 done
 
 ## Phase 2 — Breakouts and history
@@ -62,7 +62,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 ## Phase 4 — Trade tracking
 - [ ] Saxo fills import (OpenAPI or CSV) → journal with R-multiples
-- [ ] Power BI model over DuckDB/Parquet
+- [ ] Power BI model over DuckDB/Parquet — groundwork: `scripts/build_duckdb.py` builds a views-only DuckDB file over the data repo (universe, candidates, outcomes, bars, signals_with_outcomes) for the DuckDB ODBC driver; the model itself waits for real trades
 
 ---
 
@@ -95,3 +95,4 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - 2026-10-19 (later): History metrics wired into EOD and weekly jobs as `hist_*` columns; Parabolic Short/Long and tight bases built on them (0 hits until history accumulates). Live forced EOD run OK in ~10 s.
 - 2026-10-19 (later): Before-shot charts (Phase 3) wired into the EOD and pre-market jobs; a chart failure is logged and never fails the run.
 - 2026-10-19 (later): Breakout B1-B5 detector (Phase 2) with BO-Watch and trigger scans, breakout fields stored in candidates, breakout lines in the push. 10k tickers in ~3 s. Proposed parameters listed under Questions.
+- 2026-10-19 (later): Validation helper (TradingView CSV vs run, with reasons) and DuckDB views builder.

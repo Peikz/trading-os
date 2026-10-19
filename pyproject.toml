@@ -16,6 +16,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+analysis = [
+    "duckdb>=1.1",
+]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]
