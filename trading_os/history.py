@@ -35,6 +35,8 @@ BAR_COLUMNS = [
     "fetched_ts",
 ]
 SOURCES = ("massive", "tradingview")
+# The only snapshot columns history needs (a snapshot has ~100).
+SNAPSHOT_COLUMNS = ["run_ts", "session_date", "ticker", "open", "high", "low", "close", "volume"]
 
 
 def bars_path(data_dir: Path, source: str, session: dt.date) -> Path:
@@ -112,7 +114,7 @@ def load_bars(data_dir: Path, sessions: Iterable[dt.date]) -> pd.DataFrame:
             continue
         snapshot = universe_snapshot_path(data_dir, session)
         if snapshot.exists():
-            frames.append(bars_from_snapshot(pd.read_parquet(snapshot)))
+            frames.append(bars_from_snapshot(pd.read_parquet(snapshot, columns=SNAPSHOT_COLUMNS)))
     if not frames:
         return pd.DataFrame(columns=BAR_COLUMNS)
     bars = pd.concat(frames, ignore_index=True)

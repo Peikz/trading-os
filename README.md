@@ -11,11 +11,17 @@ the jobs print counts and status only, because Actions logs here are public.
 
 ## Jobs
 
-| Job | Workflow | When (New York) | Scans |
+| Job | Workflow | When | What |
 |---|---|---|---|
-| Pre-market | `premarket.yml` | 07:17, trading days | EP-PM |
-| End of day | `eod.yml` | 16:17, trading days | EP-Day, EP9M, Momentum Burst up/down, EP-AH (off by default) |
-| Weekly | `weekly.yml` | Sunday | Qullamaggie 1/3/6M gainers, Growth Bucket 1 and 2 |
+| Pre-market | `premarket.yml` | 07:17 New York, trading days | EP-PM |
+| End of day | `eod.yml` | 16:17 New York, trading days | EP-Day, EP9M, Momentum Burst up/down, EP-AH (off by default), Parabolic Short/Long, Breakout watch (B1-B4) and trigger (B5) |
+| Weekly | `weekly.yml` | Sunday | Qullamaggie 1/3/6M gainers, Growth Bucket 1 and 2, tight bases |
+| Outcomes | `outcomes.yml` | after the EOD job | 5/10/20/60-session outcomes of past signals |
+| Backfill | `backfill.yml` | daily catch-up, or manual | Massive grouped-daily bars (needs `MASSIVE_API_KEY`) |
+
+Scans that need daily history (Parabolic, breakouts, tight bases) find nothing until enough
+sessions of bars exist, from Massive or from the jobs' own EOD snapshots. Pushed candidates
+get a before-shot chart PNG in the data repo.
 
 Each workflow has two UTC crons, one per daylight-saving state. The script exits unless New
 York time is inside its window on a trading day (NYSE calendar), and it skips a session that
