@@ -1,0 +1,66 @@
+# SEC EDGAR extras for the EP history study: exact earnings dates (8-K item 2.02) and EPS /
+# revenue as filed. Free; a few thousand small requests at 5 a second. Manual runs only.
+# This repo is public: the job prints counts and status only.
+
+name: SEC fetch
+
+on:
+  workflow_dispatch:
+    inputs:
+      check:
+        description: "Only test access (three requests)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: sec
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: SEC
+        env:
+          CHECK: ${{ inputs.check && '--check' || '' }}
+        run: uv run --frozen --no-dev python scripts/sec_fetch.py --data-dir data-repo $CHECK
+
+      - name: Commit data
+        if: ${{ !inputs.check }}
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "sec: data (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1
