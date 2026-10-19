@@ -97,7 +97,7 @@ word and I flip it.
 
 Still open (no default possible):
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
-- Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
+- ~~Your manual EP-Day screen~~ — answered 19 Oct by Emil: it filters on neither TradingView's 10-day "Relative Volume" nor "Primary listing". Same as the pipeline (no primary-listing filter; RVOL from the 60-day proxy, exact 50-day once history exists), so neither explains a validation difference.
 
 ## Blocked
 - Nothing blocked. All secrets are set (19 Oct); the 2-year backfill is running.
@@ -123,3 +123,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Facts under the top pushed EPs and breakouts (Emil): earnings timing, EPS/revenue growth and surprise, float traded, prior 6-month move, 52w high, 200d, industry, latest Massive headline for EPs. Stored in candidates (`ctx_*`), shown in the report and on the dashboard's Today page. Facts only; the grade stays yours.
 - 2026-10-19 (later): DATA_REPO_TOKEN works (needed repo access plus Contents read/write). First forced EOD on GitHub wrote to the data repo (bot commit), pushed with sizing and facts; public log counts only. Fact display tidied after reading the real report: growth beyond ±999 % shown as capped, no `-0%`, float traded as % below 1x; headline window reaches back to the previous session day. 2-year backfill started.
 - 2026-10-19 (later): EP9M pace (Emil): new `intraday` job at 10:15 and 12:00 New York finds EP9M names before the close from TradingView's relative volume at time. First live run is the check: compare the 10:15 pace with the day's final volume in a few EOD runs before trusting it.
+- 2026-10-19 (later): Emil: defaults table ok as running; intraday checks keep pushing "no alerts" so a quiet day still shows they ran; Emil will do the breakout hand audit and the 2-week validation; Tailscale install approved.
