@@ -1,0 +1,69 @@
+# Ten-year strategy and EP histories over Alpaca's daily bars (Emil, 20 Oct 2026): one job per
+# calendar year, in parallel. Each reads the years around it from the data repo's
+# "bars-alpaca" release and uploads strategy_<year>.parquet and ep_<year>.parquet to its
+# "history-10y" release (not git). Manual runs only. This repo is public: counts only.
+
+name: History 10y
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "JSON list of years"
+        default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+
+permissions:
+  contents: read
+
+jobs:
+  year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/universe
+            data/manual
+            settings
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Daily bars around the year
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p bars
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          Y=${{ matrix.year }}
+          for y in $((Y-2)) $((Y-1)) $Y $((Y+1)) $((Y+2)); do
+            gh release download bars-alpaca -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null || true
+          done
+          echo "bar files: $(ls bars | wc -l)"
+
+      - name: Build the year
+        run: uv run --frozen --no-dev python -m trading_os.long_history_cli --year ${{ matrix.year }} --bars bars --data-dir data-repo --out out
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view history-10y -R "$REPO" >/dev/null 2>&1 || gh release create history-10y -R "$REPO" --title "Histories, 10 years" --notes "Strategy and EP histories over Alpaca daily bars since 2016, one file per year." >/dev/null 2>&1 || true
+          gh release upload history-10y out/*.parquet -R "$REPO" --clobber
+          echo "uploaded: $(ls out | wc -l) files"
