@@ -6,6 +6,11 @@ name: Pipeline check
 
 on:
   workflow_dispatch:
+    inputs:
+      push:
+        description: "Send the EOD message to your phone (ntfy) as a test"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,8 +25,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: EOD (forced, no push)
-        run: uv run --frozen --no-dev python scripts/eod.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+      - name: EOD (forced)
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PUSH: ${{ inputs.push && 'yes' || '' }}
+        run: |
+          if [ "$PUSH" = "yes" ]; then
+            uv run --frozen --no-dev python scripts/eod.py --data-dir "$RUNNER_TEMP/data" --force
+          else
+            uv run --frozen --no-dev python scripts/eod.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+          fi
       - name: Pre-market (forced, no push)
         run: uv run --frozen --no-dev python scripts/premarket.py --data-dir "$RUNNER_TEMP/data" --force --no-push
       - name: Weekly (forced, no push)
