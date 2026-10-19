@@ -65,7 +65,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Power BI model over DuckDB/Parquet — groundwork: `scripts/build_duckdb.py` builds a views-only DuckDB file over the data repo (universe, candidates, outcomes, bars, signals_with_outcomes) for the DuckDB ODBC driver; the model itself waits for real trades
 
 ## Phase 5 — Dashboard
-- [ ] Private dashboard — built: Streamlit app (`app/streamlit_app.py`, localhost by default): today, screens, watchlists, journal with grades/notes/screenshots, graded signals, market, stats, validation. Plus a Markdown report per run in the data repo. Phone access: Tailscale (Emil, 19 Oct) via `scripts/start_dashboard.ps1` (`tailscale serve`); waiting for Tailscale to be installed on the PC
+- [ ] Private dashboard — built (System health, Entries & exits, Journal tabs added 20 Oct): Streamlit app (`app/streamlit_app.py`, localhost by default): today, screens, watchlists, journal with grades/notes/screenshots, graded signals, market, stats, validation. Plus a Markdown report per run in the data repo. Phone access: Tailscale (Emil, 19 Oct) via `scripts/start_dashboard.ps1` (`tailscale serve`); waiting for Tailscale to be installed on the PC
 
 ---
 
@@ -104,6 +104,8 @@ word and I flip it.
 | 25 | Minute-bar study supersets and stops (Emil, 19 Oct) | Fetch every gap >= 3 %, +4 % day with 1.5M+ shares, prior-pivot day, Luk touch, VCP trigger and next session after an EOD hit; fixed-distance stop 1 ADR; EP9M pace = volume so far / 0.22 at 10:15 and / 0.42 at 12:00 (the live scan uses TradingView's relative volume at time, which the bars don't have) | `intraday_study:` |
 | 26 | Martin Luk's setups (Emil, 19 Oct) | Leader: up >= 30 % over 1/3/6 months, ADR >= 5 %; lead = EMA 9 > 21 > 50; touch within 0.25 ADR of yesterday's EMA/AVWAP; flush >= 0.5 ADR under the prior close; AVWAP from the 250-session high, base >= 40 sessions; stop at the day's low | `luk:` |
 | 27 | Minervini's VCP (Emil, 19 Oct) | Trend Template as in his books, RS = our 1-99 RS; base 3-26 weeks; swing highs hold 5 sessions each side, contractions >= 0.5 ADR, 2-6 of them, each shallower, first <= 35 %, last <= 10 %; last 10 days' volume <= 0.8 x the 50-day; stop at the last contraction low, at most 8 % | `minervini:` |
+| 28 | Minute study: no stop closer than 1 % of the entry | With only the 0.25 ADR floor, quiet stocks (merger targets) got stops of cents and R in the hundreds; 1 % is about the closest stop that survives spreads | `intraday_study.min_stop_pct` |
+| 29 | Trade plans expire after 5 sessions | A plan with no matching entry fill within 5 sessions of its day shows as expired | `journal.plan_valid_sessions` |
 
 Still open (no default possible):
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
@@ -144,3 +146,6 @@ Still open (no default possible):
 - 2026-10-19 (later): 10 years of Alpaca daily bars (2016-2024, delisted names included) in the data repo's `bars-alpaca` release, ready for longer histories.
 - 2026-10-19 (later): Minute-bar entry/exit study for every strategy (Emil): candidates from daily supersets, each stock-day fetched once from Alpaca into the `intraday-minutes` release; entries chosen with only the bars known at the entry minute; vectorised exits for every trade. Dashboard page "Entries & exits".
 - 2026-10-19 (later): Martin Luk (pullback, AVWAP flush, inside day) and Minervini (Trend Template, VCP) added to the strategy history and the minute study, study only; Luk's EMA 9/21 exit measured for every strategy.
+- 2026-10-20: GitHub started scheduled runs 3-6 h late on 19 Oct: pre-market and both intraday checks skipped, EOD never landed in its window. EOD window widened to 23:59 New York (Emil) with a third, later cron; tonight's EOD run by hand. System health page shows this from now on.
+- 2026-10-20: Journal (Emil): log fills by hand with setup and stop (a later broker fill replaces its twin), open positions with open R and risk to stops, trade plans sized from the account risk and matched to fills (slippage), MAE/MFE and exit efficiency, trade charts with fills, real R per setup next to the studies. Saxo export still needed for the broker import mapping.
+- 2026-10-20: Dashboard on the phone: Tailscale on PC and iPhone; `tailscale serve --http=80` publishes it to the tailnet only (HTTPS certificates are off in the tailnet, not needed).
