@@ -2,7 +2,7 @@ import datetime as dt
 
 import pytest
 
-from trading_os.clock import in_window, session_date
+from trading_os.clock import in_window, session_date, sessions_after, sessions_back
 from trading_os.config import load_config
 
 UTC = dt.UTC
@@ -80,3 +80,24 @@ def test_weekly_runs_on_sunday_and_reports_friday(schedule):
     assert in_window(schedule, "weekly", sunday_evening_cet)
     assert not in_window(schedule, "weekly", utc(2026, 10, 19, 16, 0))  # Monday
     assert session_date(schedule, "weekly", sunday_evening_cet) == dt.date(2026, 10, 16)
+
+
+def test_sessions_back_skips_holidays(schedule):
+    # Five sessions ending the Friday after Thanksgiving (26 Nov is a holiday).
+    assert sessions_back(schedule, dt.date(2026, 11, 27), 5) == [
+        dt.date(2026, 11, 20),
+        dt.date(2026, 11, 23),
+        dt.date(2026, 11, 24),
+        dt.date(2026, 11, 25),
+        dt.date(2026, 11, 27),
+    ]
+    # A Sunday rolls back to Friday.
+    assert sessions_back(schedule, dt.date(2026, 10, 18), 1) == [dt.date(2026, 10, 16)]
+
+
+def test_sessions_after(schedule):
+    after = sessions_after(schedule, dt.date(2026, 11, 24), 3, until=dt.date(2026, 12, 31))
+    assert after == [dt.date(2026, 11, 25), dt.date(2026, 11, 27), dt.date(2026, 11, 30)]
+    assert sessions_after(schedule, dt.date(2026, 11, 24), 3, until=dt.date(2026, 11, 25)) == [
+        dt.date(2026, 11, 25)
+    ]

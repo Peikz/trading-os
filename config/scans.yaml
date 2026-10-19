@@ -120,6 +120,16 @@ market_light:                               # SPEC §6.5 — owner's rules, do n
     red_count_below: 15
     green_count_min: 50
 
+history:                                    # Phase 2: Massive (formerly Polygon.io) grouped daily bars
+  massive_base_url: https://api.massive.com
+  calls_per_minute: 5                       # free-tier limit (CLAUDE.md)
+  adjusted: true                            # SPEC §2
+  backfill_sessions: 504                    # ~2 years of NYSE sessions
+  daily_catchup_calls: 5                    # scheduled run: fill the newest missing sessions
+
+outcomes:                                   # Phase 3 (SPEC §7)
+  horizons: [5, 10, 20, 60]                 # trading sessions after the signal
+
 notify:                                     # SPEC §8
   server: https://ntfy.sh
   max_tickers_per_scan: 10

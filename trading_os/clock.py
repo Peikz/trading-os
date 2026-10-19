@@ -38,6 +38,27 @@ def previous_session(schedule: Schedule, session: dt.date) -> dt.date:
     return _calendar(schedule.calendar).previous_session(pd.Timestamp(session)).date()
 
 
+def sessions_back(schedule: Schedule, until: dt.date, count: int) -> list[dt.date]:
+    """The `count` sessions ending at `until` (inclusive when it is a session), oldest first."""
+    cal = _calendar(schedule.calendar)
+    end = pd.Timestamp(until)
+    if not cal.is_session(end):
+        end = cal.date_to_session(end, direction="previous")
+    first = max(cal.first_session, cal.session_offset(end, -(count - 1)))
+    return [s.date() for s in cal.sessions_in_range(first, end)]
+
+
+def sessions_after(
+    schedule: Schedule, session: dt.date, count: int, until: dt.date
+) -> list[dt.date]:
+    """Up to `count` sessions strictly after `session`, not later than `until`."""
+    cal = _calendar(schedule.calendar)
+    start = cal.next_session(pd.Timestamp(session))
+    if start > pd.Timestamp(until):
+        return []
+    return [s.date() for s in cal.sessions_in_range(start, pd.Timestamp(until))][:count]
+
+
 def in_window(schedule: Schedule, slot: str, now: dt.datetime) -> bool:
     """True when `now` is inside the slot's New York window on a trading day.
 

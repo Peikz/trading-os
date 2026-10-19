@@ -1,0 +1,75 @@
+# Massive grouped-daily bars (Phase 2): one-off 2-year backfill plus a daily catch-up.
+# Resumable: sessions already saved are skipped. Without MASSIVE_API_KEY the job exits
+# cleanly ("nothing to do"). 5 calls/min, so the full backfill takes about 100 minutes.
+# This repo is public and so are these logs: the job prints counts and status only.
+
+name: Backfill
+
+on:
+  schedule:
+    - cron: "30 9 * * 2-6"    # catch-up after each session, before the pre-market job
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: "API calls this run (504 = the full 2-year backfill)"
+        type: number
+        default: 504
+
+concurrency:
+  group: data-repo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Fetch bars
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && format('--max-calls {0}', inputs.max_calls) || '--catchup' }}
+        run: uv run --frozen --no-dev python scripts/backfill.py --data-dir data-repo $MODE
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "bars: backfill (run ${{ github.run_id }})"
+          git pull -q --rebase
+          git push -q
+          echo "Data: committed and pushed"
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Backfill failed", message: "Backfill job failed. Tap to open the Actions run.", tags: ["warning"], priority: 3, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/

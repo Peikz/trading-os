@@ -21,7 +21,25 @@ SLOTS = frozenset({"pm", "eod", "weekly"})
 ACTIONS = frozenset({"push", "log"})
 TIERS = frozenset({"alert", "log"})
 
-TOP_LEVEL_KEYS = {"version", "universe", "proxies", "schedule", "scans", "market_light", "notify"}
+TOP_LEVEL_KEYS = {
+    "version",
+    "universe",
+    "proxies",
+    "schedule",
+    "scans",
+    "market_light",
+    "history",
+    "outcomes",
+    "notify",
+}
+HISTORY_KEYS = {
+    "massive_base_url",
+    "calls_per_minute",
+    "adjusted",
+    "backfill_sessions",
+    "daily_catchup_calls",
+}
+OUTCOME_KEYS = {"horizons"}
 UNIVERSE_KEYS = {
     "market",
     "include_types",
@@ -149,6 +167,8 @@ class Config:
     schedule: Schedule
     scans: Mapping[str, ScanConfig]
     market_light: Mapping[str, Any]
+    history: Mapping[str, Any]
+    outcomes: Mapping[str, Any]
     notify: Mapping[str, Any]
 
 
@@ -181,6 +201,8 @@ def parse_config(raw: Any) -> Config:
         _check_keys(f"market_light.{section}", market_light[section], keys)
         _check_numbers(f"market_light.{section}", market_light[section])
 
+    _check_keys("history", raw["history"], HISTORY_KEYS)
+    _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
 
     return Config(
@@ -190,6 +212,8 @@ def parse_config(raw: Any) -> Config:
         schedule=_parse_schedule(raw["schedule"]),
         scans=MappingProxyType(_parse_scans(raw["scans"])),
         market_light=_freeze(market_light),
+        history=_freeze(raw["history"]),
+        outcomes=_freeze(raw["outcomes"]),
         notify=_freeze(raw["notify"]),
     )
 
