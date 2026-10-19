@@ -118,7 +118,8 @@ def fetch_universe(universe: Mapping[str, Any], with_history: bool = False) -> p
 def fetch_quote(symbol: str) -> dict[str, float]:
     """Close and SMA10/20/50 for one symbol, e.g. NASDAQ:QQQ for Market Light (an ETF, so
     outside the stock universe)."""
-    query = Query().select("close", "SMA10", "SMA20", "SMA50").set_tickers(symbol)
+    query = Query().select("close", "SMA10", "SMA20", "SMA50", "premarket_change")
+    query = query.set_tickers(symbol)
     query.query.pop("filter2", None)  # the default stock-type filter would drop ETFs
     query.query["filter"] = []
     _, raw = query.get_scanner_data(timeout=30)
@@ -130,6 +131,9 @@ def fetch_quote(symbol: str) -> dict[str, float]:
         "sma10": float(row["SMA10"]),
         "sma20": float(row["SMA20"]),
         "sma50": float(row["SMA50"]),
+        "pm_change_pct": float(row["premarket_change"])
+        if row["premarket_change"] is not None
+        else float("nan"),
     }
 
 

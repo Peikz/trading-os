@@ -119,6 +119,8 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     assert "EP-PM: 1 hits (1 alert), saved" in out
     [message] = sent
     assert message.title.startswith("Trading OS · Pre-market ")
+    assert "Market Light for today: n/a" in message.body
+    assert "Pre-market: up 4%+ 1 / down 4%+ 0" in message.body
     assert f"{GAPPER}  +12.0%  PM vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"

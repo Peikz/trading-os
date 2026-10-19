@@ -186,20 +186,26 @@ def _with_cats(results: dict, data_dir: Path, cfg, session) -> dict:
 
 
 def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):
-    """EOD: today's breadth row and the two push lines. Weekly: the Sunday scan count."""
+    """EOD: today's breadth row and push lines. Pre-market: the light for today, last close's
+    breadth and the pre-market movers. Weekly: the Sunday scan count."""
     if slot == "weekly":
         count = breadth.scan_count(uni, cfg)
         field = cfg.market_light["scan_count"]["avg_volume_field"]
         status("Market Light scan count: saved")
         frame = pd.DataFrame([{"scan_count": count, "avg_volume_field": field}])
         return {"market_light_count": frame}, []
-    if slot != "eod" or not cfg.scans["breadth"].enabled:
+    if slot not in ("eod", "pm") or not cfg.scans["breadth"].enabled:
         return {}, []
     qqq = once_more(
         lambda: tv.fetch_quote(cfg.market_light["qqq"]["symbol"]),
         label="TradingView",
         wait_s=TV_RETRY_WAIT_S,
     )
+    if slot == "pm":
+        last = breadth.latest_eod_row(data_dir, session)
+        pm_row = breadth.premarket_row(uni, qqq, cfg, session, last)
+        status("Pre-market breadth: saved")
+        return {"breadth_pm": pd.DataFrame([pm_row])}, breadth.premarket_lines(pm_row, last)
     row = breadth.breadth_row(uni, qqq, cfg, data_dir, session)
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))

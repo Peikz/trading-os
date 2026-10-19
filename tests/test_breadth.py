@@ -161,3 +161,53 @@ def test_breadth_row_from_snapshot_history(cfg, tmp_path):
     assert row["scan_count_basis"] == "eod-bootstrap"
     lines = breadth.push_lines(row)
     assert lines[0].startswith("Breadth: up ") and lines[1].startswith("Market Light: ")
+
+
+def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
+    last = {
+        "session_date": pd.Timestamp("2026-10-16"),
+        "light": "YELLOW",
+        "light_missing": "",
+        "qqq_trend": "sideways",
+        "breadth_state": "neutral",
+        "scan_count": 30,
+        "up4": 22,
+        "mb_up": 20,
+        "down4": 203,
+        "up_count_rule": "stockbee_4pct",
+        "ratio_5d": 0.5,
+        "ratio_10d": 0.8,
+        "up25q": 280,
+        "down25q": 354,
+        "pct_above_ma20": 46.0,
+    }
+    path = tmp_path / "data" / "breadth" / "2026" / "2026-10-16_eod.parquet"
+    path.parent.mkdir(parents=True)
+    pd.DataFrame([last]).to_parquet(path)
+    assert breadth.latest_eod_row(tmp_path, dt.date(2026, 10, 19))["light"] == "YELLOW"
+    assert breadth.latest_eod_row(tmp_path, dt.date(2026, 10, 16)) is None  # same day isn't "last"
+
+    uni = pd.DataFrame(
+        [
+            stock("GAPUP", pm_change_pct=6.0),
+            stock("GAPDOWN", pm_change_pct=-5.0),
+            stock("FLAT", pm_change_pct=1.0),
+            stock("PENNY", close=3.0, pm_change_pct=20.0),  # outside the breadth universe
+        ]
+    )
+    row = breadth.premarket_row(uni, {"pm_change_pct": 0.42}, cfg, dt.date(2026, 10, 19), last)
+    assert (row["pm_up4"], row["pm_down4"], row["pm_breadth_n"]) == (1, 1, 3)
+    lines = breadth.premarket_lines(row, last)
+    assert lines[0].startswith("Market Light for today: YELLOW  (set at the 2026-10-16 close")
+    assert lines[1].startswith("Breadth at the 2026-10-16 close: up 22 / down 203")
+    assert lines[2] == "Pre-market: up 4%+ 1 / down 4%+ 1  QQQ +0.4%"
+
+
+def test_premarket_lines_before_any_eod(cfg):
+    uni = pd.DataFrame([stock("A", pm_change_pct=5.0)])
+    row = breadth.premarket_row(uni, {}, cfg, dt.date(2026, 10, 19), None)
+    lines = breadth.premarket_lines(row, None)
+    assert lines == [
+        "Market Light for today: n/a (waiting for an EOD run)",
+        "Pre-market: up 4%+ 1 / down 4%+ 0",
+    ]

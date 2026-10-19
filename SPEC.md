@@ -109,6 +109,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | EP-PM (yours) | Pre-market change ≥ 10%, price ≥ $1, pre-market volume ≥ 50K, market cap ≥ $50M; earnings/news flag as column | 1 | Push |
 | EP9M early warning (proposed) | Pre-market volume ≥ 500K, gap ≥ 4% | 1 | Push |
 | Watchlist gappers (proposed) | BO-Watch / EP-Watch names with pre-market gap ≥ 2% | 1 | Push |
+| Breadth + Market Light (Emil, 19 Oct 2026) | Market Light set at the last close (it governs today's orders), that close's breadth line, pre-market movers (pre-market change ≥ +4% / ≤ −4% in the breadth universe) and QQQ's pre-market change | 1 | Push (top of message) |
 
 ### 6.2 End of day (22:20 CET)
 
@@ -271,6 +272,8 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 7. ~~Which EP hits push~~ — resolved 18 Oct 2026 by Emil: every hit is saved; only hits that also pass
    the alert tier (§4) are pushed. The others are saved with `tier=log`, `pushed=false`.
 8. ~~ADRs~~ — resolved 18 Oct 2026 by Emil: ADRs stay in the universe, with the symbol type stored as a column.
+9. ~~Breadth pre-market~~ — decided 19 Oct 2026 by Emil: breadth also runs pre-market (see §6.1). The
+   light itself is still set at the close (§6.5); pre-market adds the movers count and QQQ's pre-market change.
 
 ## 12. References
 

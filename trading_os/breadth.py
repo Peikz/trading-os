@@ -257,3 +257,65 @@ def push_lines(row: Mapping[str, Any]) -> list[str]:
     else:
         light_line = f"Market Light: n/a (waiting for {row['light_missing']})"
     return [breadth_line, light_line]
+
+
+# --- pre-market (Emil, 19 Oct 2026: breadth also runs pre-market; SPEC §6.1)
+
+
+def latest_eod_row(data_dir: Path, before: dt.date) -> dict[str, Any] | None:
+    """The newest canonical EOD breadth row for a session before `before`."""
+    best = None
+    for f in (Path(data_dir) / "data" / "breadth").glob("*/*_eod.parquet"):
+        day = dt.date.fromisoformat(f.stem.split("_")[0])
+        if day < before and (best is None or day > best[0]):
+            best = (day, f)
+    if best is None:
+        return None
+    return pd.read_parquet(best[1]).iloc[0].to_dict()
+
+
+def premarket_row(
+    uni: pd.DataFrame,
+    qqq: Mapping[str, float],
+    cfg: Config,
+    session: dt.date,
+    last: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Pre-market movers in the breadth universe (prior close and prior-day volume floors),
+    QQQ's pre-market change, and the light set at the last close."""
+    universe = uni[in_breadth_universe(uni, cfg.scans["breadth"])]
+    up, down = cfg.scans["mb_up"], cfg.scans["mb_down"]
+    last = last or {}
+    last_session = last.get("session_date")
+    return {
+        "session_date": session,
+        "pm_breadth_n": len(universe),
+        "pm_up4": int((universe["pm_change_pct"] >= up["chg_min_pct"]).sum()),
+        "pm_down4": int((universe["pm_change_pct"] <= down["chg_max_pct"]).sum()),
+        "qqq_pm_change_pct": qqq.get("pm_change_pct", float("nan")),
+        "last_eod_session": pd.Timestamp(last_session).date() if last_session is not None else None,
+        "light": last.get("light"),
+        "light_missing": last.get("light_missing", "an EOD run"),
+        "qqq_trend": last.get("qqq_trend"),
+        "breadth_state": last.get("breadth_state"),
+        "scan_count": last.get("scan_count"),
+    }
+
+
+def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> list[str]:
+    """Light for today's orders, last close's breadth, and the pre-market movers."""
+    day = row["last_eod_session"]
+    if row["light"]:
+        light = (
+            f"Market Light for today: {row['light']}  (set at the {day} close: QQQ "
+            f"{row['qqq_trend']}, breadth {row['breadth_state']}, scan count {row['scan_count']})"
+        )
+    else:
+        light = f"Market Light for today: n/a (waiting for {row['light_missing']})"
+    lines = [light]
+    if last:
+        lines.append(push_lines(last)[0].replace("Breadth:", f"Breadth at the {day} close:", 1))
+    qqq = row["qqq_pm_change_pct"]
+    qqq_text = "" if qqq is None or np.isnan(qqq) else f"  QQQ {qqq:+.1f}%"
+    lines.append(f"Pre-market: up 4%+ {row['pm_up4']} / down 4%+ {row['pm_down4']}{qqq_text}")
+    return lines

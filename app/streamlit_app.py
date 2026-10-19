@@ -159,7 +159,17 @@ if page == "Today":
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
     st.subheader("Market")
-    market_lines(latest_eod)
+    if (
+        latest_pm is not None
+        and latest_pm.breadth_pm is not None
+        and (latest_eod is None or latest_pm.session > latest_eod.session)
+    ):
+        pm_row = read_parquet(str(latest_pm.breadth_pm)).iloc[0].to_dict()
+        last = breadth.latest_eod_row(data_dir, latest_pm.session)
+        for line in breadth.premarket_lines(pm_row, last):
+            st.markdown(f"- {line}")
+    else:
+        market_lines(latest_eod)
     for run in [r for r in (latest_pm, latest_eod) if r is not None]:
         st.subheader(run.label)
         cands = candidates_of(run)

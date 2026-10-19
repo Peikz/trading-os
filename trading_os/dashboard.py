@@ -38,7 +38,8 @@ class Run:
     report: Path | None
     charts: Path
     stamp: str = ""
-    created: float = 0.0  # file time, orders manual runs (their folder name has no date)
+    created: float = 0.0
+    breadth_pm: Path | None = None  # file time, orders manual runs (their folder name has no date)
 
     @property
     def label(self) -> str:
@@ -57,6 +58,7 @@ def list_runs(data_dir: Path, include_manual: bool = True) -> list[Run]:
         day, slot = dt.date.fromisoformat(m[1]), m[2]
         year, stem = path.parent.name, path.stem
         breadth = root / "data" / "breadth" / year / f"{stem}.parquet"
+        breadth_pm = root / "data" / "breadth_pm" / year / f"{stem}.parquet"
         report = root / "reports" / year / f"{stem}.md"
         runs.append(
             Run(
@@ -68,6 +70,7 @@ def list_runs(data_dir: Path, include_manual: bool = True) -> list[Run]:
                 breadth=breadth if breadth.exists() else None,
                 report=report if report.exists() else None,
                 charts=root / "data" / "charts" / year / stem,
+                breadth_pm=breadth_pm if breadth_pm.exists() else None,
             )
         )
     if include_manual:
@@ -88,6 +91,9 @@ def list_runs(data_dir: Path, include_manual: bool = True) -> list[Run]:
                     charts=folder / "charts",
                     stamp=m[3],
                     created=(folder / "candidates.parquet").stat().st_mtime,
+                    breadth_pm=(folder / "breadth_pm.parquet")
+                    if (folder / "breadth_pm.parquet").exists()
+                    else None,
                 )
             )
     return sorted(
