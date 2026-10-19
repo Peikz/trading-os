@@ -36,7 +36,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Growth Bucket 1 and 2 (record quarters checked) — built; previous quarter comes from `total_revenue_fq_h` / EPS history (SPEC §11.2: available); run locally (202 / 150 hits); ticks after the first Actions run
 
 ### Delivery
-- [ ] ntfy notifications (one message per job + failure message) — built; ticks after the first real push
+- [x] ntfy notifications (one message per job + failure message) — test EOD message and failure message both sent from GitHub on 19 Oct and received
 - [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday)
 - [x] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2) — added 19 Oct; a test push from GitHub (`Pipeline check` with push) was accepted by ntfy
 
@@ -91,6 +91,7 @@ word and I flip it.
 | 12 | Growth buckets | 30-day average volume; annual revenue = trailing 12 months | `growth_bucket_*` |
 | 13 | EP-Day ranking and `[earnings]` flag | Largest gap first; earnings on the signal session or the one before | `scans/ep.py` |
 | 14 | CATS weights | +1 growth bucket, +1 MB up/EP in the last 10 sessions, +1 if 30-day avg volume > 90-day, −0.5 per ADR beyond 3 ADR above MA10 | `cats:` |
+| 15 | Position size in the push (Emil: 500k DKK, 0.5 % risk, in USD) | EP: entry at the close, stop at the day low but 0.25-1 ADR below entry; pre-market: 1 ADR below the pre-market price until the open; breakouts: SPEC order stop; max 100 % of the account in one name | `sizing:` (method) + data repo `settings/account.yaml` (private numbers) |
 
 Still open (no default possible):
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
@@ -116,3 +117,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Massive key verified live; backfill window capped by date with 403 skip; breakout audit replay ready for after the backfill.
 - 2026-10-19 (later): Exact history metrics replace the TradingView proxies row by row as soon as history exists (SPEC §11.6 note); Phase 1 metrics item ticked.
 - 2026-10-19 (later): `Pipeline check` workflow ran EOD, pre-market and weekly on GitHub's runners (forced, no push): TradingView answers from Actions (4,517 rows), charts and reports work on Linux, public log has no tickers. Only the data-repo commit and the ntfy push are untested, both waiting for the secrets.
+- 2026-10-19 (later): Position sizing in every pushed alert (Emil): entry, stop, shares, position and risk in USD from the private account file (500k DKK, 0.5 %), live USD/DKK from TradingView; stored in candidates; journal R falls back to the planned stop for EP trades. Failure push tested from GitHub.

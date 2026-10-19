@@ -137,6 +137,17 @@ def fetch_quote(symbol: str) -> dict[str, float]:
     }
 
 
+def fetch_fx(symbol: str) -> float:
+    """Last price of a currency pair, e.g. FX_IDC:USDDKK (DKK per USD)."""
+    query = Query().select("close").set_tickers(symbol)
+    query.query.pop("filter2", None)
+    query.query["filter"] = []
+    _, raw = query.get_scanner_data(timeout=30)
+    if len(raw) != 1 or not raw.iloc[0]["close"] > 0:
+        raise TruncatedResult(f"no rate for {symbol}")
+    return float(raw.iloc[0]["close"])
+
+
 def normalize(raw: pd.DataFrame) -> pd.DataFrame:
     """Rename TradingView fields to canonical columns and fix types."""
     df = raw.rename(columns=_CANONICAL).rename(columns={"ticker": "tv_ticker"})

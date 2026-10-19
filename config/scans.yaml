@@ -208,6 +208,14 @@ outcomes:                                   # Phase 3 (SPEC §7)
 charts:                                     # Phase 3: before-shot PNG per alert candidate
   sessions: 120                             # sessions shown up to the signal
 
+sizing:                                     # entry / stop / shares line under each pushed alert
+  ep_stop_max_adr: 1.0                      # EP (proposed): stop = day low, at most 1 ADR below entry
+  pm_stop_adr: 1.0                          # pre-market (proposed): 1 ADR below until the open
+  min_stop_adr: 0.25                        # EP (proposed): stop at least 0.25 ADR below entry, so a
+                                            # close at the day low doesn't give a 1-cent stop
+  fx_symbol: "FX_IDC:USD{currency}"         # live rate for the account currency (TradingView)
+  # Account size and risk per trade are private: data repo settings/account.yaml
+
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25
 

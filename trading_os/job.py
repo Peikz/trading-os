@@ -27,6 +27,7 @@ from trading_os import (
     notify,
     outcomes,
     report,
+    sizing,
     stats,
     store,
     tv,
@@ -130,6 +131,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         if not events.empty:
             extras["watchlists"] = events
         status(f"Watchlists: {len(events)} events")
+    results = _with_sizing(results, args.data_dir, cfg)
     selected = notify.select_for_push(results, cfg)
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
@@ -185,6 +187,31 @@ def _with_cats(results: dict, data_dir: Path, cfg, session) -> dict:
         if name in out:
             out[name] = cats.add_cats(out[name], growth, recent, rules)
     return out
+
+
+def _with_sizing(results: dict, data_dir: Path, cfg) -> dict:
+    """Entry / stop / shares for every hit of the scans with a rule. The account is private
+    (data repo settings/account.yaml) and no amount is ever printed."""
+    account = sizing.load_account(data_dir)
+    if account is None:
+        status("Sizing: no settings/account.yaml in the data repo, skipped")
+        return results
+    rate = 1.0
+    if account.currency != "USD":
+        symbol = cfg.sizing["fx_symbol"].format(currency=account.currency)
+        try:
+            rate = once_more(
+                lambda: tv.fetch_fx(symbol), label="TradingView", wait_s=TV_RETRY_WAIT_S
+            )
+        except Exception as exc:  # noqa: BLE001 - alerts still go out, just without sizes
+            status(f"Sizing: FAILED to get the exchange rate ({type(exc).__name__}), skipped")
+            return results
+    planned = sizing.add_plans(results, cfg.sizing, account, rate)
+    for name, hits in planned.items():
+        if "plan_shares" in hits:
+            planned[name] = hits.assign(plan_fx_rate=rate)
+    status("Sizing: added")
+    return planned
 
 
 def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):

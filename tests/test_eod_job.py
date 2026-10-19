@@ -191,3 +191,28 @@ def test_eod_uses_exact_rvol_once_history_exists(tmp_path, capsys, sent):
     row = cands[cands["scan"] == "ep_day"].iloc[0]
     assert row["rvol_basis"] == "history_50d_excl_today"
     assert row["rvol50"] == pytest.approx(3_000_000 / 750_000)  # today's volume / prior 50-day mean
+
+
+def test_push_carries_position_size_when_account_is_set(tmp_path, capsys, sent, monkeypatch):
+    settings = tmp_path / "settings" / "account.yaml"
+    settings.parent.mkdir(parents=True)
+    settings.write_text("currency: DKK\nsize: 500000\nrisk_pct: 0.5\n", encoding="utf-8")
+    monkeypatch.setattr(job.tv, "fetch_fx", lambda symbol: 6.667)
+    universe = synthetic_universe()
+    universe.loc[universe["ticker"] == GAPPER, "adr14_usd_tv"] = 1.5
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: universe)
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
+    out, _ = capsys.readouterr()
+    assert "Sizing: added" in out and "500000" not in out and "374" not in out  # no amounts in logs
+    [message] = sent
+    # GAPPER: close 11.50, day low 10.50, ADR 1.50 -> stop at the day low, 1.00 risk per share;
+    # 2,500 DKK / 6.667 = $374.98 -> 374 shares ($4.3k), risk $374.
+    dot = "·"
+    assert f"{GAPPER}  +18.0%" in message.body
+    assert f"   buy 11.50 {dot} stop 10.50 (day low) {dot} 374 sh {dot} $4.3k {dot} risk $374" in (
+        message.body
+    )
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    cands = pd.read_parquet(run_dir / "candidates.parquet")
+    ep = cands[cands["scan"] == "ep_day"].iloc[0]
+    assert ep["plan_shares"] > 0 and ep["plan_fx_rate"] == 6.667

@@ -76,4 +76,4 @@ def test_breakout_flags_column():
         }
     )
     lines = report.scan_table("breakout_watch", hits, 25)
-    assert lines[-1] == "| 1 | BO | alert | 15.12 | 14.88 | 1.00 | 27 | 14.7,7.6 | 12-4- |"
+    assert lines[-1] == "| 1 | BO | alert | 15.12 | 14.88 | 1.00 | 27 | 14.7,7.6 | 12-4- |  |  |"

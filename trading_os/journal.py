@@ -161,7 +161,10 @@ def link_signals(
         out.at[i, "signal_id"] = best["signal_id"]
         out.at[i, "signal_scan"] = best["scan"]
         out.at[i, "signal_date"] = best["session_date"]
-        out.at[i, "order_stop"] = best.get("order_stop")
+        stop = best.get("order_stop")
+        if stop is None or pd.isna(stop):  # EP signals: the planned stop from the alert
+            stop = best.get("plan_stop")
+        out.at[i, "order_stop"] = stop
     return out
 
 

@@ -20,6 +20,10 @@ the jobs print counts and status only, because Actions logs here are public.
 | Backfill | `backfill.yml` | daily catch-up, or manual | Massive grouped-daily bars (needs `MASSIVE_API_KEY`) |
 | Keepalive | `keepalive.yml` | 1st of each month | Re-enables the scheduled workflows (GitHub disables them after 60 idle days) |
 
+Each pushed alert also gets a position-size line (entry, stop, shares, position and risk in
+USD). The method is in `config/scans.yaml` → `sizing:`; your account size and risk per trade
+live only in the private data repo (`settings/account.yaml`) and never appear in logs.
+
 Scans that need daily history (Parabolic, breakouts, tight bases) find nothing until enough
 sessions of bars exist, from Massive or from the jobs' own EOD snapshots. Pushed candidates
 get a before-shot chart PNG in the data repo.

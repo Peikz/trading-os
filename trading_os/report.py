@@ -94,6 +94,15 @@ COLUMNS: dict[str, list[tuple[str, str, str]]] = {
         ("CATS", "cats", ".1f"),
     ],
 }
+_PLAN = [
+    ("Buy", "plan_entry", ".2f"),
+    ("Stop", "plan_stop", ".2f"),
+    ("Shares", "plan_shares", "int"),
+    ("Risk $", "plan_risk_usd", ".0f"),
+]
+for _scan in ("ep_day", "ep9m", "ep_pm", "ep9m_early", "watchlist_gappers"):
+    COLUMNS[_scan] = [*COLUMNS[_scan], *_PLAN]
+COLUMNS["breakout_watch"] = [*COLUMNS["breakout_watch"], *_PLAN[2:]]
 COLUMNS["breakout_trigger"] = [("Chg %", "chg_pct", "+.1f"), *COLUMNS["breakout_watch"]]
 
 

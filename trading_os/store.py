@@ -94,6 +94,14 @@ AUDIT_COLUMNS = [
     "cats_recent",
     "cats_volume",
     "cats_extension",
+    "plan_entry",
+    "plan_stop",
+    "plan_stop_basis",
+    "plan_shares",
+    "plan_position_usd",
+    "plan_risk_usd",
+    "plan_capped",
+    "plan_fx_rate",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

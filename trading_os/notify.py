@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 import requests
 
+from trading_os import sizing
 from trading_os.config import Config
 from trading_os.store import RunContext
 
@@ -148,10 +149,10 @@ def build_message(
         if ctx.slot == "weekly":
             lines = [format_weekly(row, name) for row in records]
         elif name.startswith("breakout_"):
-            lines = [format_breakout(row, name) for row in records]
+            lines = [_with_plan(format_breakout(row, name), row) for row in records]
         else:
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
-            lines = [format_hit(row, pct_column, ctx.slot) for row in records]
+            lines = [_with_plan(format_hit(row, pct_column, ctx.slot), row) for row in records]
         blocks.append("\n".join([header, *lines]))
     if header_lines:
         blocks.insert(0, "\n".join(header_lines))
@@ -166,6 +167,12 @@ def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> N
         timeout=timeout,
     )
     response.raise_for_status()
+
+
+def _with_plan(line: str, row: Mapping[str, Any]) -> str:
+    """The alert line plus its position-size line, when the account is set up."""
+    plan = sizing.plan_line(row)
+    return f"{line}\n{plan}" if plan else line
 
 
 def _pair(latest: float, previous: float) -> str:
