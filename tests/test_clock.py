@@ -73,3 +73,10 @@ def test_pm_session_is_today(schedule):
 def test_naive_datetime_rejected(schedule):
     with pytest.raises(ValueError):
         in_window(schedule, "eod", dt.datetime(2026, 10, 19, 20, 17))
+
+
+def test_weekly_runs_on_sunday_and_reports_friday(schedule):
+    sunday_evening_cet = utc(2026, 10, 18, 16, 0)
+    assert in_window(schedule, "weekly", sunday_evening_cet)
+    assert not in_window(schedule, "weekly", utc(2026, 10, 19, 16, 0))  # Monday
+    assert session_date(schedule, "weekly", sunday_evening_cet) == dt.date(2026, 10, 16)

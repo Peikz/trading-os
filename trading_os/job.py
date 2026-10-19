@@ -43,7 +43,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     now = dt.datetime.now(dt.UTC)
 
     if not args.force and not clock.in_window(cfg.schedule, slot, now):
-        status(f"{label}: outside the New York window or not a trading day, nothing to do")
+        status(f"{label}: outside its New York window or day, nothing to do")
         return 0
     session = clock.session_date(cfg.schedule, slot, now)
     if not args.force and store.already_done(args.data_dir, session, slot):
@@ -63,9 +63,11 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     )
     status(f"{label}: session {session}, run_kind {ctx.run_kind}, forced {ctx.forced}")
 
-    raw = tv.fetch_universe(cfg.universe)
+    raw = tv.fetch_universe(cfg.universe, with_history=slot == "weekly")
     status(f"TradingView: {len(raw)} rows")
     df = metrics.add_phase1_metrics(raw, cfg.proxies)
+    if slot == "weekly":
+        df = metrics.add_growth_metrics(df)
     previous = clock.previous_session(cfg.schedule, session)
     df["earnings_flag"] = metrics.earnings_flag(df["earnings_date_last"], session, previous)
     uni = universe.build_universe(df, cfg.universe, slot)
@@ -77,7 +79,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if args.no_push:
         status("Push: skipped (--no-push)")
     else:
-        notify.send(cfg.notify["server"], topic, notify.build_message(ctx, results, selected))
+        notify.send(cfg.notify["server"], topic, notify.build_message(ctx, results, selected, cfg))
         pushed = {name: set(hits["ticker"]) for name, hits in selected.items()}
         status("Push: sent")
 

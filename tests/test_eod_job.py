@@ -14,7 +14,7 @@ GAPPER = "".join(["GP", "QX"])  # built at runtime, like real data
 QUIET = "".join(["QT", "ZZ"])
 
 
-def synthetic_universe() -> pd.DataFrame:
+def synthetic_universe(with_history: bool = False) -> pd.DataFrame:
     base = {column: 0.0 for column in tv.FIELDS if column != "symbol"}
     base |= {
         "tv_ticker": "",
@@ -51,13 +51,22 @@ def synthetic_universe() -> pd.DataFrame:
         "volume": 900_000,
         "avg_volume_60d_tv": 900_000.0,
     }
-    return pd.DataFrame([gapper, quiet])
+    df = pd.DataFrame([gapper, quiet])
+    if with_history:
+        # Gapper: revenue +50 % and +40 % YoY in the last two quarters.
+        df["revenue_q_hist"] = [[150, 140, 120, 110, 100, 100, 90, 80], [10] * 8]
+        df["eps_q_hist"] = [[1.0] * 8, [0.1] * 8]
+    return df
 
 
 @pytest.fixture()
 def sent(monkeypatch):
     messages = []
-    monkeypatch.setattr(job.tv, "fetch_universe", lambda universe: synthetic_universe())
+    monkeypatch.setattr(
+        job.tv,
+        "fetch_universe",
+        lambda universe, with_history=False: synthetic_universe(with_history),
+    )
     monkeypatch.setattr(job.notify, "send", lambda server, topic, msg: messages.append(msg))
     monkeypatch.setenv("NTFY_TOPIC", "test-topic")
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
@@ -111,3 +120,24 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     assert f"{GAPPER}  +12.0%  PM vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"
+
+
+def test_weekly_run_fetches_history_and_stores_no_arrays(tmp_path, capsys, sent, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        job.tv,
+        "fetch_universe",
+        lambda universe, with_history=False: (
+            calls.append(with_history) or synthetic_universe(with_history)
+        ),
+    )
+    assert job.main("weekly", "Weekly", "test", ["--data-dir", str(tmp_path), "--force"]) == 0
+    assert calls == [True]
+    out, err = capsys.readouterr()
+    assert GAPPER not in out + err
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    universe = pd.read_parquet(run_dir / "universe.parquet")
+    assert "revenue_q_hist" not in universe.columns
+    assert universe.set_index("ticker").loc[GAPPER, "rev_growth_q_prev"] == pytest.approx(40.0)
+    [message] = sent
+    assert message.title.startswith("Trading OS · Weekly ")

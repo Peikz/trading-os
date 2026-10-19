@@ -84,10 +84,25 @@ def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct", slot: str = 
     return line
 
 
+def format_weekly(row: Mapping[str, Any], scan: str) -> str:
+    """Weekly list lines: the numbers each list is about."""
+    t = row["ticker"]
+    if scan == "qm_gainers":
+        return (
+            f"{t}  1M {row['ret_22']:+.0f}%  3M {row['ret_63']:+.0f}%  6M {row['ret_126']:+.0f}%  "
+            f"ADR {row['adr20_pct']:.1f}%  [{row['qm_lists']}]"
+        )
+    rev = _pair(row["rev_growth_q"], row["rev_growth_q_prev"])
+    if scan == "growth_bucket_1":
+        return f"{t}  rev {rev}  TTM {_money(row['revenue_ttm'])}"
+    return f"{t}  EPS {_pair(row['eps_growth_q'], row['eps_growth_q_prev'])}  rev {rev}"
+
+
 def build_message(
     ctx: RunContext,
     results: Mapping[str, pd.DataFrame],
     selected: Mapping[str, pd.DataFrame],
+    cfg: Config,
 ) -> Message:
     title = f"Trading OS · {SLOT_LABELS[ctx.slot]} {ctx.session.isoformat()}"
     if ctx.forced:
@@ -96,13 +111,22 @@ def build_message(
     for name, chosen in selected.items():
         label = SCAN_LABELS.get(name, name)
         total = len(results[name])
+        tiered = "push_tier" in cfg.scans[name].params
         if chosen.empty:
-            suffix = f" ({total} below alert tier)" if total else ""
-            blocks.append(f"{label}: no alerts{suffix}")
+            if not tiered:
+                blocks.append(f"{label}: no hits")
+            else:
+                suffix = f" ({total} below alert tier)" if total else ""
+                blocks.append(f"{label}: no alerts{suffix}")
             continue
-        header = f"{label}: {len(chosen)} alert" + (f" of {total} hits" if total else "")
-        pct_column = PCT_COLUMNS.get(name, "chg_pct")
-        lines = [format_hit(row, pct_column, ctx.slot) for row in chosen.to_dict("records")]
+        noun = "alert" if tiered else "shown"
+        header = f"{label}: {len(chosen)} {noun}" + (f" of {total} hits" if total else "")
+        records = chosen.to_dict("records")
+        if ctx.slot == "weekly":
+            lines = [format_weekly(row, name) for row in records]
+        else:
+            pct_column = PCT_COLUMNS.get(name, "chg_pct")
+            lines = [format_hit(row, pct_column, ctx.slot) for row in records]
         blocks.append("\n".join([header, *lines]))
     return Message(title=title, body="\n\n".join(blocks) or "No pushing scans ran.")
 
@@ -115,6 +139,12 @@ def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> N
         timeout=timeout,
     )
     response.raise_for_status()
+
+
+def _pair(latest: float, previous: float) -> str:
+    """`+62% / +55%` (latest / previous quarter), `+62%` when the previous is missing."""
+    text = f"{latest:+.0f}%"
+    return text if previous != previous else f"{text} / {previous:+.0f}%"
 
 
 def _money(value: float) -> str:

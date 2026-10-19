@@ -59,7 +59,7 @@ def test_select_for_push_alert_tier_and_limit():
 def test_message_one_per_job():
     cfg = load_config()
     results = {"ep_day": hits(n_alert=2, n_log=1)}
-    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg))
+    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
     assert msg.title == "Trading OS · EOD 2026-10-19"
     lines = msg.body.splitlines()
     assert lines[0] == "EP-Day: 2 alert of 3 hits"
@@ -70,10 +70,10 @@ def test_message_one_per_job():
 def test_message_without_hits():
     cfg = load_config()
     results = {"ep_day": hits(0)}
-    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg))
+    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
     assert msg.body == "EP-Day: no alerts"
     results = {"ep_day": hits(0, n_log=2)}
-    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg))
+    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
     assert msg.body == "EP-Day: no alerts (2 below alert tier)"
 
 

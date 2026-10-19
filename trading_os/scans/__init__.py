@@ -9,6 +9,7 @@ import pandas as pd
 from trading_os.config import Config, ScanConfig
 from trading_os.scans.ep import ep9m, ep_ah, ep_day, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
+from trading_os.scans.weekly import growth_bucket_1, growth_bucket_2, qm_gainers
 
 ScanFn = Callable[[pd.DataFrame, ScanConfig], pd.DataFrame]
 
@@ -19,6 +20,9 @@ REGISTRY: dict[str, ScanFn] = {
     "ep9m": ep9m,
     "mb_up": mb_up,
     "mb_down": mb_down,
+    "qm_gainers": qm_gainers,
+    "growth_bucket_1": growth_bucket_1,
+    "growth_bucket_2": growth_bucket_2,
 }
 
 
