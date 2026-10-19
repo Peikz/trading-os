@@ -112,7 +112,10 @@ class AlpacaClient:
             except requests.HTTPError as exc:
                 code = exc.response.status_code if exc.response is not None else None
                 if code in (403, 422) and self.feed == "sip":
-                    self.feed = params["feed"] = "iex"  # the plan doesn't allow SIP
+                    # The plan refused SIP (also happens when the window reaches the last 15
+                    # minutes). IEX has a sliver of the volume: say so, never silently.
+                    status("Alpaca: SIP refused, falling back to IEX (partial volume)")
+                    self.feed = params["feed"] = "iex"
                     continue
                 if code == 400 and len(symbols) > 1 and "page_token" not in params:
                     # One unknown symbol rejects the batch: split it to find the rest.
@@ -301,7 +304,10 @@ def daily_year(client: AlpacaClient, symbols: list[str], year: int) -> pd.DataFr
     from trading_os.metrics import NEW_YORK
 
     start = dt.datetime(year, 1, 1, tzinfo=dt.UTC)
-    end = dt.datetime(year, 12, 31, 23, 59, tzinfo=dt.UTC)
+    # Never ask for "now": the free plan refuses SIP for the last 15 minutes, and the IEX
+    # fallback has ~2 % of the volume (it broke the first 2026 file, 20 Oct 2026).
+    yesterday = dt.datetime.now(dt.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = min(dt.datetime(year, 12, 31, 23, 59, tzinfo=dt.UTC), yesterday)
     frames = []
     for k in range(0, len(symbols), YEAR_BATCH):
         bars = client.bars(symbols[k : k + YEAR_BATCH], "1Day", start, end)
@@ -312,8 +318,13 @@ def daily_year(client: AlpacaClient, symbols: list[str], year: int) -> pd.DataFr
     out = pd.concat(frames, ignore_index=True)
     out["session_date"] = out["ts"].dt.tz_convert(NEW_YORK).dt.date
     out["source"] = "alpaca"
+    out["feed"] = getattr(client, "feed", "sip")
     columns = ["session_date", "ticker", "open", "high", "low", "close", "volume", "vwap", "trades"]
-    return out[[*columns, "source"]].sort_values(["ticker", "session_date"]).reset_index(drop=True)
+    return (
+        out[[*columns, "source", "feed"]]
+        .sort_values(["ticker", "session_date"])
+        .reset_index(drop=True)
+    )
 
 
 def daily_history(client: AlpacaClient, out_dir, first_year: int, last_year: int) -> list[int]:
