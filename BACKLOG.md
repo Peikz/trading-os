@@ -91,7 +91,7 @@ word and I flip it.
 | 12 | Growth buckets | 30-day average volume; annual revenue = trailing 12 months | `growth_bucket_*` |
 | 13 | EP-Day ranking and `[earnings]` flag | Largest gap first; earnings on the signal session or the one before | `scans/ep.py` |
 | 14 | CATS weights | +1 growth bucket, +1 MB up/EP in the last 10 sessions, +1 if 30-day avg volume > 90-day, −0.5 per ADR beyond 3 ADR above MA10 | `cats:` |
-| 15 | Position size in the push (Emil: 500k DKK, 0.5 % risk, in USD) | EP: entry at the close, stop at the day low but 0.25-1 ADR below entry; pre-market: 1 ADR below the pre-market price until the open; breakouts: SPEC order stop; max 100 % of the account in one name | `sizing:` (method) + data repo `settings/account.yaml` (private numbers) |
+| 15 | Position size in the push (Emil: 500k DKK, 0.5 % risk, in USD) | EP: entry at the close, stop at the day low but 0.25-1 ADR below entry; pre-market: 1 ADR below the pre-market price until the open; breakouts: SPEC order stop; max 25 % of the account in one name (Emil, 19 Oct) | `sizing:` (method) + data repo `settings/account.yaml` (private numbers) |
 
 Still open (no default possible):
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
