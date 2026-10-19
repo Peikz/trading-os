@@ -123,6 +123,7 @@ def build_message(
     results: Mapping[str, pd.DataFrame],
     selected: Mapping[str, pd.DataFrame],
     cfg: Config,
+    header_lines: list[str] | None = None,
 ) -> Message:
     title = f"Trading OS · {SLOT_LABELS[ctx.slot]} {ctx.session.isoformat()}"
     if ctx.forced:
@@ -150,6 +151,8 @@ def build_message(
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
             lines = [format_hit(row, pct_column, ctx.slot) for row in records]
         blocks.append("\n".join([header, *lines]))
+    if header_lines:
+        blocks.insert(0, "\n".join(header_lines))
     return Message(title=title, body="\n\n".join(blocks) or "No pushing scans ran.")
 
 

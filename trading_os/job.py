@@ -15,7 +15,18 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from trading_os import charts, clock, enrich, history, metrics, notify, store, tv, universe
+from trading_os import (
+    breadth,
+    charts,
+    clock,
+    enrich,
+    history,
+    metrics,
+    notify,
+    store,
+    tv,
+    universe,
+)
 from trading_os.config import load_config
 from trading_os.history_metrics import LOOKBACK_SESSIONS
 from trading_os.logsafe import run_guarded, status
@@ -93,13 +104,14 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
 
     results = run_scans(uni, cfg, slot)
+    extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
     selected = notify.select_for_push(results, cfg)
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
     if args.no_push:
         status("Push: skipped (--no-push)")
     else:
-        message = notify.build_message(ctx, results, selected, cfg)
+        message = notify.build_message(ctx, results, selected, cfg, header)
         try:
             once_more(
                 lambda: notify.send(cfg.notify["server"], topic, message),
@@ -113,7 +125,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
             status(f"Push: FAILED ({type(exc).__name__}), saving data anyway")
 
     candidates = store.build_candidates(results, ctx, pushed)
-    store.write_run(args.data_dir, ctx, uni, candidates)
+    store.write_run(args.data_dir, ctx, uni, candidates, extras)
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
@@ -123,6 +135,27 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
+
+
+def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):
+    """EOD: today's breadth row and the two push lines. Weekly: the Sunday scan count."""
+    if slot == "weekly":
+        count = breadth.scan_count(uni, cfg)
+        field = cfg.market_light["scan_count"]["avg_volume_field"]
+        status("Market Light scan count: saved")
+        frame = pd.DataFrame([{"scan_count": count, "avg_volume_field": field}])
+        return {"market_light_count": frame}, []
+    if slot != "eod" or not cfg.scans["breadth"].enabled:
+        return {}, []
+    qqq = once_more(
+        lambda: tv.fetch_quote(cfg.market_light["qqq"]["symbol"]),
+        label="TradingView",
+        wait_s=TV_RETRY_WAIT_S,
+    )
+    row = breadth.breadth_row(uni, qqq, cfg, data_dir, session)
+    status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
+    status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
+    return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)
 
 
 def _charts(data_dir: Path, cfg, session, slot: str, selected, df) -> None:

@@ -68,6 +68,8 @@ def sent(monkeypatch):
         lambda universe, with_history=False: synthetic_universe(with_history),
     )
     monkeypatch.setattr(job.notify, "send", lambda server, topic, msg: messages.append(msg))
+    qqq = {"close": 100.0, "sma10": 98.0, "sma20": 97.0, "sma50": 95.0}
+    monkeypatch.setattr(job.tv, "fetch_quote", lambda symbol: qqq)
     monkeypatch.setenv("NTFY_TOPIC", "test-topic")
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     return messages

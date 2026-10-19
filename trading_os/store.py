@@ -113,7 +113,7 @@ def signal_id(session: dt.date, slot: str, scan: str, ticker: str) -> str:
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
 
-def run_paths(data_dir: Path, ctx: RunContext) -> dict[str, Path]:
+def run_paths(data_dir: Path, ctx: RunContext, extras: tuple[str, ...] = ()) -> dict[str, Path]:
     root = Path(data_dir) / "data"
     stem = f"{ctx.session.isoformat()}_{ctx.slot}"
     if ctx.forced:
@@ -122,12 +122,15 @@ def run_paths(data_dir: Path, ctx: RunContext) -> dict[str, Path]:
             "universe": base / "universe.parquet",
             "candidates": base / "candidates.parquet",
             "export": base / "export.xlsx",
+            **{name: base / f"{name}.parquet" for name in extras},
         }
     year = str(ctx.session.year)
     return {
         "universe": root / "universe" / year / f"{stem}.parquet",
         "candidates": root / "candidates" / year / f"{stem}.parquet",
         "export": root / "exports" / f"{stem}.xlsx",
+        # One row per session (breadth, the Sunday scan count): data/<name>/YYYY/<date>.parquet
+        **{name: root / name / year / f"{ctx.session.isoformat()}.parquet" for name in extras},
     }
 
 
@@ -138,7 +141,8 @@ def already_done(data_dir: Path, session: dt.date, slot: str) -> bool:
 
 def stamp(df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
     """Prefix run metadata columns (point-in-time: as known at run time)."""
-    out = df.copy()
+    meta_columns = ("run_ts", "session_date", "slot", "run_kind", "data_source")
+    out = df.drop(columns=[c for c in meta_columns if c in df.columns])
     meta = {
         "run_ts": pd.Timestamp(ctx.run_ts),
         "session_date": pd.Timestamp(ctx.session),
@@ -201,14 +205,19 @@ def build_candidates(
 
 
 def write_run(
-    data_dir: Path, ctx: RunContext, universe: pd.DataFrame, candidates: pd.DataFrame
+    data_dir: Path,
+    ctx: RunContext,
+    universe: pd.DataFrame,
+    candidates: pd.DataFrame,
+    extras: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Path]:
     """Write universe, candidates and the xlsx export; never overwrite.
 
     Files are staged next to their targets and renamed at the end, candidates last, so a
     crash never leaves a half-written run that looks complete.
     """
-    paths = run_paths(data_dir, ctx)
+    extras = extras or {}
+    paths = run_paths(data_dir, ctx, tuple(extras))
     for path in paths.values():
         if path.exists():
             raise AlreadyWritten(path.name)
@@ -216,6 +225,7 @@ def write_run(
     for key, writer in (
         ("universe", lambda p: stamp(universe, ctx).to_parquet(p, index=False)),
         ("export", lambda p: _write_export(candidates, p)),
+        *[(name, _parquet_writer(stamp(frame, ctx))) for name, frame in extras.items()],
         ("candidates", lambda p: candidates.to_parquet(p, index=False)),
     ):
         target = paths[key]
@@ -226,6 +236,10 @@ def write_run(
     for tmp, target in staged:
         tmp.rename(target)
     return paths
+
+
+def _parquet_writer(frame: pd.DataFrame):
+    return lambda path: frame.to_parquet(path, index=False)
 
 
 def _write_export(candidates: pd.DataFrame, path: Path) -> None:

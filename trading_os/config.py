@@ -88,7 +88,14 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MARKET_LIGHT_KEYS = {
     "qqq": {"symbol", "sma_windows", "slope_lookback"},
     "breadth": {"strong_ratio10_min", "weak_ratio10_below", "thrust_ratio5_gt", "quarter_move_pct"},
-    "scan_count": {"country", "price_gt", "avg_volume_gt", "perf_3m_min_pct", "above_sma"},
+    "scan_count": {
+        "country",
+        "price_gt",
+        "avg_volume_gt",
+        "avg_volume_field",
+        "perf_3m_min_pct",
+        "above_sma",
+    },
     "thresholds": {"stop_count_below", "red_count_below", "green_count_min"},
 }
 NOTIFY_KEYS = {"server", "max_tickers_per_scan"}
@@ -125,6 +132,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "ratio_windows",
         "quarter_move_pct",
         "ma_windows",
+        "up_count_rule",
     },
     "breakout_watch": {"push_tier"},
     "breakout_trigger": {"push_tier"},
@@ -298,6 +306,8 @@ def _parse_scans(raw: Any) -> dict[str, ScanConfig]:
             raise ConfigError(
                 f"scans.{name}.pm_gap_basis: {body['pm_gap_basis']!r} not in {allowed}"
             )
+        if body.get("up_count_rule", "stockbee_4pct") not in ("stockbee_4pct", "mb_up"):
+            raise ConfigError(f"scans.{name}.up_count_rule: {body['up_count_rule']!r}")
         if "push_tier" in body and body["push_tier"] not in TIERS:
             raise ConfigError(f"scans.{name}.push_tier: {body['push_tier']!r} not in {TIERS}")
         params = {k: v for k, v in body.items() if k not in SCAN_COMMON_KEYS}

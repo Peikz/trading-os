@@ -46,6 +46,7 @@ FIELDS: dict[str, str] = {
     "avg_dollar_volume_30d_tv": "AvgValue.Traded_30d",
     "ma10": "SMA10",
     "ma20": "SMA20",
+    "ma40": "SMA40",
     "ma50": "SMA50",
     "ma200": "SMA200",
     "high_52w": "price_52_week_high",
@@ -112,6 +113,24 @@ def fetch_universe(universe: Mapping[str, Any], with_history: bool = False) -> p
     if len(raw) != total:
         raise TruncatedResult(f"TradingView matched {total} rows but returned {len(raw)}")
     return normalize(raw)
+
+
+def fetch_quote(symbol: str) -> dict[str, float]:
+    """Close and SMA10/20/50 for one symbol, e.g. NASDAQ:QQQ for Market Light (an ETF, so
+    outside the stock universe)."""
+    query = Query().select("close", "SMA10", "SMA20", "SMA50").set_tickers(symbol)
+    query.query.pop("filter2", None)  # the default stock-type filter would drop ETFs
+    query.query["filter"] = []
+    _, raw = query.get_scanner_data(timeout=30)
+    if len(raw) != 1:
+        raise TruncatedResult(f"expected 1 row for the quote, got {len(raw)}")
+    row = raw.iloc[0]
+    return {
+        "close": float(row["close"]),
+        "sma10": float(row["SMA10"]),
+        "sma20": float(row["SMA20"]),
+        "sma50": float(row["SMA50"]),
+    }
 
 
 def normalize(raw: pd.DataFrame) -> pd.DataFrame:

@@ -81,10 +81,14 @@ scans:
   parabolic_long:
     {enabled: true, phase: 1, slot: eod, action: log,
      lookback_days_max: 10, drop_min_pct: 30, consec_down_min: 3}
-  breadth:                                  # one line in the EOD push
+  # Breadth: one line in the EOD push. Up/down use the Momentum Burst thresholds above.
+  # up_count_rule (proposed, pending Emil): stockbee_4pct = change >= 4 % on volume above
+  # the prior day (Stockbee Market Monitor); mb_up = also close location >= 0.70 (MB up).
+  breadth:
     {enabled: true, phase: 1, slot: eod, action: push,
      universe_price_min: 5, universe_volume_min: 100_000,
-     ratio_windows: [5, 10], quarter_move_pct: 25, ma_windows: [20, 40, 50]}
+     ratio_windows: [5, 10], quarter_move_pct: 25, ma_windows: [20, 40, 50],
+     up_count_rule: stockbee_4pct}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
@@ -124,6 +128,8 @@ market_light:                               # SPEC §6.5 — owner's rules, do n
     country: USA
     price_gt: 5
     avg_volume_gt: 500_000
+    avg_volume_field: average_volume_30d_calc  # (proposed, pending Emil): which TradingView
+                                            # average your screen uses (10/30/60/90 days)
     perf_3m_min_pct: 50
     above_sma: 20
   thresholds:                               # first matching light wins: STOP, RED, GREEN, YELLOW
