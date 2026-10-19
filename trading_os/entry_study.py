@@ -1,0 +1,291 @@
+"""EP entry study (Emil, 19 Oct 2026): when is the best time to buy an EP? Facts, not advice.
+
+For every EP-Day event with Massive minute bars (`ep_enrich`), the same trade is entered at
+different times and measured the same way afterwards:
+
+- after-hours the evening before (18:00 ET), pre-market (08:00 and 09:15 ET), the open,
+  an opening-range-high breakout after 1, 5, 15, 30 and 60 minutes (a buy-stop at the
+  range high: no break, no trade), 10:30, 12:00 and 15:30 ET, the close, and the next
+  day's open and 5-minute range high;
+- two stops for each: 1.5 ADR below the entry (the same distance for every entry, so the
+  timing is all that differs), and the low so far (the opening-range low for a breakout,
+  the day's low up to the entry otherwise; at least 0.25 ADR away);
+- after the entry: the rest of that day minute by minute, then daily bars; R after 5, 21
+  and 63 sessions, and a trailing exit at the first close under the 20-day MA (from the
+  third session).
+
+Times are New York (the minute bars come in UTC). The regular session is 09:30-16:00.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from collections.abc import Mapping
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from trading_os.metrics import NEW_YORK
+
+ENTRY_TIMES = {"ah_1800": "18:00", "pm_0800": "08:00", "pm_0915": "09:15"}
+CLOCK_ENTRIES = {"t_1030": "10:30", "t_1200": "12:00", "t_1530": "15:30"}
+OPENING_RANGES = (1, 5, 15, 30, 60)
+HORIZONS = (5, 21, 63)
+STOPS = ("adr", "low")
+WIDE_STOP_ADR = 1.5
+MIN_STOP_ADR = 0.25
+
+
+def to_ny(minutes: pd.DataFrame) -> pd.DataFrame:
+    out = minutes.copy()
+    out["ts"] = pd.to_datetime(out["ts"], utc=True).dt.tz_convert(NEW_YORK)
+    out["day"] = out["ts"].dt.date
+    out["clock"] = out["ts"].dt.strftime("%H:%M")
+    return out.sort_values("ts").reset_index(drop=True)
+
+
+def _last_at(day: pd.DataFrame, hhmm: str) -> tuple[float, int] | None:
+    """Last traded price at or before `hhmm` that day, and its row position."""
+    before = day[day["clock"] <= hhmm]
+    if before.empty:
+        return None
+    return float(before["close"].iloc[-1]), int(before.index[-1])
+
+
+def _session(day: pd.DataFrame) -> pd.DataFrame:
+    return day[(day["clock"] >= "09:30") & (day["clock"] < "16:00")]
+
+
+def entries(minutes: pd.DataFrame, prev: dt.date, ep: dt.date, nxt: dt.date | None):
+    """name -> (price, minute row where the trade starts, low-so-far stop or None)."""
+    days = {d: g for d, g in minutes.groupby("day")}
+    out: dict[str, tuple[float, int, float | None]] = {}
+    before = days.get(prev)
+    if before is not None:
+        evening = before[(before["clock"] >= "16:00")]
+        found = _last_at(evening, ENTRY_TIMES["ah_1800"])
+        if found and not evening[evening["clock"] <= "18:00"].empty:
+            out["ah_1800"] = (*found, None)
+    today = days.get(ep)
+    if today is None:
+        return out
+    pre = today[today["clock"] < "09:30"]
+    for name in ("pm_0800", "pm_0915"):
+        found = _last_at(pre, ENTRY_TIMES[name])
+        if found and not pre[pre["clock"] <= ENTRY_TIMES[name]].empty:
+            low = float(pre[pre["clock"] <= ENTRY_TIMES[name]]["low"].min())
+            out[name] = (found[0], found[1], low)
+    session = _session(today)
+    if session.empty:
+        return out
+    first = session.iloc[0]
+    out["open"] = (float(first["open"]), int(session.index[0]), None)
+    for name, hhmm in CLOCK_ENTRIES.items():
+        found = _last_at(session, hhmm)
+        if found:
+            low = float(session.loc[: found[1], "low"].min())
+            out[name] = (found[0], found[1], low)
+    last = session.iloc[-1]
+    out["close"] = (float(last["close"]), int(session.index[-1]), float(session["low"].min()))
+    out |= _breakouts(session, "orh")
+    if nxt is not None and nxt in days:
+        nxt_session = _session(days[nxt])
+        if not nxt_session.empty:
+            out["next_open"] = (float(nxt_session.iloc[0]["open"]), int(nxt_session.index[0]), None)
+            out |= {"next_" + k: v for k, v in _breakouts(nxt_session, "orh", (5,)).items()}
+    return out
+
+
+def _breakouts(session: pd.DataFrame, prefix: str, ranges=OPENING_RANGES) -> dict:
+    """Buy-stop at the high of the first N minutes, filled at the high (or the open of the
+    bar that gaps over it); the range low is the stop."""
+    out = {}
+    start = session["ts"].iloc[0]
+    for n in ranges:
+        inside = session[session["ts"] < start + pd.Timedelta(minutes=n)]
+        after = session[session["ts"] >= start + pd.Timedelta(minutes=n)]
+        if inside.empty or after.empty:
+            continue
+        high, low = float(inside["high"].max()), float(inside["low"].min())
+        crossed = after[after["high"] > high]
+        if crossed.empty:
+            continue
+        bar = crossed.iloc[0]
+        fill = max(float(bar["open"]), high)
+        out[f"{prefix}_{n}m"] = (fill, int(crossed.index[0]), low)
+    return out
+
+
+def simulate(
+    minutes: pd.DataFrame,
+    start_row: int,
+    entry: float,
+    stop: float,
+    daily: pd.DataFrame,
+    entry_day: dt.date,
+) -> dict[str, Any]:
+    """R for one entry: the rest of the entry day minute by minute, then daily bars."""
+    risk = entry - stop
+    if not risk > 0:
+        return {}
+    out: dict[str, Any] = {}
+    rest = minutes.loc[start_row + 1 :]
+    rest = rest[(rest["day"] == entry_day) & (rest["clock"] < "16:00")]
+    hit = rest[rest["low"] <= stop]
+    if len(hit):
+        r = (min(float(hit.iloc[0]["open"]), stop) - entry) / risk
+        out |= {f"r_{h}d": r for h in HORIZONS} | {"r_trail_ma20": r, "stopped_entry_day": True}
+        return out
+    out["stopped_entry_day"] = False
+    later = daily[daily["session_date"] > entry_day].reset_index(drop=True)
+    ma20 = daily.set_index("session_date")["close"].rolling(20).mean()
+    exit_r = None
+    trail = None
+    for i, bar in later.iterrows():
+        if bar["low"] <= stop:
+            exit_r = (min(bar["open"], stop) - entry) / risk
+        horizon = i + 1
+        for h in HORIZONS:
+            if horizon == h and f"r_{h}d" not in out:
+                out[f"r_{h}d"] = exit_r if exit_r is not None else (bar["close"] - entry) / risk
+        if trail is None:
+            if exit_r is not None:
+                trail = exit_r
+            elif horizon >= 3 and bar["close"] < ma20.get(bar["session_date"], np.nan):
+                trail = (bar["close"] - entry) / risk
+        if exit_r is not None:
+            for h in HORIZONS:
+                out.setdefault(f"r_{h}d", exit_r)
+            break
+        if horizon >= max(HORIZONS) and trail is not None:
+            break
+    if trail is None and len(later):
+        trail = (later.iloc[min(len(later), 126) - 1]["close"] - entry) / risk
+    out["r_trail_ma20"] = trail
+    return out
+
+
+def study_event(
+    minutes: pd.DataFrame,
+    daily: pd.DataFrame,
+    prev: dt.date,
+    ep: dt.date,
+    nxt: dt.date | None,
+    adr_usd: float,
+) -> list[dict[str, Any]]:
+    """Every entry x stop for one EP."""
+    rows = []
+    for name, (price, row, low) in entries(minutes, prev, ep, nxt).items():
+        day = minutes.loc[row, "day"]
+        floor = MIN_STOP_ADR * adr_usd
+        stops = {"adr": price - WIDE_STOP_ADR * adr_usd}
+        if low is not None:
+            stops["low"] = min(low, price - floor)
+        for kind, stop in stops.items():
+            result = simulate(minutes, row, price, stop, daily, day)
+            if result:
+                rows.append(
+                    {"entry": name, "stop_rule": kind, "price": price, "stop": stop} | result
+                )
+    return rows
+
+
+def summary(df: pd.DataFrame, by: list[str] | None = None) -> pd.DataFrame:
+    """Per entry and stop rule: trades, win rate and mean R (capped at 20) per horizon."""
+    keys = ["entry", "stop_rule", *(by or [])]
+    rows = []
+    for key, part in df.groupby(keys, dropna=False, observed=True):
+        row: dict[str, Any] = dict(
+            zip(keys, key if isinstance(key, tuple) else (key,), strict=True)
+        )
+        row["trades"] = len(part)
+        row["stopped_same_day%"] = part["stopped_entry_day"].mean() * 100
+        for h in HORIZONS:
+            r = part[f"r_{h}d"].dropna()
+            row[f"win_{h}d%"] = (r > 0).mean() * 100 if len(r) else np.nan
+            row[f"R_{h}d"] = r.clip(upper=20).mean() if len(r) else np.nan
+        trail = part["r_trail_ma20"].dropna()
+        row["R_trail_ma20"] = trail.clip(upper=20).mean() if len(trail) else np.nan
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def run(events: pd.DataFrame, minute_path, bars: pd.DataFrame, sessions: list) -> pd.DataFrame:
+    """`events`: EP rows with session_date, ticker, adr20_pct, close (+ any grouping columns).
+    `minute_path(day, ticker)` gives each event's minute file."""
+    index = {d: i for i, d in enumerate(sessions)}
+    by_ticker = {t: g.sort_values("session_date") for t, g in bars.groupby("ticker")}
+    rows = []
+    for event in events.to_dict("records"):
+        path = minute_path(event["session_date"], event["ticker"])
+        if not path.exists():
+            continue
+        raw = pd.read_parquet(path)
+        if raw.empty:
+            continue
+        i = index.get(event["session_date"])
+        if not i:
+            continue
+        prev = sessions[i - 1]
+        nxt = sessions[i + 1] if i + 1 < len(sessions) else None
+        adr_usd = event["adr20_pct"] * event["close"] / 100
+        daily = by_ticker.get(event["ticker"])
+        if daily is None or not adr_usd > 0:
+            continue
+        keep = {k: event.get(k) for k in ("session_date", "ticker", "earnings", "earnings_timing")}
+        for row in study_event(to_ny(raw), daily, prev, event["session_date"], nxt, adr_usd):
+            rows.append(keep | row)
+    return pd.DataFrame(rows)
+
+
+def label(entry: str) -> str:
+    names: Mapping[str, str] = {
+        "ah_1800": "after-hours the evening before (18:00)",
+        "pm_0800": "pre-market 08:00",
+        "pm_0915": "pre-market 09:15",
+        "open": "the open",
+        "t_1030": "10:30",
+        "t_1200": "12:00",
+        "t_1530": "15:30",
+        "close": "the close",
+        "next_open": "next day's open",
+        "next_orh_5m": "next day's 5-minute range high",
+    }
+    if entry.startswith("orh_"):
+        return f"{entry[4:-1]}-minute opening-range high"
+    return names.get(entry, entry)
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    from pathlib import Path
+
+    from trading_os import ep_enrich, history
+    from trading_os.logsafe import status
+    from trading_os.store import PARQUET_OPTIONS
+
+    parser = argparse.ArgumentParser(description="EP entry timing study on the minute bars")
+    parser.add_argument("--data-dir", type=Path, required=True)
+    args = parser.parse_args(argv)
+    built = sorted((args.data_dir / "data" / "ep_history").glob("ep_history_*.parquet"))
+    if not built:
+        status("Entry study: no EP history yet")
+        return 1
+    study = pd.read_parquet(built[-1])
+    study["session_date"] = pd.to_datetime(study["session_date"]).dt.date
+    events = study[study["is_ep_day"] & (study["tier"] == "alert")]
+    files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
+    sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
+    bars = history.load_bars(args.data_dir, sessions)
+    bars = bars[bars["ticker"].isin(set(events["ticker"]))]
+    result = run(
+        events, lambda day, t: ep_enrich.minutes_path(args.data_dir, day, t), bars, sessions
+    )
+    if result.empty:
+        status("Entry study: no minute bars yet")
+        return 0
+    out = args.data_dir / "data" / "ep_enrich" / f"entry_study_{built[-1].stem[11:]}.parquet"
+    result.to_parquet(out, **PARQUET_OPTIONS)
+    status(f"Entry study: {result['ticker'].nunique()} EPs, {len(result)} entries, saved")
+    return 0

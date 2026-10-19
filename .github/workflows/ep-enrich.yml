@@ -44,11 +44,28 @@ jobs:
 
       - run: uv sync --frozen --no-dev
 
-      - name: Fetch
+      - name: Fetch, saving every hour
         env:
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           UNTIL: ${{ inputs.until || (github.event.schedule == '35 22 * * *' && '04:20') || (github.event.schedule == '30 4 * * *' && '09:20') || '15:30' }}
-        run: uv run --frozen --no-dev python scripts/ep_enrich.py --data-dir data-repo --max-calls 1800 --minutes 345 --until "$UNTIL"
+        run: |
+          git -C data-repo config user.name "trading-os-bot"
+          git -C data-repo config user.email "trading-os-bot@users.noreply.github.com"
+          for slice in 1 2 3 4 5 6; do
+            uv run --frozen --no-dev python scripts/ep_enrich.py --data-dir data-repo --max-calls 300 --minutes 58 --until "$UNTIL" | tee slice.log
+            git -C data-repo add -A
+            if ! git -C data-repo diff --cached --quiet; then
+              git -C data-repo commit -q -m "ep enrich: data (run ${{ github.run_id }}, hour $slice)"
+              for attempt in 1 2 3; do
+                if git -C data-repo pull -q --rebase && git -C data-repo push -q; then
+                  echo "Data: hour $slice pushed"; break
+                fi
+                sleep $((attempt * 10))
+              done
+            fi
+            # Nothing left to fetch, or past the end time (the job then makes 0 calls).
+            if grep -q "in 0 calls" slice.log; then break; fi
+          done
 
       - name: Commit data
         if: always()
