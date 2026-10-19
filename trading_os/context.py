@@ -98,8 +98,16 @@ def add_context(
     return out
 
 
-def _pct(x: Any, spec: str = "+.0f") -> str | None:
-    return None if x is None or pd.isna(x) else f"{x:{spec}}%"
+GROWTH_CAP = 999  # beyond this the base is near zero and the number says nothing
+
+
+def _pct(x: Any) -> str | None:
+    """`+128%`; whole percents, no `-0%`, capped at ±999 % (tiny year-ago bases)."""
+    if x is None or pd.isna(x):
+        return None
+    if abs(x) > GROWTH_CAP:
+        return f">+{GROWTH_CAP}%" if x > 0 else f"<-{GROWTH_CAP}%"
+    return f"{round(x) + 0:+d}%"
 
 
 def _growth(latest: Any, previous: Any, surprise: Any) -> str | None:
@@ -109,8 +117,20 @@ def _growth(latest: Any, previous: Any, surprise: Any) -> str | None:
     if previous is not None and not pd.isna(previous):
         text += f" / {_pct(previous)}"
     if surprise is not None and not pd.isna(surprise):
-        text += f" (beat {_pct(surprise)})" if surprise >= 0 else f" (miss {_pct(surprise)})"
+        if round(surprise) == 0:
+            text += " (in line)"
+        else:
+            text += f" (beat {_pct(surprise)})" if surprise > 0 else f" (miss {_pct(surprise)})"
     return text
+
+
+def _traded(turnover: Any) -> str:
+    """Share of the float that traded: `8.8x` from one float up, `12%` below."""
+    if turnover is None or pd.isna(turnover):
+        return ""
+    if turnover >= 1:
+        return f" ({turnover:.1f}x traded)"
+    return f" ({turnover:.0%} traded)" if turnover >= 0.005 else " (<1% traded)"
 
 
 def _shares(x: float) -> str:
@@ -153,10 +173,7 @@ def ep_line(row: Mapping[str, Any], *, premarket: bool = False) -> str:
         parts.append(f"rev {rev}")
     floats, turnover = row.get("float_shares"), row.get("ctx_float_turnover")
     if floats is not None and not pd.isna(floats) and floats > 0:
-        traded = (
-            f" ({turnover:.1f}x traded)" if turnover is not None and not pd.isna(turnover) else ""
-        )
-        parts.append(f"float {_shares(floats)}{traded}")
+        parts.append(f"float {_shares(floats)}{_traded(turnover)}")
     prior = _pct(row.get("ctx_prior_6m_pct"))
     if prior:
         parts.append(f"6M before {prior}")

@@ -244,7 +244,12 @@ def _news_lookup(cfg, session):
         key, cfg.history["massive_base_url"], RateLimiter(cfg.history["calls_per_minute"])
     )
     conf, cache = cfg.context, {}
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=conf["news_max_age_hours"])
+    # Back to the start of the previous session day (ET) at least, so a Monday run still
+    # sees Friday's after-close news.
+    previous = clock.previous_session(cfg.schedule, session)
+    since_previous = pd.Timestamp(previous).tz_localize(cfg.schedule.timezone)
+    recent = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=conf["news_max_age_hours"])
+    cutoff = min(recent, since_previous)
 
     def lookup(ticker: str):
         if ticker in cache:

@@ -1,5 +1,7 @@
 """End-to-end test of the job runner with a synthetic TradingView frame (no network)."""
 
+import datetime as dt
+
 import pandas as pd
 import pytest
 
@@ -245,7 +247,7 @@ def test_push_carries_facts_and_headline(tmp_path, capsys, sent, monkeypatch):
     assert asked == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
     [message] = sent
     assert "   no earnings on this session" in message.body
-    assert "float 6M (0.5x traded)" in message.body and "rev +50% / +40%" in message.body
+    assert "float 6M (50% traded)" in message.body and "rev +50% / +40%" in message.body
     assert '   news: "Signs a supply deal" (PR, ' in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     ep = pd.read_parquet(run_dir / "candidates.parquet").query("scan == 'ep_day'").iloc[0]
@@ -269,3 +271,20 @@ def job_massive():
     from trading_os.massive import MassiveClient
 
     return MassiveClient
+
+
+def test_headline_window_reaches_back_to_the_previous_session(monkeypatch):
+    cfg = load_config()
+    seen = []
+
+    def news(self, ticker, limit=3):
+        seen.append(ticker)
+        # Friday 16 Oct after the close; a Monday 19 Oct run is > 48 h later.
+        return [{"title": "Beats", "publisher": "PR", "published_utc": "2026-10-16T20:30:00Z"}]
+
+    monkeypatch.setenv("MASSIVE_API_KEY", "test-key")
+    monkeypatch.setattr(job_massive(), "news", news)
+    monday = job._news_lookup(cfg, dt.date(2026, 10, 19))
+    assert monday("ABC")["title"] == "Beats"
+    tuesday = job._news_lookup(cfg, dt.date(2026, 10, 21))  # Wednesday: previous session is Tuesday
+    assert tuesday("ABC") is None

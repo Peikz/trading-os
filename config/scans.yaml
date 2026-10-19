@@ -219,7 +219,7 @@ sizing:                                     # entry / stop / shares line under e
 context:                                    # facts under pushed EPs/breakouts (never a verdict)
   max_per_scan: 5                           # top N per scan get a context line
   news_max_tickers: 8                       # Massive headline lookups per run (5 calls/min)
-  news_max_age_hours: 48                    # older headlines aren't today's catalyst
+  news_max_age_hours: 48                    # and at least back to the previous session day
 
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25

@@ -148,3 +148,21 @@ def test_lines_per_scan():
     assert len(context.lines(row, "ep_day")) == 2
     assert len(context.lines(row, "breakout_watch")) == 1
     assert context.lines(row, "mb_up") == []
+
+
+def test_formatting_caps_tiny_bases_and_avoids_minus_zero():
+    row = {
+        "earnings_flag": False,
+        "ctx_eps_growth_q": 5838.0,
+        "ctx_eps_growth_q_prev": -11320.0,
+        "ctx_eps_surprise_pct": -0.3,
+        "ctx_rev_growth_q": -0.4,
+        "ctx_rev_growth_q_prev": 0.2,
+        "ctx_rev_surprise_pct": 0.6,
+        "float_shares": 1.9e9,
+        "ctx_float_turnover": 0.003,
+    }
+    line = context.ep_line(row)
+    assert f"EPS >+999% / <-999% (in line) {DOT} rev +0% / +0% (beat +1%)" in line
+    assert "float 1.9B (<1% traded)" in line
+    assert "(12% traded)" in context.ep_line(row | {"ctx_float_turnover": 0.12})
