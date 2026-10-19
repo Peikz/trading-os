@@ -1,0 +1,25 @@
+# Manual check that MASSIVE_API_KEY works and how far back history goes. Writes nothing and
+# needs no data-repo token. Logs show HTTP status and ticker counts only.
+
+name: Massive check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --no-dev
+      - name: Check the key on two sessions
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+        run: uv run --frozen --no-dev python scripts/backfill.py --check

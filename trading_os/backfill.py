@@ -10,6 +10,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+
 from trading_os import clock, history
 from trading_os.config import Config, load_config
 from trading_os.logsafe import run_guarded, status
@@ -53,10 +55,39 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument(
         "--catchup", action="store_true", help="scheduled mode: config daily_catchup_calls"
     )
+    group.add_argument(
+        "--check", action="store_true", help="test the key on two sessions; writes nothing"
+    )
     args = parser.parse_args(argv)
+    if args.check:
+        return run_guarded(_check, None, "Massive check")
     if args.data_dir is None:
         parser.error("--data-dir or DATA_DIR is required")
     return run_guarded(lambda: _run(args), Path(args.data_dir) / "logs", "Backfill")
+
+
+def _check() -> int:
+    """Fetch the latest session and the oldest in the backfill window; log counts only."""
+    cfg = load_config()
+    key = os.environ.get("MASSIVE_API_KEY", "")
+    if not key:
+        status("Massive check: MASSIVE_API_KEY not set")
+        return 1
+    client = MassiveClient(
+        key, cfg.history["massive_base_url"], RateLimiter(cfg.history["calls_per_minute"])
+    )
+    latest = clock.session_date(cfg.schedule, "eod", dt.datetime.now(dt.UTC))
+    oldest = clock.sessions_back(cfg.schedule, latest, cfg.history["backfill_sessions"])[0]
+    failures = 0
+    for label, session in (("latest session", latest), ("oldest backfill session", oldest)):
+        try:
+            bars = client.grouped_daily(session, adjusted=cfg.history["adjusted"])
+            status(f"Massive check: {label} {session}: OK, {len(bars)} tickers")
+        except requests.HTTPError as exc:
+            code = exc.response.status_code if exc.response is not None else "?"
+            status(f"Massive check: {label} {session}: HTTP {code}")
+            failures += 1
+    return 1 if failures else 0
 
 
 def _run(args: argparse.Namespace) -> int:

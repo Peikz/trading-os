@@ -41,3 +41,22 @@ def test_missing_key_is_a_clean_skip(tmp_path, capsys, monkeypatch):
     monkeypatch.delenv("MASSIVE_API_KEY", raising=False)
     assert backfill.main(["--data-dir", str(tmp_path), "--catchup"]) == 0
     assert "MASSIVE_API_KEY not set" in capsys.readouterr().out
+
+
+def test_check_without_key_fails_cleanly(capsys, monkeypatch):
+    monkeypatch.delenv("MASSIVE_API_KEY", raising=False)
+    assert backfill.main(["--check"]) == 1
+    assert "MASSIVE_API_KEY not set" in capsys.readouterr().out
+
+
+def test_check_reports_counts_only(capsys, monkeypatch):
+    monkeypatch.setenv("MASSIVE_API_KEY", "k")
+    monkeypatch.setattr(
+        backfill.MassiveClient,
+        "grouped_daily",
+        lambda self, day, adjusted=True: FakeClient().grouped_daily(day),
+    )
+    monkeypatch.setattr(backfill.RateLimiter, "wait", lambda self: None)
+    assert backfill.main(["--check"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("OK, 1 tickers") == 2 and "AAA" not in out
