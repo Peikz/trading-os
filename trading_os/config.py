@@ -83,6 +83,7 @@ HISTORY_KEYS = {
     "calls_per_minute",
     "adjusted",
     "backfill_sessions",
+    "max_history_days",
     "daily_catchup_calls",
 }
 OUTCOME_KEYS = {"horizons"}

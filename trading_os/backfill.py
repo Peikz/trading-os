@@ -24,6 +24,14 @@ class BackfillResult:
     empty: int
     still_missing: int
     window: int
+    unavailable: int = 0
+
+
+def window(cfg: Config, until: dt.date) -> list[dt.date]:
+    """Backfill sessions up to `until`: the configured count, never older than the plan serves."""
+    oldest_allowed = until - dt.timedelta(days=cfg.history["max_history_days"])
+    sessions = clock.sessions_back(cfg.schedule, until, cfg.history["backfill_sessions"])
+    return [s for s in sessions if s >= oldest_allowed]
 
 
 def missing_sessions(data_dir: Path, sessions: list[dt.date]) -> list[dt.date]:
@@ -34,17 +42,23 @@ def missing_sessions(data_dir: Path, sessions: list[dt.date]) -> list[dt.date]:
 def run_backfill(
     data_dir: Path, cfg: Config, client: MassiveClient, until: dt.date, max_calls: int
 ) -> BackfillResult:
-    sessions = clock.sessions_back(cfg.schedule, until, cfg.history["backfill_sessions"])
+    sessions = window(cfg, until)
     todo = missing_sessions(data_dir, sessions)
-    fetched = empty = 0
+    fetched = empty = unavailable = 0
     for session in todo[:max_calls]:
-        bars = client.grouped_daily(session, adjusted=cfg.history["adjusted"])
+        try:
+            bars = client.grouped_daily(session, adjusted=cfg.history["adjusted"])
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                unavailable += 1  # outside the plan's history: skip, don't fail the run
+                continue
+            raise
         if bars.empty:  # not published yet: leave it for the next run
             empty += 1
             continue
         history.write_bars(data_dir, "massive", session, bars)
         fetched += 1
-    return BackfillResult(fetched, empty, len(todo) - fetched, len(sessions))
+    return BackfillResult(fetched, empty, len(todo) - fetched, len(sessions), unavailable)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -77,7 +91,7 @@ def _check() -> int:
         key, cfg.history["massive_base_url"], RateLimiter(cfg.history["calls_per_minute"])
     )
     latest = clock.session_date(cfg.schedule, "eod", dt.datetime.now(dt.UTC))
-    oldest = clock.sessions_back(cfg.schedule, latest, cfg.history["backfill_sessions"])[0]
+    oldest = window(cfg, latest)[0]
     failures = 0
     for label, session in (("latest session", latest), ("oldest backfill session", oldest)):
         try:
@@ -106,6 +120,7 @@ def _run(args: argparse.Namespace) -> int:
     result = run_backfill(args.data_dir, cfg, client, until, max_calls)
     status(
         f"Backfill: {result.fetched} sessions fetched, {result.empty} not published yet, "
-        f"{result.still_missing} of {result.window} still missing"
+        f"{result.unavailable} outside the plan, {result.still_missing} of {result.window} "
+        "still missing"
     )
     return 0

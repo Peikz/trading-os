@@ -197,7 +197,9 @@ history:                                    # Phase 2: Massive (formerly Polygon
   massive_base_url: https://api.massive.com
   calls_per_minute: 5                       # free-tier limit (CLAUDE.md)
   adjusted: true                            # SPEC §2
-  backfill_sessions: 504                    # ~2 years of NYSE sessions
+  backfill_sessions: 504                    # ~2 years of NYSE sessions ...
+  max_history_days: 720                     # ... capped by date: the plan serves 2 years back
+                                            # (a session older than that answers HTTP 403)
   daily_catchup_calls: 5                    # scheduled run: fill the newest missing sessions
 
 outcomes:                                   # Phase 3 (SPEC §7)

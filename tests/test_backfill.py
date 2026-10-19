@@ -23,7 +23,8 @@ def test_backfill_newest_first_capped_and_resumable(tmp_path):
     first = FakeClient()
     result = backfill.run_backfill(tmp_path, cfg, first, FRI, max_calls=3)
     assert first.days == [dt.date(2026, 10, 16), dt.date(2026, 10, 15), dt.date(2026, 10, 14)]
-    assert (result.fetched, result.still_missing, result.window) == (3, 501, 504)
+    assert result.fetched == 3 and result.still_missing == result.window - 3
+    assert 490 <= result.window <= 504  # capped at max_history_days
     second = FakeClient()
     backfill.run_backfill(tmp_path, cfg, second, FRI, max_calls=2)
     assert second.days == [dt.date(2026, 10, 13), dt.date(2026, 10, 12)]  # resumes
@@ -60,3 +61,25 @@ def test_check_reports_counts_only(capsys, monkeypatch):
     assert backfill.main(["--check"]) == 0
     out = capsys.readouterr().out
     assert out.count("OK, 1 tickers") == 2 and "AAA" not in out
+
+
+def test_window_never_goes_past_the_plan():
+    cfg = load_config()
+    sessions = backfill.window(cfg, FRI)
+    assert sessions[-1] == FRI
+    assert (FRI - sessions[0]).days <= cfg.history["max_history_days"]
+
+
+def test_403_on_an_old_session_is_skipped(tmp_path):
+    cfg = load_config()
+
+    class PlanLimited(FakeClient):
+        def grouped_daily(self, day, adjusted=True):
+            if day < dt.date(2026, 10, 14):
+                response = backfill.requests.Response()
+                response.status_code = 403
+                raise backfill.requests.HTTPError("403", response=response)
+            return super().grouped_daily(day, adjusted)
+
+    result = backfill.run_backfill(tmp_path, cfg, PlanLimited(), FRI, max_calls=5)
+    assert (result.fetched, result.unavailable) == (3, 2)
