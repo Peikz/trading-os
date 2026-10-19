@@ -235,6 +235,10 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 - One message per job, not per ticker.
 - Format: title `Trading OS · EOD 2026-10-19`, body = breadth line, then each pushing scan with up to
   10 tickers: `TICKER  +14.2%  RVOL 5.1  $82M  [earnings]`.
+  Phone layout (Emil, 19 Oct 2026): the title carries the counts (`🟡 EOD Fri 16 Oct · EP 2 · BO 3`),
+  the market lines come first, then one section per scan with a short block per stock (alert line,
+  entry/stop, size, facts wrapped to ~40 characters). A stock shown above gets one line; scans
+  without alerts share one closing line; tapping opens the run's report in the data repo.
 - If a job fails, push a short failure message with a link to the Actions run.
 
 ---

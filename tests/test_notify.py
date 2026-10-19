@@ -12,6 +12,7 @@ CTX = RunContext(
     run_ts=dt.datetime(2026, 10, 19, 20, 18, tzinfo=dt.UTC),
     run_kind="scheduled",
 )
+DOT = "·"
 
 
 def hits(n_alert, n_log=0):
@@ -32,7 +33,7 @@ def hits(n_alert, n_log=0):
     return pd.DataFrame(rows, columns=columns)
 
 
-def test_format_hit_matches_spec():
+def test_format_hit():
     row = {
         "ticker": "ABCD",
         "gap_pct": 14.2,
@@ -40,9 +41,9 @@ def test_format_hit_matches_spec():
         "dollar_volume": 82e6,
         "earnings_flag": True,
     }
-    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $82M  [earnings]"
-    row |= {"dollar_volume": 2.34e9, "earnings_flag": False}
-    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $2.3B"
+    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $82M  earnings"
+    row |= {"dollar_volume": 2.34e9, "earnings_flag": False, "rvol50": 333.0}
+    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 333  $2.3B"
     # EP9M shows the day's change instead of the gap.
     assert notify.format_hit(row | {"chg_pct": 6.0}, "chg_pct").startswith("ABCD  +6.0%")
 
@@ -56,28 +57,51 @@ def test_select_for_push_alert_tier_and_limit():
     assert chosen["rank"].tolist() == list(range(1, 11))
 
 
-def test_message_one_per_job():
+def test_message_title_counts_and_sections():
     cfg = load_config()
     results = {"ep_day": hits(n_alert=2, n_log=1)}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.title == "Trading OS · EOD 2026-10-19"
-    lines = msg.body.splitlines()
-    assert lines[0] == "EP-Day: 2 alert of 3 hits"
-    assert lines[1] == "T00  +30.0%  RVOL 5.1  $82M  [earnings]"
-    assert len(lines) == 3
+    assert msg.title == f"EOD Mon 19 Oct {DOT} EP 2"
+    assert msg.body.splitlines() == [
+        f"━━ EP-Day {DOT} 2 of 3 ━━",
+        "▸ T00  +30.0%  RVOL 5.1  $82M  earnings",
+        "▸ T01  +29.0%  RVOL 5.1  $82M",
+    ]
+    assert msg.click is None
 
 
-def test_message_without_hits():
+def test_message_without_hits_and_the_market_icon():
     cfg = load_config()
     results = {"ep_day": hits(0)}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.body == "EP-Day: no alerts"
+    assert msg.title == f"EOD Mon 19 Oct {DOT} no alerts"
+    assert msg.body == "Nothing new: EP-Day"
     results = {"ep_day": hits(0, n_log=2)}
+    header = ["🟡 Market Light YELLOW"]
+    msg = notify.build_message(
+        CTX, results, notify.select_for_push(results, cfg), cfg, header, click="https://x/r.md"
+    )
+    assert msg.title.startswith("🟡 EOD Mon 19 Oct")
+    assert msg.body.splitlines() == [
+        "🟡 Market Light YELLOW",
+        "",
+        "Nothing new: EP-Day (2 below alert tier)",
+        "Tap for the full report with charts.",
+    ]
+    assert msg.click == "https://x/r.md"
+
+
+def test_a_stock_shown_above_gets_one_line():
+    cfg = load_config()
+    day = hits(1).assign(ctx_done=True)
+    nine = day.assign(chg_pct=40.0)
+    results = {"ep_day": day, "ep9m": nine}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.body == "EP-Day: no alerts (2 below alert tier)"
+    assert "▸ T00  +40.0%  (see EP-Day)" in msg.body
+    assert msg.body.count("\n   ") == 1  # the facts appear once, under EP-Day
 
 
-def test_send_posts_json(monkeypatch):
+def test_send_posts_json_with_the_report_link(monkeypatch):
     calls = {}
 
     class Ok:
@@ -89,19 +113,30 @@ def test_send_posts_json(monkeypatch):
         return Ok()
 
     monkeypatch.setattr(notify.requests, "post", fake_post)
-    notify.send("https://ntfy.sh", "topic-x", notify.Message("t", "b"))
+    notify.send("https://ntfy.sh", "topic-x", notify.Message("t", "b", click="https://x"))
     assert calls["url"] == "https://ntfy.sh/"
-    assert calls["json"]["topic"] == "topic-x"
+    assert calls["json"]["topic"] == "topic-x" and calls["json"]["click"] == "https://x"
     assert calls["json"]["title"] == "t" and calls["json"]["message"] == "b"
     assert calls["checked"]
 
 
-def test_breakout_lines_show_pivot_stop_risk_and_flags():
+def test_report_url_needs_the_repo_owner(monkeypatch):
+    cfg = load_config()
+    monkeypatch.delenv("GITHUB_REPOSITORY_OWNER", raising=False)
+    assert notify.report_url(cfg, "reports/2026/a.md") is None
+    monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "someone")
+    assert notify.report_url(cfg, "reports/2026/a.md") == (
+        "https://github.com/someone/trading-os-data/blob/main/reports/2026/a.md"
+    )
+
+
+def test_breakout_lines_show_flags_and_the_plan():
     row = {
         "ticker": "BRKO",
         "pivot": 15.12,
         "order_stop": 14.88,
         "risk_adr": 1.0,
+        "base_len": 12,
         "b1": True,
         "b2": True,
         "b3": False,
@@ -110,41 +145,83 @@ def test_breakout_lines_show_pivot_stop_risk_and_flags():
         "chg_pct": 6.8,
         "trig_rvol": 2.5,
     }
-    assert notify.format_breakout(row, "breakout_watch") == (
-        "BRKO  pivot 15.12  stop 14.88  risk 1.0 ADR  B12-4"
-    )
-    assert notify.format_breakout(row, "breakout_trigger") == (
-        "BRKO  +6.8%  RVOL 2.5  pivot 15.12  stop 14.88  risk 1.0 ADR  B12-45"
-    )
+    assert notify.format_breakout(row, "breakout_watch") == "BRKO  base 12d  B1,2,4"
+    assert notify.format_breakout(row | {"b3": True}, "breakout_watch") == "BRKO  base 12d  B1-4"
+    assert notify.format_breakout(row, "breakout_trigger") == "BRKO  +6.8%  RVOL 2.5  B1,2,4,5"
+    assert notify.plan_lines(row) == [f"Pivot 15.12 {DOT} stop 14.88"]  # no account file
+    sized = row | {
+        "plan_shares": 1500,
+        "plan_entry": 15.12,
+        "plan_stop": 14.88,
+        "plan_stop_basis": "order stop, buy-stop at pivot",
+        "plan_position_usd": 22680.0,
+        "plan_risk_usd": 360.0,
+        "plan_capped": False,
+    }
+    assert notify.plan_lines(sized) == [
+        f"Buy-stop 15.12 {DOT} stop 14.88 (1.0 ADR)",
+        f"1,500 sh {DOT} $22.7k {DOT} risk $360",
+    ]
 
 
-def test_context_line_only_for_rows_with_facts():
+def test_facts_only_for_rows_with_them_and_wrapped():
     row = {"ticker": "ABCD", "gap_pct": 14.2, "rvol50": 5.1, "dollar_volume": 82e6}
-    plain = notify._with_extras(notify.format_hit(row), row, "ep_day")
-    assert plain == "ABCD  +14.2%  RVOL 5.1  $82M"
-    assert notify._with_extras("x", row | {"ctx_done": float("nan")}, "ep_day") == "x"
+    assert [x.text for x in notify._block(row, "ep_day", "eod")] == [
+        "▸ ABCD  +14.2%  RVOL 5.1  $82M"
+    ]
     facts = row | {"ctx_done": True, "earnings_flag": False, "ctx_news_title": "Deal signed"}
-    lines = notify._with_extras("x", facts, "ep_day").split("\n")
-    assert lines[1].startswith("   no earnings on this session")
-    assert lines[2] == '   news: "Deal signed"'
+    facts |= {"rs_pct": 88.0, "industry": "Semis", "ctx_news_publisher": "PR"}
+    lines = [x.text for x in notify._block(facts, "ep_day", "eod")]
+    assert lines[1] == f"   no earnings report {DOT} RS 88 {DOT} Semis"
+    assert lines[2] == "   📰 Deal signed (PR)"
+    assert all(len(x) <= notify.WIDTH for x in lines)
 
 
-def test_fit_drops_headlines_then_facts_then_cuts():
-    alert, plan = "ABCD  +14.2%", "   buy 10.00 · stop 9.50"
-    facts, news = "   earnings 10-15 " + "f" * 60, '   news: "' + "n" * 60 + '"'
-    body = "\n".join([alert, plan, facts, news] * 3)
-    size = len(body.encode("utf-8"))
-    assert notify.fit(body, limit=size) == body
-    no_news = notify.fit(body, limit=size - 10)
-    assert "news:" not in no_news and "earnings" in no_news
-    facts_only = "\n".join([alert, plan, facts] * 3)
-    bare = notify.fit(body, limit=len(facts_only.encode("utf-8")) - 1)
-    assert bare == "\n".join([alert, plan] * 3)
-    cut = notify.fit(body, limit=60)
-    assert len(cut.encode("utf-8")) <= 60 and cut.endswith("(full list in the report)")
+def test_wrap_packs_phrases_into_phone_lines():
+    assert notify.wrap(["aaaa", "bbbb", "cccc"], 11) == [f"aaaa {DOT} bbbb", "cccc"]
+    assert notify.wrap(["x" * 20], 10) == ["x" * 20]
 
 
-def test_format_pace():
+def test_fit_drops_headlines_then_facts_from_the_bottom_then_cuts():
+    fact, news = "   FACT " + "f" * 25, "   📰 " + "n" * 30
+
+    def block(t):
+        return [
+            notify.Line("hit", f"▸ {t}  +14.2%"),
+            notify.Line("plan", "   Buy 10.00 · stop 9.50"),
+            notify.Line("fact", fact),
+            notify.Line("news", news),
+        ]
+
+    def size(text):
+        return len(text.encode("utf-8"))
+
+    lines = [*block("AAA"), notify.Line("gap", ""), *block("BBB")]
+    full = notify.fit(lines, limit=10_000)
+    news_b, fact_b = size("\n" + news), size("\n" + fact)
+    assert notify.fit(lines, limit=size(full)) == full
+    one_news = notify.fit(lines, limit=size(full) - 1)
+    assert one_news.count("📰") == 1 and "📰" in one_news.split("\n\n")[0]  # top keeps its
+    no_news = notify.fit(lines, limit=size(full) - 2 * news_b)
+    assert "📰" not in no_news and no_news.count("FACT") == 2
+    top_facts = notify.fit(lines, limit=size(full) - 2 * news_b - fact_b)
+    assert top_facts.count("FACT") == 1 and "FACT" in top_facts.split("\n\n")[0]
+    assert "▸ BBB" in top_facts
+    cut = notify.fit(lines, limit=60)
+    assert size(cut) <= 60 and cut.endswith("more in the report")
+
+
+def test_format_pace_and_pivot():
     row = {"ticker": "ABCD", "chg_pct": 6.2, "volume": 4.1e6, "proj_volume": 11.4e6}
     row |= {"dollar_volume": 82e6, "earnings_flag": True}
-    assert notify.format_pace(row) == "ABCD  +6.2%  vol 4.1M, pace 11M  $82M  [earnings]"
+    assert notify.format_pace(row) == "ABCD  +6.2%  4.1M → pace 11M  earnings"
+    pivot = {"ticker": "ABCD", "chg_pct": 3.1, "pivot_crossed": True, "pivot_dist_pct": 0.9}
+    assert notify.format_pivot(pivot | {"rvol_at_time_tv": 2.34}) == (
+        "ABCD  +3.1%  over pivot +0.9%  RVOL 2.3"
+    )
+
+
+def test_weekly_growth_caps_tiny_bases():
+    row = {"ticker": "ABCD", "eps_growth_q": 432900.0, "eps_growth_q_prev": 115.0}
+    row |= {"rev_growth_q": 36.0, "rev_growth_q_prev": float("nan")}
+    assert notify.format_weekly(row, "growth_bucket_2") == "ABCD  EPS >+999% / +115%  rev +36%"

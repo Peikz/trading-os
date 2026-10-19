@@ -73,6 +73,9 @@ def sent(monkeypatch):
     monkeypatch.setattr(job.notify, "send", lambda server, topic, msg: messages.append(msg))
     qqq = {"close": 100.0, "sma10": 98.0, "sma20": 97.0, "sma50": 95.0}
     monkeypatch.setattr(job.tv, "fetch_quote", lambda symbol: qqq)
+    index = {"close": 18.58, "chg_pct": -7.07, "pm_change_pct": 0.3}
+    index |= {f"sma{w}": 20.0 for w in (10, 20, 50, 200)}
+    monkeypatch.setattr(job.tv, "fetch_index", lambda symbol: index)
     monkeypatch.setattr(job.tv, "fetch_details", lambda symbols, fields: pd.DataFrame())
     monkeypatch.setenv("NTFY_TOPIC", "test-topic")
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
@@ -97,7 +100,7 @@ def test_forced_run_writes_manual_files_and_pushes(tmp_path, capsys, sent):
     assert not (tmp_path / "data" / "candidates").exists()  # canonical history untouched
 
     [message] = sent
-    assert message.title.endswith("(manual)")
+    assert message.title.endswith("(manual run)")
     assert GAPPER in message.body
 
 
@@ -123,10 +126,11 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     assert GAPPER not in out + err
     assert "EP-PM: 1 hits (1 alert), saved" in out
     [message] = sent
-    assert message.title.startswith("Trading OS · Pre-market ")
-    assert "Market Light for today: n/a" in message.body
-    assert "Pre-market: up 4%+ 1 / down 4%+ 0" in message.body
-    assert f"{GAPPER}  +12.0%  PM vol 0.4M  $4M" in message.body
+    assert message.title.startswith("Pre-market ")
+    assert "⚪ Market Light n/a (needs an EOD run)" in message.body
+    assert "SPY pre-market +0.3% · VIX 18.6 -7.1%" in message.body  # stubbed quotes
+    assert "Pre-market 4%: ▲1 ▼0" in message.body
+    assert f"▸ {GAPPER}  +12.0% PM  vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"
 
@@ -149,7 +153,7 @@ def test_weekly_run_fetches_history_and_stores_no_arrays(tmp_path, capsys, sent,
     assert "revenue_q_hist" not in universe.columns
     assert universe.set_index("ticker").loc[GAPPER, "rev_growth_q_prev"] == pytest.approx(40.0)
     [message] = sent
-    assert message.title.startswith("Trading OS · Weekly ")
+    assert message.title.startswith("Weekly ")
 
 
 def test_push_failure_still_saves_data(tmp_path, capsys, sent, monkeypatch):
@@ -213,7 +217,7 @@ def test_push_carries_position_size_when_account_is_set(tmp_path, capsys, sent, 
     # 2,500 DKK / 6.667 = $374.98 -> 374 shares ($4.3k), risk $374.
     dot = "·"
     assert f"{GAPPER}  +18.0%" in message.body
-    assert f"   buy 11.50 {dot} stop 10.50 (day low) {dot} 374 sh {dot} $4.3k {dot} risk $374" in (
+    assert f"   Buy 11.50 {dot} stop 10.50 (day low)\n   374 sh {dot} $4.3k {dot} risk $374" in (
         message.body
     )
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
@@ -246,9 +250,9 @@ def test_push_carries_facts_and_headline(tmp_path, capsys, sent, monkeypatch):
     assert "Context: added" in out and "supply deal" not in out
     assert asked == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
     [message] = sent
-    assert "   no earnings on this session" in message.body
+    assert "   no earnings report" in message.body
     assert "float 6M (50% traded)" in message.body and "rev +50% / +40%" in message.body
-    assert '   news: "Signs a supply deal" (PR, ' in message.body
+    assert "   📰 Signs a supply deal (PR)" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     ep = pd.read_parquet(run_dir / "candidates.parquet").query("scan == 'ep_day'").iloc[0]
     assert ep["ctx_eps_surprise_pct"] == 12.0 and ep["ctx_news_title"] == "Signs a supply deal"
@@ -315,8 +319,8 @@ def test_intraday_check_pushes_pace_without_a_universe_snapshot(
     assert cands["scan"].tolist() == ["ep9m_pace"]  # nothing else runs during the session
     assert cands["proj_volume"].iloc[0] == pytest.approx(12e6) and bool(cands["pushed"].iloc[0])
     [message] = sent
-    assert message.title.startswith("Trading OS · Intraday 10:15")
-    assert f"{GAPPER}  +20.0%  vol 3.0M, pace 12M" in message.body
+    assert message.title.startswith("Intraday 10:15 ") and "EP9M pace 1" in message.title
+    assert f"▸ {GAPPER}  +20.0%  3.0M → pace 12M" in message.body
 
 
 def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypatch):
@@ -331,7 +335,7 @@ def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypat
     out, _ = capsys.readouterr()
     assert "Push: 1 already sent at 10:15, skipped" in out
     [message] = sent
-    assert "EP9M pace: no new alerts (1 already sent today)" in message.body
+    assert "Nothing new: EP9M pace (1 sent earlier)" in message.body
     assert GAPPER not in message.body
 
 
@@ -389,10 +393,10 @@ def test_intraday_pivot_alert_uses_the_latest_eod_levels(tmp_path, capsys, sent,
     out, err = capsys.readouterr()
     assert "BO levels: 1 of 1 BO-Watch names have a pivot" in out and GAPPER not in out + err
     [message] = sent
-    assert f"{GAPPER}  +20.0%  11.50 over pivot 11.40 (+0.9%)  stop 10.80  RVOL at time 2.0" in (
+    assert f"▸ {GAPPER}  +20.0%  over pivot +0.9%  RVOL 2.0\n   Pivot 11.40 · stop 10.80" in (
         message.body
     )
-    assert "   prior move +60%" in message.body and "EP9M pace: no alerts" in message.body
+    assert "   prior move +60%" in message.body and "Nothing new: EP9M pace" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     row = pd.read_parquet(run_dir / "candidates.parquet").query("scan == 'pivot_watch'").iloc[0]
     assert row["pivot_from_session"] == "2026-10-01" and bool(row["pivot_crossed"])

@@ -143,7 +143,7 @@ MARKET_LIGHT_KEYS = {
     },
     "thresholds": {"stop_count_below", "red_count_below", "green_count_min"},
 }
-NOTIFY_KEYS = {"server", "max_tickers_per_scan"}
+NOTIFY_KEYS = {"server", "max_tickers_per_scan", "report_url"}
 
 SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).

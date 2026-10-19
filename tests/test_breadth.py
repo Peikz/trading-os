@@ -160,8 +160,12 @@ def test_breadth_row_from_snapshot_history(cfg, tmp_path):
     assert row["qqq_trend"] == "up"
     assert row["scan_count_basis"] == "eod-bootstrap"
     lines = breadth.push_lines(row)
-    assert lines[0].startswith("Breadth: up ") and lines[2].startswith("Market Light: ")
-    assert lines[1] == "Monitor: month 25% +0 / -0  50% +0 / -0  34d 13% n/a"  # no history yet
+    assert lines[0] == "⛔ Market Light STOP"  # today's bootstrap count of 1 stock
+    assert lines[1].startswith("QQQ up · breadth ")
+    assert lines[2].startswith("4%: ▲")
+    assert lines[3].startswith("Qtr 25%: ▲") and " · Mo 25%: ▲" in lines[3]
+    assert lines[4].endswith("34d 13%: n/a")  # no 34-day history yet
+    assert lines[5].startswith("Above MA20 ")
 
 
 def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
@@ -199,19 +203,19 @@ def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
     row = breadth.premarket_row(uni, {"pm_change_pct": 0.42}, cfg, dt.date(2026, 10, 19), last)
     assert (row["pm_up4"], row["pm_down4"], row["pm_breadth_n"]) == (1, 1, 3)
     lines = breadth.premarket_lines(row, last)
-    assert lines[0].startswith("Market Light for today: YELLOW  (set at the 2026-10-16 close")
-    assert lines[1].startswith("Breadth at the 2026-10-16 close: up 22 / down 203")
-    assert lines[2] == "Pre-market: up 4%+ 1 / down 4%+ 1  QQQ +0.4%"
+    assert lines == [
+        "🟡 Market Light YELLOW (from the 10-16 close)",
+        "QQQ sideways · breadth neutral · count 30",
+        "Last close 4%: ▲22 ▼203 · 5d 0.50 · 10d 0.80",
+        "Pre-market 4%: ▲1 ▼1 · QQQ +0.4%",
+    ]
 
 
 def test_premarket_lines_before_any_eod(cfg):
     uni = pd.DataFrame([stock("A", pm_change_pct=5.0)])
     row = breadth.premarket_row(uni, {}, cfg, dt.date(2026, 10, 19), None)
     lines = breadth.premarket_lines(row, None)
-    assert lines == [
-        "Market Light for today: n/a (waiting for an EOD run)",
-        "Pre-market: up 4%+ 1 / down 4%+ 0",
-    ]
+    assert lines == ["⚪ Market Light n/a (needs an EOD run)", "Pre-market 4%: ▲1 ▼0"]
 
 
 def test_market_monitor_counts_month_and_34_day_moves():
@@ -225,7 +229,11 @@ def test_market_monitor_counts_month_and_34_day_moves():
     m = breadth.market_monitor(uni, rules)
     assert (m["up25m"], m["down25m"], m["up50m"], m["down50m"]) == (2, 2, 1, 1)
     assert (m["up13_34d"], m["down13_34d"], m["mid_rows"]) == (1, 1, 3)
-    row = {**m, "breadth_n": 6}
-    assert breadth.monitor_line(row) == "Monitor: month 25% +2 / -2  50% +1 / -1  34d 13% +1 / -1"
-    assert breadth.monitor_line(row | {"mid_rows": 2}).endswith("34d 13% n/a")  # thin history
-    assert breadth.monitor_line({"up4": 3}) is None  # rows stored before 19 Oct
+    row = {**m, "breadth_n": 6, "up25q": 9, "down25q": 4}
+    assert breadth.monitor_lines(row) == [
+        "Qtr 25%: ▲9 ▼4 · Mo 25%: ▲2 ▼2",
+        "Mo 50%: ▲1 ▼1 · 34d 13%: ▲1 ▼1",
+    ]
+    assert breadth.monitor_lines(row | {"mid_rows": 2})[1].endswith("34d 13%: n/a")  # thin
+    old = {"up25q": 9, "down25q": 4}  # rows stored before 19 Oct
+    assert breadth.monitor_lines(old) == ["Qtr 25%: ▲9 ▼4"]

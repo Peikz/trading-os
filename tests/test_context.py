@@ -107,7 +107,7 @@ def test_ep_line_premarket_measures_the_gap_from_the_pm_price():
         "ma200": 12.0,
     }
     line = context.ep_line(row, premarket=True)
-    assert line == f"   no earnings on this session {DOT} at 52w high {DOT} above 200d"
+    assert line == f"   no earnings report {DOT} at 52w high {DOT} above 200d"
     assert "below 200d" in context.ep_line(row)  # the close is under the 200d
 
 

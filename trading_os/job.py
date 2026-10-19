@@ -150,7 +150,9 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if args.no_push:
         status("Push: skipped (--no-push)")
     else:
-        message = notify.build_message(ctx, results, selected, cfg, header)
+        report_path = store.run_outputs(args.data_dir, ctx)["report"]
+        link = notify.report_url(cfg, report_path.relative_to(args.data_dir).as_posix())
+        message = notify.build_message(ctx, results, selected, cfg, header, click=link)
         try:
             once_more(
                 lambda: notify.send(cfg.notify["server"], topic, message),

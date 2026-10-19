@@ -89,7 +89,7 @@ def test_facts_show_rs_earnings_soon_ath_and_industry_rank():
     }
     line = context.ep_line(row)
     assert line.endswith(
-        f"at all-time high {DOT} RS 97 {DOT} earnings in 4 days {DOT} Semis (#3 of 120)"
+        f"at all-time high {DOT} RS 97 {DOT} 📅 earnings in 4 days {DOT} Semis (#3 of 120)"
     )
     later = context.ep_line(row | {"earnings_soon": False, "high_all_tv": 80.0})
     assert "earnings in" not in later and "at 52w high" in later
@@ -112,11 +112,12 @@ def test_index_line_for_close_and_premarket():
         | {f"sma{w}": 20.0 for w in (10, 20, 50, 200)},
     }
     row = breadth.index_fields(quotes)
-    assert breadth.index_line(row) == (
-        "SPY 767.59 +0.6% (above MA 50, 200; below 10, 20)  VIX 18.6 -7.1%"
-    )
-    assert breadth.index_line(row, premarket=True) == "SPY 767.59 +0.3% pre-market  VIX 18.6 -7.1%"
-    assert breadth.index_line({}) is None
+    assert breadth.index_lines(row) == [
+        "SPY 767.59 +0.6% · VIX 18.6 -7.1%",
+        "SPY above MA50, 200 · below 10, 20",
+    ]
+    assert breadth.index_lines(row, premarket=True) == ["SPY pre-market +0.3% · VIX 18.6 -7.1%"]
+    assert breadth.index_lines({}) == []
 
 
 def pivot_rows():

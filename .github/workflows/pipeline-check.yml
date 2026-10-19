@@ -35,6 +35,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          GITHUB_REPOSITORY_OWNER: ""   # throwaway folder: no report to link to
           PUSH: ${{ inputs.push && 'yes' || '' }}
         run: |
           if [ "$PUSH" = "yes" ]; then

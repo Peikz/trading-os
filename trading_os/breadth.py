@@ -262,19 +262,25 @@ def market_monitor(universe: pd.DataFrame, breadth: Mapping[str, Any]) -> dict[s
     }
 
 
-def monitor_line(row: Mapping[str, Any]) -> str | None:
-    """`Monitor: month 25% +40 / -12  50% +6 / -1  34d 13% +900 / -400` (None for old rows)."""
-    if row.get("up25m") is None or pd.isna(row.get("up25m")):
-        return None
-    covered = row.get("mid_rows", 0) >= 0.5 * max(row.get("breadth_n", 0), 1)
-    mid = f"+{row['up13_34d']} / -{row['down13_34d']}" if covered else "n/a"
-    return (
-        f"Monitor: month 25% +{row['up25m']} / -{row['down25m']}  "
-        f"50% +{row['up50m']} / -{row['down50m']}  34d 13% {mid}"
-    )
-
-
+LIGHT_ICONS = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴", "STOP": "⛔"}
 INDEX_MAS = (10, 20, 50, 200)
+
+
+def _ratio(x: Any) -> str:
+    return "n/a" if x is None or pd.isna(x) else f"{x:.2f}"
+
+
+def monitor_lines(row: Mapping[str, Any]) -> list[str]:
+    """Stockbee's quarter, month and 34-day counts (empty for rows stored before 19 Oct)."""
+    quarter = f"Qtr 25%: ▲{row['up25q']} ▼{row['down25q']}"
+    if row.get("up25m") is None or pd.isna(row.get("up25m")):
+        return [quarter]
+    covered = row.get("mid_rows", 0) >= 0.5 * max(row.get("breadth_n", 0), 1)
+    mid = f"▲{row['up13_34d']} ▼{row['down13_34d']}" if covered else "n/a"
+    return [
+        f"{quarter} · Mo 25%: ▲{row['up25m']} ▼{row['down25m']}",
+        f"Mo 50%: ▲{row['up50m']} ▼{row['down50m']} · 34d 13%: {mid}",
+    ]
 
 
 def index_fields(quotes: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
@@ -290,59 +296,62 @@ def index_fields(quotes: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
 
 
 def _ma_side(row: Mapping[str, Any], name: str) -> str:
+    """`above MA200 · below 10, 20, 50`."""
     close = row[f"{name}_close"]
     above = [str(w) for w in INDEX_MAS if close > row.get(f"{name}_sma{w}", np.inf)]
     below = [str(w) for w in INDEX_MAS if close <= row.get(f"{name}_sma{w}", -np.inf)]
-    parts = ([f"above MA {', '.join(above)}"] if above else []) + (
+    parts = ([f"above MA{', '.join(above)}"] if above else []) + (
         [f"below {', '.join(below)}"] if below else []
     )
-    return "; ".join(parts)
+    return " · ".join(parts)
 
 
-def index_line(row: Mapping[str, Any], premarket: bool = False) -> str | None:
-    """`SPY 767.59 +0.6% (above MA 50, 200; below 10, 20)  VIX 18.6 -7.1%`."""
-    parts = []
-    spy = row.get("spy_close")
+def index_lines(row: Mapping[str, Any], premarket: bool = False) -> list[str]:
+    """`SPY 767.59 +0.6% · VIX 18.6 -7.1%`, then (at the close) SPY against its MAs."""
+    parts, spy = [], row.get("spy_close")
     if spy is not None and not pd.isna(spy):
         change = row["spy_pm_change_pct"] if premarket else row["spy_chg_pct"]
-        move = "" if pd.isna(change) else f" {change:+.1f}%{' pre-market' if premarket else ''}"
-        side = "" if premarket else f" ({_ma_side(row, 'spy')})"
-        parts.append(f"SPY {spy:.2f}{move}{side}")
+        label = "SPY pre-market" if premarket else f"SPY {spy:.2f}"
+        parts.append(label + ("" if pd.isna(change) else f" {change:+.1f}%"))
     vix = row.get("vix_close")
     if vix is not None and not pd.isna(vix):
         change = row.get("vix_chg_pct")
         parts.append(f"VIX {vix:.1f}" + ("" if pd.isna(change) else f" {change:+.1f}%"))
-    return "  ".join(parts) or None
+    lines = [" · ".join(parts)] if parts else []
+    if not premarket and spy is not None and not pd.isna(spy):
+        lines.append(f"SPY {_ma_side(row, 'spy')}")
+    return lines
 
 
-def push_lines(row: Mapping[str, Any]) -> list[str]:
-    def r(x):
-        return "n/a" if x is None or np.isnan(x) else f"{x:.2f}"
+def light_lines(row: Mapping[str, Any], suffix: str = "") -> list[str]:
+    """`🟡 Market Light YELLOW` and its three inputs, or why it's missing."""
+    if not row.get("light"):
+        return [f"⚪ Market Light n/a{suffix} (needs {row.get('light_missing')})"]
+    icon = LIGHT_ICONS.get(row["light"], "")
+    return [
+        f"{icon} Market Light {row['light']}{suffix}".strip(),
+        f"QQQ {row['qqq_trend']} · breadth {row['breadth_state']} · count {row['scan_count']}",
+    ]
 
+
+def breadth_lines(row: Mapping[str, Any]) -> list[str]:
     up = row["up4"] if row["up_count_rule"] == "stockbee_4pct" else row["mb_up"]
-    above = "  ".join(
-        f">MA{k[len('pct_above_ma') :]} {v:.0f}%"
+    above = " · ".join(
+        f"MA{k[len('pct_above_ma') :]} {v:.0f}%"
         for k, v in row.items()
         if k.startswith("pct_above_ma")
     )
-    breadth_line = (
-        f"Breadth: up {up} / down {row['down4']}  5d {r(row['ratio_5d'])}  "
-        f"10d {r(row['ratio_10d'])}  Q +{row['up25q']} / -{row['down25q']}  {above}"
-    )
-    if row["light"]:
-        light_line = (
-            f"Market Light: {row['light']}  (QQQ {row['qqq_trend']}, breadth "
-            f"{row['breadth_state']}, scan count {row['scan_count']})"
-        )
-    else:
-        light_line = f"Market Light: n/a (waiting for {row['light_missing']})"
-    monitor, indexes = monitor_line(row), index_line(row)
+    ratios = f"5d {_ratio(row['ratio_5d'])} · 10d {_ratio(row['ratio_10d'])}"
     return [
-        breadth_line,
-        *([monitor] if monitor else []),
-        light_line,
-        *([indexes] if indexes else []),
+        f"4%: ▲{up} ▼{row['down4']} · {ratios}",
+        *monitor_lines(row),
+        f"Above {above}",
     ]
+
+
+def push_lines(row: Mapping[str, Any]) -> list[str]:
+    """EOD market header (push, report, dashboard): light, breadth, SPY and VIX."""
+    return [*light_lines(row), *breadth_lines(row), *index_lines(row)]
 
 
 # --- pre-market (Emil, 19 Oct 2026: breadth also runs pre-market; SPEC §6.1)
@@ -391,18 +400,11 @@ def premarket_row(
 def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> list[str]:
     """Light for today's orders, last close's breadth, and the pre-market movers."""
     day = row["last_eod_session"]
-    if row["light"]:
-        light = (
-            f"Market Light for today: {row['light']}  (set at the {day} close: QQQ "
-            f"{row['qqq_trend']}, breadth {row['breadth_state']}, scan count {row['scan_count']})"
-        )
-    else:
-        light = f"Market Light for today: n/a (waiting for {row['light_missing']})"
-    lines = [light]
+    when = f" (from the {day:%m-%d} close)" if day is not None and row["light"] else ""
+    lines = light_lines(row, suffix=when)
     if last:
-        lines.append(push_lines(last)[0].replace("Breadth:", f"Breadth at the {day} close:", 1))
+        lines.append(f"Last close {breadth_lines(last)[0]}")
     qqq = row["qqq_pm_change_pct"]
-    qqq_text = "" if qqq is None or np.isnan(qqq) else f"  QQQ {qqq:+.1f}%"
-    lines.append(f"Pre-market: up 4%+ {row['pm_up4']} / down 4%+ {row['pm_down4']}{qqq_text}")
-    indexes = index_line(row, premarket=True)
-    return [*lines, *([indexes] if indexes else [])]
+    qqq_text = "" if qqq is None or np.isnan(qqq) else f" · QQQ {qqq:+.1f}%"
+    lines.append(f"Pre-market 4%: ▲{row['pm_up4']} ▼{row['pm_down4']}{qqq_text}")
+    return [*lines, *index_lines(row, premarket=True)]

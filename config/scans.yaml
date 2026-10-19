@@ -248,3 +248,5 @@ stats:                                      # weekly outcome statistics (reports
 notify:                                     # SPEC §8
   server: https://ntfy.sh
   max_tickers_per_scan: 10
+  # Tapping a push opens the run's report in the private data repo ({owner} from the runner)
+  report_url: "https://github.com/{owner}/trading-os-data/blob/main/{path}"

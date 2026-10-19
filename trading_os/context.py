@@ -162,7 +162,7 @@ def _common_tail(row: Mapping[str, Any]) -> list[str]:
         parts.append(f"RS {int(rs)}")
     soon, flagged = row.get("earnings_in_sessions"), row.get("earnings_soon")
     if not _missing(flagged) and bool(flagged):  # within context.earnings_soon_sessions
-        parts.append("earnings today" if soon == 0 else f"earnings in {int(soon)} days")
+        parts.append("📅 earnings today" if soon == 0 else f"📅 earnings in {int(soon)} days")
     group = industries.label(row)
     if group:
         parts.append(group)
@@ -178,13 +178,19 @@ def _et(when: Any, fmt: str) -> str:
 
 
 def ep_line(row: Mapping[str, Any], *, premarket: bool = False) -> str:
+    return "   " + " · ".join(ep_parts(row, premarket=premarket))
+
+
+def ep_parts(row: Mapping[str, Any], *, premarket: bool = False) -> list[str]:
+    """The EP facts, each a short phrase (joined into one line in the report, wrapped on
+    the phone)."""
     parts = []
     if bool(row.get("earnings_flag")):
         day = _et(row.get("earnings_date_last"), "%m-%d")
         timing = TIMING.get(row.get("ctx_earnings_time"), "")
         parts.append(" ".join(p for p in ("earnings", day, timing) if p))
     else:
-        parts.append("no earnings on this session")
+        parts.append("no earnings report")
     eps = _growth(
         row.get("ctx_eps_growth_q"),
         row.get("ctx_eps_growth_q_prev"),
@@ -213,10 +219,15 @@ def ep_line(row: Mapping[str, Any], *, premarket: bool = False) -> str:
     if not _missing(price) and not _missing(ma200) and ma200 > 0:
         parts.append("above 200d" if price > ma200 else "below 200d")
     parts.extend(_common_tail(row))
-    return "   " + " · ".join(parts)
+    return parts
 
 
 def breakout_line(row: Mapping[str, Any], scan: str) -> str:
+    return "   " + " · ".join(breakout_parts(row, scan))
+
+
+def breakout_parts(row: Mapping[str, Any], scan: str) -> list[str]:
+    """The breakout facts, each a short phrase."""
     prefix = "trig_" if scan == "breakout_trigger" else "bo_"
     parts = []
     prior = row.get(f"{prefix}prior_move_pct", row.get("bo_prior_move_pct"))
@@ -245,7 +256,7 @@ def breakout_line(row: Mapping[str, Any], scan: str) -> str:
     if rev:
         parts.append(f"rev {rev}")
     parts.extend(_common_tail(row))
-    return "   " + " · ".join(parts)
+    return parts
 
 
 def headline(row: Mapping[str, Any], max_chars: int = 110) -> tuple[str, str] | None:
@@ -274,6 +285,15 @@ def news_line(row: Mapping[str, Any], max_chars: int = 110) -> str | None:
 def has_context(row: Mapping[str, Any]) -> bool:
     done = row.get("ctx_done")
     return done is not None and not pd.isna(done) and bool(done)
+
+
+def parts(row: Mapping[str, Any], scan: str) -> list[str]:
+    """The fact phrases for a pushed row of `scan` (empty for scans without facts)."""
+    if scan in EP_SCANS:
+        return ep_parts(row, premarket=scan in PREMARKET_SCANS)
+    if scan in BREAKOUT_SCANS:
+        return breakout_parts(row, scan)
+    return []
 
 
 def lines(row: Mapping[str, Any], scan: str) -> list[str]:
