@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import threading
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -52,17 +53,28 @@ class AlpacaClient:
         if not key_id or not secret:
             raise ValueError("Alpaca keys are empty")
         self._headers = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
-        self._http = session or requests.Session()
+        self._shared = session  # tests pass a fake; otherwise one requests session per thread
+        self._local = threading.local()
+        self._lock = threading.Lock()  # the request spacing holds across threads
         self._gap, self._sleep, self._clock, self._last = 60 / per_minute, sleep, clock, None
         self.feed = "sip"
 
+    @property
+    def _http(self):
+        if self._shared is not None:
+            return self._shared
+        if not hasattr(self._local, "session"):
+            self._local.session = requests.Session()
+        return self._local.session
+
     def _get(self, url: str, params: dict) -> dict | list:
         for attempt in (1, 2, 3):
-            if self._last is not None:
-                wait = self._gap - (self._clock() - self._last)
-                if wait > 0:
-                    self._sleep(wait)
-            self._last = self._clock()
+            with self._lock:
+                if self._last is not None:
+                    wait = self._gap - (self._clock() - self._last)
+                    if wait > 0:
+                        self._sleep(wait)
+                self._last = self._clock()
             response = self._http.get(url, params=params, headers=self._headers, timeout=60)
             if response.status_code == 429 and attempt < 3:
                 self._sleep(30)

@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: intraday-minutes   # a second run waits, then fetches only what the first didn't
+  cancel-in-progress: false
+
 jobs:
   minutes:
     runs-on: ubuntu-latest

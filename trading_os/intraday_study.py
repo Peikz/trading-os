@@ -31,6 +31,7 @@ fetched; `residual` counts how many opened 3-5 % up, which bounds it.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
@@ -290,6 +291,7 @@ def fetch_windows(cands: pd.DataFrame, sessions: list) -> pd.DataFrame:
 
 
 BATCH = {"1Min": 50, "5Min": 200}  # symbols per request
+WORKERS = 3  # requests in flight; Alpaca answers in ~1 s, the client spaces them to its limit
 ASKED = ".asked.parquet"  # suffix of the per-file list of stock-days asked for
 BAR_COLUMNS = ["ticker", "ts", "open", "high", "low", "close", "volume", "vwap"]
 
@@ -335,17 +337,23 @@ def fetch(client, windows: pd.DataFrame, out_dir, deadline: float | None = None)
         if deadline is not None and time.time() > deadline:
             status("Intraday minutes: stopped at the deadline, the next run resumes")
             break
-        frames, done = [], []
+        tasks, done = [], []
         for row in part.itertuples(index=False):
             todo = [t for t in row.tickers if (row.session_date, t, row.kind) not in have]
             size = BATCH[row.timeframe]
             for k in range(0, len(todo), size):
-                bars = client.bars(todo[k : k + size], row.timeframe, row.start, row.end)
-                if len(bars):
-                    frames.append(
-                        _compact(bars).assign(session_date=row.session_date, kind=row.kind)
-                    )
+                tasks.append((row, todo[k : k + size]))
             done += [(row.session_date, t, row.kind) for t in todo]
+
+        def one(task):
+            row, symbols = task
+            bars = client.bars(symbols, row.timeframe, row.start, row.end)
+            if not len(bars):
+                return None
+            return _compact(bars).assign(session_date=row.session_date, kind=row.kind)
+
+        with ThreadPoolExecutor(WORKERS) as pool:
+            frames = [f for f in pool.map(one, tasks) if f is not None]
         if not done:
             continue
         stem, n = f"{month}_{run}", 1
