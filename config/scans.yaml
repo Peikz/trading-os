@@ -4,7 +4,8 @@
 # Units: percentages are percent numbers (10 = 10 %), money is USD, volume is shares.
 # Key suffixes: *_min means >=, *_gt means >, *_below means <, *_max means <=.
 # Slots: pm (pre-market job), eod (end-of-day job), weekly (Sunday job).
-# Actions: push = saved + phone notification, log = saved only. Every scan is always saved.
+# Actions: push = saved + phone notification, log = saved only, watchlist = saved (feeds the
+# watchlists once they exist, Phase 2). Every scan is always saved.
 
 version: 1
 
@@ -98,6 +99,10 @@ scans:
     {enabled: true, phase: 1, slot: weekly, action: push,
      price_gt: 10, avg_volume_gt: 200_000, eps_growth_q_min_pct: 40,
      rev_growth_q_min_pct: 20, quarters_to_check: 2}
+  tight_bases:                              # HTB + Ants merged (needs daily history)
+    {enabled: true, phase: 2, slot: weekly, action: watchlist,
+     high_52w_within_pct: 15, adr_min_pct: 4, above_ma: 50,
+     range_days: 10, range_adr_mult_below: 1.5, volume_short_days: 10, volume_long_days: 50}
 
 market_light:                               # SPEC §6.5 — owner's rules, do not change
   qqq:

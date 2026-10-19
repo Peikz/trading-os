@@ -18,7 +18,7 @@ import yaml
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "scans.yaml"
 
 SLOTS = frozenset({"pm", "eod", "weekly"})
-ACTIONS = frozenset({"push", "log"})
+ACTIONS = frozenset({"push", "log", "watchlist"})
 TIERS = frozenset({"alert", "log"})
 
 TOP_LEVEL_KEYS = {
@@ -127,6 +127,15 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "eps_growth_q_min_pct",
         "rev_growth_q_min_pct",
         "quarters_to_check",
+    },
+    "tight_bases": {
+        "high_52w_within_pct",
+        "adr_min_pct",
+        "above_ma",
+        "range_days",
+        "range_adr_mult_below",
+        "volume_short_days",
+        "volume_long_days",
     },
 }
 

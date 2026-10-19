@@ -76,6 +76,18 @@ AUDIT_COLUMNS = [
     "eps_growth_q_prev",
     "revenue_ttm",
     "growth_quarters_checked",
+    "pct_from_52w_high",
+    "hist_gain_max_pct",
+    "hist_drop_max_pct",
+    "hist_consec_up",
+    "hist_consec_down",
+    "hist_dist_ma10_adr",
+    "hist_adr20_pct",
+    "hist_adr20_usd",
+    "hist_range_nd",
+    "hist_avg_volume_short",
+    "hist_avg_volume_long",
+    "tightness_adr",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

@@ -109,10 +109,28 @@ def test_parabolic_moves_within_10_days():
     # 10 → 15 over the last 10 sessions: +50 %; and the drop from the peak 15 → 10: 33.3 %.
     up = [10.0] * 10 + [11, 12, 13, 15]
     row = last(hm.compute(bars_for("A", up), sessions(14)), "A")
-    assert row["gain_max_10d_pct"] == pytest.approx(50.0)
+    assert row["gain_max_pct"] == pytest.approx(50.0)
     down = [15.0] * 10 + [12, 11, 10]
     row = last(hm.compute(bars_for("B", down), sessions(13)), "B")
-    assert row["drop_max_10d_pct"] == pytest.approx(100 / 3)
+    assert row["drop_max_pct"] == pytest.approx(100 / 3)
+
+
+def test_tight_base_windows():
+    # 50 sessions at 1,000 shares then 10 at 400; last 10 highs/lows 10.2-10.6 / 10.0-9.9.
+    closes = [10.0] * 60
+    highs = [11.0] * 50 + [10.2, 10.3, 10.4, 10.5, 10.6, 10.2, 10.2, 10.2, 10.2, 10.2]
+    lows = [9.0] * 50 + [10.0] * 9 + [9.9]
+    volumes = [1000.0] * 50 + [400.0] * 10
+    w = hm.ScanWindows(range_days=10, volume_short_days=10, volume_long_days=50)
+    row = last(
+        hm.compute(
+            bars_for("A", closes, highs=highs, lows=lows, volumes=volumes), sessions(60), windows=w
+        ),
+        "A",
+    )
+    assert row["range_nd"] == pytest.approx(10.6 - 9.9)
+    assert row["avg_volume_short"] == pytest.approx(400.0)
+    assert row["avg_volume_long"] == pytest.approx((40 * 1000 + 10 * 400) / 50)
 
 
 def test_missing_session_breaks_windows_instead_of_shifting_them():

@@ -100,6 +100,7 @@ def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.Da
     out["adr20_pct"] = adr_pct(out["adr20_usd"], out["close"])
     out["adr_basis"] = f"tv:{proxies['adr']}/close"
     out["dist_ma10_adr"] = distance_in_adr(out["close"], out["ma10"], out["adr20_usd"])
+    out["pct_from_52w_high"] = (out["close"] / out["high_52w"] - 1) * 100
     returns = proxies["returns"]
     for days, field in returns.items():  # type: ignore[union-attr]
         out[f"ret_{days}"] = out[canonical(str(field))]

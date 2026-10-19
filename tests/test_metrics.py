@@ -60,6 +60,7 @@ def test_add_phase1_metrics_uses_config_proxies():
             "perf_1m_tv": [10.0],
             "perf_3m_tv": [20.0],
             "perf_6m_tv": [30.0],
+            "high_52w": [12.5],
         }
     )
     out = metrics.add_phase1_metrics(df, load_config().proxies)
@@ -75,6 +76,7 @@ def test_add_phase1_metrics_uses_config_proxies():
     assert row["dist_ma10_adr"] == pytest.approx(2.0)  # (10 − 9) / 0.50
     assert (row["ret_22"], row["ret_63"], row["ret_126"]) == (10.0, 20.0, 30.0)
     assert row["returns_basis"] == "tv:Perf.1M/Perf.3M/Perf.6M"
+    assert row["pct_from_52w_high"] == pytest.approx(-20.0)  # 10 / 12.50 − 1
     # MA position: above ma10, not above an equal ma20, missing ma50 is False, below ma200.
     assert [row[f"above_ma{w}"] for w in (10, 20, 50, 200)] == [True, False, False, False]
     assert "close_loc" not in df.columns  # input untouched

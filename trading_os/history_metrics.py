@@ -11,6 +11,7 @@ output rows that are kept.
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,6 @@ MA_SLOPE_LOOKBACK = 5  # SPEC §5: "MA today > MA 5 trading days ago"
 ADR_DAYS = 20
 RVOL_DAYS = 50
 AVG_DAYS = 20
-PARABOLIC_DAYS = 10  # SPEC §6.2: move "in <= 10 days"
 PRICE_FIELDS = ("open", "high", "low", "close", "volume")
 
 # Sessions of history needed before the latest session has every metric.
@@ -77,14 +77,29 @@ def consecutive(flags: np.ndarray) -> np.ndarray:
     return (counts - at_last_break).astype("float64")
 
 
+@dataclass(frozen=True)
+class ScanWindows:
+    """Windows some scans add on top of SPEC §5; values come from config/scans.yaml."""
+
+    gain_days: int = 10  # Parabolic Short: largest gain within <= N sessions
+    drop_days: int = 10  # Parabolic Long: largest drop within <= N sessions
+    range_days: int = 10  # tight bases: high-low range over N sessions
+    volume_short_days: int = 10  # tight bases: N-day average volume ...
+    volume_long_days: int = 50  # ... below the M-day average
+
+
 def compute(
-    bars: pd.DataFrame, sessions: list[dt.date], keep: list[dt.date] | None = None
+    bars: pd.DataFrame,
+    sessions: list[dt.date],
+    keep: list[dt.date] | None = None,
+    windows: ScanWindows | None = None,
 ) -> pd.DataFrame:
     """SPEC §5 metrics per (session, ticker), long format, NaN where unknown.
 
     `sessions` is the contiguous history the windows run over; `keep` limits the output to
     some of them (the EOD job only needs the latest), which keeps memory small.
     """
+    windows = windows or ScanWindows()
     g, tickers = grids(bars, sessions)
     o, h, lo, c, v = (g[f] for f in PRICE_FIELDS)
     pc = shift(c, 1)
@@ -113,9 +128,15 @@ def compute(
         known = ~np.isnan(pc) & ~np.isnan(c)
         m["consec_up"] = np.where(known, consecutive((c > pc) & known), np.nan)
         m["consec_down"] = np.where(known, consecutive((c < pc) & known), np.nan)
-        # Largest close-to-close gain / drop over the last 1..10 sessions (Parabolic, §6.2).
-        m["gain_max_10d_pct"] = (c / rolling_extreme(pc, PARABOLIC_DAYS, "min") - 1) * 100
-        m["drop_max_10d_pct"] = (1 - c / rolling_extreme(pc, PARABOLIC_DAYS, "max")) * 100
+        # Largest close-to-close gain / drop over the last 1..N sessions (Parabolic, §6.2).
+        m["gain_max_pct"] = (c / rolling_extreme(pc, windows.gain_days, "min") - 1) * 100
+        m["drop_max_pct"] = (1 - c / rolling_extreme(pc, windows.drop_days, "max")) * 100
+        # Tight bases (§6.3): recent range and volume dry-up.
+        m["range_nd"] = rolling_extreme(h, windows.range_days, "max") - rolling_extreme(
+            lo, windows.range_days, "min"
+        )
+        m["avg_volume_short"] = rolling_mean(v, windows.volume_short_days)
+        m["avg_volume_long"] = rolling_mean(v, windows.volume_long_days)
 
     out_sessions = list(keep) if keep is not None else list(sessions)
     position = {s: i for i, s in enumerate(sessions)}

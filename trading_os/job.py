@@ -14,8 +14,9 @@ from pathlib import Path
 
 import requests
 
-from trading_os import clock, metrics, notify, store, tv, universe
+from trading_os import clock, enrich, metrics, notify, store, tv, universe
 from trading_os.config import load_config
+from trading_os.history_metrics import LOOKBACK_SESSIONS
 from trading_os.logsafe import run_guarded, status
 from trading_os.retry import once_more
 from trading_os.scans import run_scans
@@ -82,6 +83,9 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     df = metrics.add_phase1_metrics(raw, cfg.proxies)
     if slot == "weekly":
         df = metrics.add_growth_metrics(df)
+    if slot in ("eod", "weekly"):
+        df, covered = enrich.attach_history(df, args.data_dir, cfg, session)
+        status(f"History: {covered} of {LOOKBACK_SESSIONS} sessions available")
     previous = clock.previous_session(cfg.schedule, session)
     df["earnings_flag"] = metrics.earnings_flag(df["earnings_date_last"], session, previous)
     uni = universe.build_universe(df, cfg.universe, slot)

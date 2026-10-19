@@ -66,8 +66,20 @@ def test_run_scans_picks_enabled_scans_per_slot():
         ah_volume=0,
         pm_change_pct=0.0,
         pm_volume=0,
+        hist_gain_max_pct=0.0,
+        hist_consec_up=0,
+        hist_drop_max_pct=0.0,
+        hist_consec_down=0,
     )
     cfg = load_config()
     eod = run_scans(pd.DataFrame([full]), cfg, "eod")
-    assert list(eod) == ["ep_day", "ep9m", "mb_up", "mb_down"]  # ep_ah is off by default
+    # ep_ah is off by default
+    assert list(eod) == [
+        "ep_day",
+        "ep9m",
+        "mb_up",
+        "mb_down",
+        "parabolic_short",
+        "parabolic_long",
+    ]
     assert list(run_scans(pd.DataFrame([full]), cfg, "pm")) == ["ep_pm"]

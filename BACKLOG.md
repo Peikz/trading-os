@@ -22,7 +22,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run
 - [ ] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run
 - [ ] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run
-- [ ] Parabolic Short / Long — needs a decision, see Questions
+- [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive, or our own EOD snapshots). History-source question below still open
 - [ ] Breadth line + Market Light count — needs a decision, see Questions
 - [ ] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run
 
@@ -52,7 +52,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Base detection B2 (configurable heuristic, store intermediates)
 - [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger
 - [ ] Watchlists: EP-Watch → BO-Watch flow
-- [ ] Tight bases scan, CATS score
+- [ ] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS needs weights (see Questions)
 - [ ] Hand audit of 20 random breakout hits
 
 ## Phase 3 — Outcomes and journal
@@ -77,6 +77,8 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - **Growth buckets:** "avg volume" uses the same 30-day field as the other 20-day averages, and "annual revenue" is trailing-12-month revenue. OK?
 - **Market Light scan count** (Sunday): which average-volume field does your TradingView screen use for "average volume > 500K": 10, 30, 60 or 90 days? Since that screen must not change, it isn't built until you say.
 
+- **CATS score** (Phase 2): SPEC lists the parts (growth-bucket hit + recent MB/EP + RVOL trend − extension penalty) but no weights or windows. What should they be?
+
 ## Blocked
 - 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet. The first Actions runs of `eod.yml` and `premarket.yml` wait on them (Emil).
 
@@ -86,3 +88,4 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - 2026-10-19 (later): QM gainers, Growth Bucket 1 and 2, weekly job + `weekly.yml`; ADR %, returns and previous-quarter growth metrics; reported revenue history verified (100 % match). Local weekly run written to `docs/validation.md`. Next: secrets → first Actions runs; answers on the Questions.
 - 2026-10-19 (later): Hardening for the 10-day goal: one retry on TradingView/ntfy errors, data saved even if the push fails. READMEs for both repos (data repo: layout + DuckDB query). All unblocked Phase 1 items done; the rest waits on the secrets and the Questions above.
 - 2026-10-19 (later): Phase 2/3 groundwork on Emil's go-ahead: bars store + loader, Massive client and resumable backfill (+ daily catch-up), SPEC §5 metrics on full history, outcomes job. All tested offline; none needs a decision. Waiting on: secrets, Massive key, Questions.
+- 2026-10-19 (later): History metrics wired into EOD and weekly jobs as `hist_*` columns; Parabolic Short/Long and tight bases built on them (0 hits until history accumulates). Live forced EOD run OK in ~10 s.
