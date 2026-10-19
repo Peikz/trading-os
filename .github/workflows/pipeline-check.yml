@@ -12,6 +12,10 @@ on:
         description: "Send the EOD message to your phone (ntfy) as a test"
         type: boolean
         default: false
+      fail:
+        description: "Simulate a failure to test the failure push"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,3 +49,17 @@ jobs:
           echo "parquet: $(find "$RUNNER_TEMP/data" -name '*.parquet' | wc -l)"
           echo "charts:  $(find "$RUNNER_TEMP/data" -name '*.png' | wc -l)"
           echo "reports: $(find "$RUNNER_TEMP/data" -name '*.md' | wc -l)"
+      - name: Simulated failure
+        if: inputs.fail
+        run: |
+          echo "Simulating a failure to test the failure push"
+          exit 1
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL"             '{topic: $topic, title: "Trading OS · Pipeline check failed", message: "Pipeline check failed. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}'             | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}
+" -H "Content-Type: application/json" -d @- https://ntfy.sh/
