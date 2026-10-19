@@ -89,6 +89,11 @@ AUDIT_COLUMNS = [
     "hist_avg_volume_short",
     "hist_avg_volume_long",
     "tightness_adr",
+    "cats",
+    "cats_growth",
+    "cats_recent",
+    "cats_volume",
+    "cats_extension",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

@@ -31,6 +31,7 @@ TOP_LEVEL_KEYS = {
     "scans",
     "market_light",
     "watchlists",
+    "cats",
     "breakout",
     "history",
     "outcomes",
@@ -39,6 +40,17 @@ TOP_LEVEL_KEYS = {
     "notify",
 }
 WATCHLIST_KEYS = {"ep_watch_sources", "ep_watch_max_sessions", "bo_watch_stale_sessions"}
+CATS_KEYS = {
+    "apply_to",
+    "growth_bucket_points",
+    "recent_signal_points",
+    "recent_signal_sessions",
+    "recent_signal_scans",
+    "volume_trend_points",
+    "volume_trend_fields",
+    "extension_free_adr",
+    "extension_penalty_per_adr",
+}
 BREAKOUT_KEYS = {
     "prior_move_min_pct",
     "prior_move_max_days",
@@ -211,6 +223,7 @@ class Config:
     scans: Mapping[str, ScanConfig]
     market_light: Mapping[str, Any]
     watchlists: Mapping[str, Any]
+    cats: Mapping[str, Any]
     breakout: Mapping[str, Any]
     history: Mapping[str, Any]
     outcomes: Mapping[str, Any]
@@ -252,6 +265,7 @@ def parse_config(raw: Any) -> Config:
     unknown = set(raw["watchlists"]["ep_watch_sources"]) - SCAN_PARAM_KEYS.keys()
     if unknown:
         raise ConfigError(f"watchlists.ep_watch_sources: unknown scans {sorted(unknown)}")
+    _check_keys("cats", raw["cats"], CATS_KEYS)
     _check_keys("breakout", raw["breakout"], BREAKOUT_KEYS)
     _check_numbers("breakout", raw["breakout"])
     _check_keys("history", raw["history"], HISTORY_KEYS)
@@ -268,6 +282,7 @@ def parse_config(raw: Any) -> Config:
         scans=MappingProxyType(_parse_scans(raw["scans"])),
         market_light=_freeze(market_light),
         watchlists=_freeze(raw["watchlists"]),
+        cats=_freeze(raw["cats"]),
         breakout=_freeze(raw["breakout"]),
         history=_freeze(raw["history"]),
         outcomes=_freeze(raw["outcomes"]),

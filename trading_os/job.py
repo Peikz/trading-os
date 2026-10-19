@@ -17,12 +17,14 @@ import requests
 
 from trading_os import (
     breadth,
+    cats,
     charts,
     clock,
     enrich,
     history,
     metrics,
     notify,
+    outcomes,
     report,
     store,
     tv,
@@ -109,6 +111,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     for name in watchlists.LISTS:
         uni[f"on_{name}"] = uni["ticker"].isin(watchlists.active(state, name))
     results = run_scans(uni, cfg, slot)
+    if slot == "weekly":
+        results = _with_cats(results, args.data_dir, cfg, session)
     extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
     if slot in ("pm", "eod"):
         events = watchlists.update(
@@ -155,6 +159,24 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
+
+
+def _with_cats(results: dict, data_dir: Path, cfg, session) -> dict:
+    """Add the CATS ranking column (SPEC §6.3) to the configured weekly lists."""
+    rules = cfg.cats
+    growth = set()
+    for name in ("growth_bucket_1", "growth_bucket_2"):
+        if name in results:
+            growth |= set(results[name]["ticker"])
+    window = clock.sessions_back(cfg.schedule, session, rules["recent_signal_sessions"])
+    recent = cats.recent_signal_tickers(
+        outcomes.load_candidates(data_dir), list(rules["recent_signal_scans"]), window
+    )
+    out = dict(results)
+    for name in rules["apply_to"]:
+        if name in out:
+            out[name] = cats.add_cats(out[name], growth, recent, rules)
+    return out
 
 
 def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):

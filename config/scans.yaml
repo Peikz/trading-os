@@ -142,6 +142,17 @@ watchlists:                                 # SPEC §7 (proposed rules, pending 
   ep_watch_max_sessions: 63                 # an EP-Watch entry expires after ~3 months
   bo_watch_stale_sessions: 10               # BO-Watch expires after 10 sessions without B1-B4
 
+cats:                                       # SPEC §6.3 ranking column (proposed weights, pending Emil)
+  apply_to: [qm_gainers, tight_bases]
+  growth_bucket_points: 1.0                 # in Growth Bucket 1 or 2 this week
+  recent_signal_points: 1.0                 # an MB up / EP hit in the last N sessions
+  recent_signal_sessions: 10
+  recent_signal_scans: [mb_up, ep_day, ep_pm, ep9m]
+  volume_trend_points: 1.0                  # 30-day average volume above the 90-day average
+  volume_trend_fields: [average_volume_30d_calc, average_volume_90d_calc]
+  extension_free_adr: 3.0                   # no penalty within 3 ADR above MA10 ...
+  extension_penalty_per_adr: 0.5            # ... then minus 0.5 per ADR beyond
+
 breakout:                                   # SPEC §6.4. (proposed) = default, confirm in
                                             # the hand audit of 20 hits (SPEC §9, Phase 2)
   prior_move_min_pct: 30                    # B1: up >= 30 %

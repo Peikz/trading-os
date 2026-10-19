@@ -32,6 +32,7 @@ SCAN_LABELS = {
     "qm_gainers": "QM gainers",
     "growth_bucket_1": "Growth 1",
     "growth_bucket_2": "Growth 2",
+    "tight_bases": "Tight bases",
 }
 
 # The percent shown on each line: the move that triggered the scan.
