@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import time
 from collections.abc import Callable, Iterable
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -164,6 +165,9 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Alpaca market data")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--ep-minutes", action="store_true", help="minute bars around EPs")
+    parser.add_argument("--data-dir", type=Path, help="checkout of trading-os-data")
+    parser.add_argument("--out", type=Path, help="folder for the monthly minute files")
     args = parser.parse_args(argv)
     key, secret = (
         os.environ.get("ALPACA_API_KEY_ID", ""),
@@ -175,5 +179,58 @@ def main(argv: list[str] | None = None) -> int:
     client = AlpacaClient(key, secret)
     if args.check:
         return 0 if check(client) else 1
-    status("Alpaca: nothing but --check yet")
-    return 0
+    if args.ep_minutes:
+        files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
+        sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
+        ep_minutes(args.data_dir, client, args.out, sessions)
+        return 0
+    status("Alpaca: pass --check or --ep-minutes")
+    return 1
+
+
+BATCH = 50  # symbols per request
+
+
+def ep_minutes(data_dir, client: AlpacaClient, out_dir, sessions: list[dt.date]) -> dict[str, int]:
+    """1-minute bars (pre/post-market included) around every EP-Day event, from the session
+    before to the session after, written as one file per month (`YYYY-MM.parquet`) in
+    `out_dir`. EPs on the same day share requests. Months already written are skipped."""
+    from pathlib import Path
+
+    from trading_os.ep_enrich import events, latest_study
+    from trading_os.metrics import NEW_YORK
+    from trading_os.store import PARQUET_OPTIONS
+
+    study = latest_study(data_dir)
+    if study.empty:
+        return {}
+    ep = events(study)
+    index = {d: i for i, d in enumerate(sessions)}
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    done: dict[str, int] = {}
+    ep["month"] = ep["session_date"].map(lambda d: f"{d:%Y-%m}")
+    for month, part in sorted(ep.groupby("month"), reverse=True):
+        path = out_dir / f"{month}.parquet"
+        if path.exists():
+            continue
+        frames = []
+        for day, same_day in part.groupby("session_date"):
+            i = index.get(day)
+            if i is None or i == 0:
+                continue
+            prev, nxt = sessions[i - 1], sessions[min(i + 1, len(sessions) - 1)]
+            start = pd.Timestamp(f"{prev} 15:30", tz=NEW_YORK).tz_convert("UTC").to_pydatetime()
+            end = pd.Timestamp(f"{nxt} 16:00", tz=NEW_YORK).tz_convert("UTC").to_pydatetime()
+            tickers = sorted(set(same_day["ticker"]))
+            for k in range(0, len(tickers), BATCH):
+                bars = client.bars(tickers[k : k + BATCH], "1Min", start, end)
+                if len(bars):
+                    frames.append(bars.assign(event_date=day))
+        month_bars = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        tmp = path.with_name(path.name + ".tmp")
+        month_bars.to_parquet(tmp, **PARQUET_OPTIONS)
+        tmp.replace(path)
+        done[month] = int(month_bars["ticker"].nunique()) if len(month_bars) else 0
+    status(f"Alpaca minutes: {len(done)} months written, {sum(done.values())} stock-months")
+    return done

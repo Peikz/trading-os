@@ -30,7 +30,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_os import audit, enrich, ep_history, sizing
+from trading_os import audit, enrich, ep_history, exits, sizing
 from trading_os import history_metrics as hm
 from trading_os.scans import REGISTRY
 
@@ -297,6 +297,7 @@ def measure(found: pd.DataFrame, g, col, pos, market, cfg) -> pd.DataFrame:
                 )
             stop = _stop({**rec, **day}, strategy, cfg.sizing)
             result = outcomes(oc, hc, lc, cc, mas, entry_t, entry, stop, side)
+            result |= exits.managed(oc, hc, lc, cc, mas, entry_t, entry, stop, side, cfg.exits)
             rows.append(_row(rec, day, entry, stop, market[t]) | result)
     return (
         pd.DataFrame(rows)
@@ -413,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Strategy history over the Massive bars")
     parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--rebuild", action="store_true", help="replace this date's build")
     args = parser.parse_args(argv)
     cfg = load_config()
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
@@ -421,8 +423,8 @@ def main(argv: list[str] | None = None) -> int:
         status("Strategy history: not enough bars yet")
         return 1
     folder = args.data_dir / "data" / "strategy_history" / sessions[-1].isoformat()
-    if folder.exists():
-        status(f"Strategy history: {folder.name} already built")
+    if folder.exists() and not args.rebuild:
+        status(f"Strategy history: {folder.name} already built (--rebuild replaces it)")
         return 0
     root = args.data_dir / "data"
     snaps = [*root.glob("universe/*/*.parquet"), *root.glob("manual/*/universe.parquet")]

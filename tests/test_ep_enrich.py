@@ -57,7 +57,15 @@ class Fake:
         return [{"title": "Beats", "publisher": "PR", "published_utc": end, "url": ""}]
 
 
-def test_fetches_in_priority_order_and_resumes(tmp_path):
+def test_minute_bars_are_left_to_alpaca_by_default(tmp_path):
+    write_study(tmp_path)
+    fake = Fake()
+    ep_enrich.run(tmp_path, fake, DAYS, max_calls=100, deadline=1e18)
+    assert not [c for c in fake.calls if c[0] == "minutes"]
+
+
+def test_fetches_in_priority_order_and_resumes(tmp_path, monkeypatch):
+    monkeypatch.setattr(ep_enrich, "FETCH_MINUTES", True)
     write_study(tmp_path)
     fake = Fake()
     done = ep_enrich.run(tmp_path, fake, DAYS, max_calls=100, deadline=1e18)

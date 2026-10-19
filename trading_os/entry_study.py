@@ -211,18 +211,15 @@ def summary(df: pd.DataFrame, by: list[str] | None = None) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run(events: pd.DataFrame, minute_path, bars: pd.DataFrame, sessions: list) -> pd.DataFrame:
+def run(events: pd.DataFrame, minutes_for, bars: pd.DataFrame, sessions: list) -> pd.DataFrame:
     """`events`: EP rows with session_date, ticker, adr20_pct, close (+ any grouping columns).
-    `minute_path(day, ticker)` gives each event's minute file."""
+    `minutes_for(day, ticker)` gives each event's minute bars (or None)."""
     index = {d: i for i, d in enumerate(sessions)}
     by_ticker = {t: g.sort_values("session_date") for t, g in bars.groupby("ticker")}
     rows = []
     for event in events.to_dict("records"):
-        path = minute_path(event["session_date"], event["ticker"])
-        if not path.exists():
-            continue
-        raw = pd.read_parquet(path)
-        if raw.empty:
+        raw = minutes_for(event["session_date"], event["ticker"])
+        if raw is None or raw.empty:
             continue
         i = index.get(event["session_date"])
         if not i:
@@ -257,11 +254,47 @@ def label(entry: str) -> str:
     return names.get(entry, entry)
 
 
+def minute_source(data_dir):
+    """Minute bars per (EP day, ticker): Alpaca's monthly files in `data/ep_minutes/`
+    (downloaded from the data repo's "ep-minutes" release) first, else Massive's per-event
+    files from `ep_enrich`."""
+    from pathlib import Path
+
+    from trading_os import ep_enrich
+
+    months: dict[str, dict] = {}
+    folder = Path(data_dir) / "data" / "ep_minutes"
+
+    def month(key: str) -> dict:
+        if key not in months:
+            path = folder / f"{key}.parquet"
+            frame = pd.read_parquet(path) if path.exists() and path.stat().st_size else None
+            months.clear()  # one month in memory at a time
+            months[key] = (
+                {}
+                if frame is None or frame.empty
+                else {
+                    (pd.Timestamp(d).date(), t): g.drop(columns=["event_date"])
+                    for (d, t), g in frame.groupby(["event_date", "ticker"])
+                }
+            )
+        return months[key]
+
+    def minutes_for(day, ticker):
+        found = month(f"{day:%Y-%m}").get((day, ticker))
+        if found is not None:
+            return found
+        path = ep_enrich.minutes_path(data_dir, day, ticker)
+        return pd.read_parquet(path) if path.exists() else None
+
+    return minutes_for
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     from pathlib import Path
 
-    from trading_os import ep_enrich, history
+    from trading_os import history
     from trading_os.logsafe import status
     from trading_os.store import PARQUET_OPTIONS
 
@@ -274,14 +307,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     study = pd.read_parquet(built[-1])
     study["session_date"] = pd.to_datetime(study["session_date"]).dt.date
-    events = study[study["is_ep_day"] & (study["tier"] == "alert")]
+    events = study[study["is_ep_day"] & (study["tier"] == "alert")].sort_values("session_date")
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
     sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
     bars = history.load_bars(args.data_dir, sessions)
     bars = bars[bars["ticker"].isin(set(events["ticker"]))]
-    result = run(
-        events, lambda day, t: ep_enrich.minutes_path(args.data_dir, day, t), bars, sessions
-    )
+    result = run(events, minute_source(args.data_dir), bars, sessions)
     if result.empty:
         status("Entry study: no minute bars yet")
         return 0

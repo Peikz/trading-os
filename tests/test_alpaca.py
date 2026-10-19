@@ -62,3 +62,41 @@ def test_rate_limit_waits_and_sip_falls_back_to_iex():
     c, http = client([Response(429), Response(403), Response(200, {"bars": {}})])
     frame = c.bars(["A"], "1Min", DAY, DAY)
     assert frame.empty and c.feed == "iex" and http.calls[-1]["feed"] == "iex"
+
+
+def test_ep_minutes_writes_one_file_per_month_and_skips_done_months(tmp_path):
+    import pandas as pd
+
+    from trading_os import alpaca
+
+    days = [dt.date(2026, 9, 29), dt.date(2026, 9, 30), dt.date(2026, 10, 1), dt.date(2026, 10, 2)]
+    study = pd.DataFrame(
+        {
+            "session_date": [days[1], days[2], days[2]],
+            "ticker": ["AAA", "BBB", "CCC"],
+            "is_ep_day": [True, True, True],
+            "tier": ["alert", "alert", "log"],
+        }
+    )
+    folder = tmp_path / "data" / "ep_history"
+    folder.mkdir(parents=True)
+    study.to_parquet(folder / "ep_history_2026-10-02.parquet")
+
+    class Fake:
+        calls = []
+
+        def bars(self, symbols, timeframe, start, end):
+            self.calls.append((tuple(symbols), timeframe))
+            ts = pd.Timestamp(start)
+            return pd.DataFrame({"ticker": list(symbols), "ts": [ts] * len(symbols), "close": 1.0})
+
+    fake = Fake()
+    out = tmp_path / "minutes"
+    done = alpaca.ep_minutes(tmp_path, fake, out, days)
+    assert done == {"2026-10": 2, "2026-09": 1}
+    assert ("BBB", "CCC") in [c[0] for c in fake.calls]  # same-day EPs share a request
+    month = pd.read_parquet(out / "2026-10.parquet")
+    assert set(month["ticker"]) == {"BBB", "CCC"} and set(month["event_date"]) == {days[2]}
+    again = Fake()
+    again.calls = []
+    assert alpaca.ep_minutes(tmp_path, again, out, days) == {} and again.calls == []

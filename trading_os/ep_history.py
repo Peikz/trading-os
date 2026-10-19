@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_os import breadth, sizing
+from trading_os import breadth, exits, sizing
 from trading_os import history_metrics as hm
 from trading_os.audit import ordinary_ticker
 from trading_os.metrics import NEW_YORK, yoy_growth
@@ -262,6 +262,7 @@ def find(bars: pd.DataFrame, sessions: list, cfg) -> pd.DataFrame:
                 "lod_stop_adr": (entry - lc[t]) / adr_usd if adr_usd > 0 else np.nan,
                 **market[t],
                 **outcomes(oc, hc, lc, cc, mas, t, entry, stop),
+                **exits.managed(oc, hc, lc, cc, mas, t, entry, stop, 1, cfg.exits),
             }
             rows.append(row)
     out = pd.DataFrame(rows)

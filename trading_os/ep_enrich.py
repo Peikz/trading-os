@@ -29,6 +29,9 @@ from trading_os.metrics import NEW_YORK
 from trading_os.store import PARQUET_OPTIONS
 
 KINDS = ("tickers", "minutes", "short_interest", "details", "news")
+# Minute bars now come from Alpaca (alpaca.ep_minutes: whole days in a few requests); Massive's
+# 5 calls a minute go to what only Massive has.
+FETCH_MINUTES = False
 FLUSH_EVERY = 100
 
 
@@ -121,7 +124,8 @@ def tasks(data_dir: Path, study: pd.DataFrame, sessions: list[dt.date]) -> Itera
     for part in (alert, rest):
         for row in part.itertuples():
             span = around(row.session_date)
-            if span and not minutes_path(data_dir, row.session_date, row.ticker).exists():
+            fresh = not minutes_path(data_dir, row.session_date, row.ticker).exists()
+            if FETCH_MINUTES and span and fresh:
                 yield "minutes", (row.ticker, row.session_date, *span)
         if part is alert:
             for ticker in dict.fromkeys(part["ticker"]):

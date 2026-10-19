@@ -252,6 +252,15 @@ ep_history:                                 # EP study over the Massive bars (Em
   c4_neglect_min_months: 3
   c5_stop_adr_max: 1.5
 
+exits:                                      # how the history studies run the trades (proposed)
+  partial_days: [3, 5]                      # Qullamaggie: sell part after 3-5 days ...
+  partial_fraction: 0.3333                  # ... a third, stop to break-even ...
+  trail_mas: [10, 20]                       # ... and trail the rest to a close through the MA
+  time_days: [3, 5]                         # Stockbee: out after 3-5 days ...
+  target_pct: 8                             # ... or at +8 % within ...
+  target_days: 5                            # ... 5 sessions
+  max_days: 126                             # longest trail
+
 sec:                                        # SEC EDGAR (free): exact earnings dates, EPS/revenue as filed
   user_agent: ""                            # contact from the SEC_USER_AGENT secret (not public)
   requests_per_second: 5                    # SEC allows 10

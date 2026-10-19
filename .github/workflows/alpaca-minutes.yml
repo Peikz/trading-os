@@ -1,0 +1,60 @@
+# Alpaca 1-minute bars around every EP-Day event (Emil, 19 Oct 2026), for the entry-timing
+# study. Monthly files go to the private data repo as assets of the "ep-minutes" release, not
+# into git (a few hundred MB). Months already uploaded are skipped. Manual runs only.
+# This repo is public: the job prints counts only.
+
+name: Alpaca EP minutes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  minutes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Months already uploaded
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p minutes
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view ep-minutes -R "$REPO" >/dev/null 2>&1 || gh release create ep-minutes -R "$REPO" --title "EP minute bars" --notes "1-minute bars around EP-Day events (Alpaca), one file per month." >/dev/null
+          for name in $(gh release view ep-minutes -R "$REPO" --json assets -q '.assets[].name'); do
+            touch "minutes/$name"   # placeholder: the fetch skips months that exist
+          done
+          echo "uploaded months: $(ls minutes | wc -l)"
+
+      - name: Fetch
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: uv run --frozen --no-dev python -m trading_os.alpaca_cli --ep-minutes --data-dir data-repo --out minutes
+
+      - name: Upload new months
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          new=$(find minutes -name '*.parquet' -size +0 | sort)
+          [ -z "$new" ] && { echo "nothing new"; exit 0; }
+          gh release upload ep-minutes $new -R "$REPO" --clobber
+          echo "uploaded: $(echo "$new" | wc -l) months"
