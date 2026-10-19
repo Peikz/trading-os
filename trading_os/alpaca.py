@@ -12,6 +12,7 @@ stocks that have since been delisted (the EP study needs them)?
 from __future__ import annotations
 
 import datetime as dt
+import re
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -26,6 +27,15 @@ ASSETS_URL = "https://paper-api.alpaca.markets/v2/assets"
 # Probe symbols for the check: listed for decades, and a few delisted since 2023.
 LISTED = "AAPL"
 DELISTED = ("SIVB", "FRC", "BBBY", "SPWR")
+BAR_FIELDS = ["ticker", "ts", "open", "high", "low", "close", "volume", "trades", "vwap"]
+# Real ticker shapes only: Alpaca's inactive list also holds CUSIP-style placeholders.
+SYMBOL_SHAPE = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
+
+
+def _empty_bars() -> pd.DataFrame:
+    frame = pd.DataFrame(columns=BAR_FIELDS)
+    frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
+    return frame
 
 
 class AlpacaClient:
@@ -57,7 +67,9 @@ class AlpacaClient:
             if response.status_code == 429 and attempt < 3:
                 self._sleep(30)
                 continue
-            response.raise_for_status()
+            if not response.ok:
+                # Never the URL: it carries the symbols, and job logs are public.
+                raise requests.HTTPError(f"HTTP {response.status_code}", response=response)
             return response.json()
         raise requests.HTTPError("rate limited three times")
 
@@ -71,6 +83,7 @@ class AlpacaClient:
     ) -> pd.DataFrame:
         """Bars for several symbols (all pages): ticker, ts (UTC), open, high, low, close,
         volume, trades, vwap. Split- and dividend-adjusted."""
+        symbols = list(symbols)
         params = {
             "symbols": ",".join(symbols),
             "timeframe": timeframe,
@@ -89,6 +102,18 @@ class AlpacaClient:
                 if code in (403, 422) and self.feed == "sip":
                     self.feed = params["feed"] = "iex"  # the plan doesn't allow SIP
                     continue
+                if code == 400 and len(symbols) > 1 and "page_token" not in params:
+                    # One unknown symbol rejects the batch: split it to find the rest.
+                    half = len(symbols) // 2
+                    return pd.concat(
+                        [
+                            self.bars(symbols[:half], timeframe, start, end, max_pages),
+                            self.bars(symbols[half:], timeframe, start, end, max_pages),
+                        ],
+                        ignore_index=True,
+                    )
+                if code == 400:
+                    return _empty_bars()
                 raise
             for symbol, items in (body.get("bars") or {}).items():
                 for b in items:
@@ -109,10 +134,7 @@ class AlpacaClient:
             if not token:
                 break
             params["page_token"] = token
-        frame = pd.DataFrame(
-            rows,
-            columns=["ticker", "ts", "open", "high", "low", "close", "volume", "trades", "vwap"],
-        )
+        frame = pd.DataFrame(rows, columns=BAR_FIELDS)
         frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
         return frame
 
@@ -178,6 +200,12 @@ def main(argv: list[str] | None = None) -> int:
         status("Alpaca: ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY not set")
         return 1
     client = AlpacaClient(key, secret)
+    from trading_os.logsafe import run_guarded
+
+    return run_guarded(lambda: _run(args, client), None, "Alpaca")
+
+
+def _run(args, client: AlpacaClient) -> int:
     if args.check:
         return 0 if check(client) else 1
     if args.ep_minutes:
@@ -248,7 +276,11 @@ def stock_symbols(client: AlpacaClient) -> list[str]:
     """Every US equity Alpaca knows, listed or delisted, on an exchange (no OTC)."""
     assets = client.assets("active") + client.assets("inactive")
     return sorted(
-        {a["symbol"] for a in assets if a.get("exchange") not in ("OTC", None) and a.get("symbol")}
+        {
+            a["symbol"]
+            for a in assets
+            if a.get("exchange") not in ("OTC", None) and SYMBOL_SHAPE.match(a.get("symbol") or "")
+        }
     )
 
 

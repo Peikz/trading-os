@@ -11,6 +11,7 @@ from trading_os.alpaca import AlpacaClient
 class Response:
     def __init__(self, code, body=None):
         self.status_code, self._body = code, body or {}
+        self.ok = code < 400
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -127,3 +128,40 @@ def test_daily_year_in_the_history_bars_shape_and_symbols_skip_otc():
     assert year["session_date"].tolist() == [dt.date(2020, 3, 2)] * 2 and set(year["source"]) == {
         "alpaca"
     }
+
+
+def test_errors_never_carry_the_symbols_and_a_bad_symbol_only_drops_itself():
+    class Http:
+        def get(self, url, params, headers, timeout):
+            symbols = params["symbols"].split(",")
+            if "BAD1" in symbols:
+                return Response(400)
+            bars = {s: [bar("2016-01-04T05:00:00Z", 1.0)] for s in symbols}
+            return Response(200, {"bars": bars})
+
+    c = AlpacaClient("id", "secret", 1e9, session=Http(), sleep=lambda s: None)
+    frame = c.bars(["AAA", "BAD1", "CCC", "DDD"], "1Day", DAY, DAY)
+    assert sorted(frame["ticker"]) == ["AAA", "CCC", "DDD"]
+
+    class Down:
+        def get(self, url, params, headers, timeout):
+            return Response(500)
+
+    broken = AlpacaClient("id", "secret", 1e9, session=Down(), sleep=lambda s: None)
+    with pytest.raises(requests.HTTPError) as caught:
+        broken.bars(["SECRETTICKER"], "1Day", DAY, DAY)
+    assert "SECRETTICKER" not in str(caught.value) and "500" in str(caught.value)
+
+
+def test_symbol_list_keeps_real_tickers_only():
+    from trading_os import alpaca
+
+    class Fake:
+        def assets(self, status_filter):
+            return [
+                {"symbol": "BRK.B", "exchange": "NYSE"},
+                {"symbol": "0029900E0", "exchange": "NYSE"},
+                {"symbol": "003CVR016", "exchange": "NASDAQ"},
+            ]
+
+    assert alpaca.stock_symbols(Fake()) == ["BRK.B"]

@@ -225,6 +225,12 @@ def cik_map(data_dir: Path, client: SecClient) -> dict[str, int]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from trading_os.logsafe import run_guarded
+
+    return run_guarded(lambda: _main(argv), None, "SEC")
+
+
+def _main(argv: list[str] | None = None) -> int:
     import argparse
 
     from trading_os.config import load_config

@@ -117,64 +117,89 @@ def _breakouts(session: pd.DataFrame, prefix: str, ranges=OPENING_RANGES) -> dic
     return out
 
 
+class Daily:
+    """One stock's daily bars as arrays (the outcome loop runs on these, not on pandas)."""
+
+    def __init__(self, bars: pd.DataFrame) -> None:
+        bars = bars.sort_values("session_date").reset_index(drop=True)
+        self.index = {d: i for i, d in enumerate(bars["session_date"])}
+        self.o, self.h, self.lo, self.c = (
+            bars[k].to_numpy(dtype=float) for k in ("open", "high", "low", "close")
+        )
+        self.ma20 = bars["close"].rolling(20).mean().to_numpy(dtype=float)
+
+
 def simulate(
     minutes: pd.DataFrame,
     start_row: int,
     entry: float,
     stop: float,
-    daily: pd.DataFrame,
+    daily: Daily,
     entry_day: dt.date,
 ) -> dict[str, Any]:
-    """R for one entry: the rest of the entry day minute by minute, then daily bars."""
+    """R for one entry: the rest of the entry day minute by minute, then daily bars. Holding
+    5/21/63 sessions with the stop, a trailing exit at the first close under the 20-day MA
+    (from the third session), and the managed exits (a third after 3 days, the rest on the
+    20-day MA; out after 3 or 5 days; +8 % within 5 days)."""
+    from trading_os import exits
+
     risk = entry - stop
-    if not risk > 0:
+    t = daily.index.get(entry_day)
+    if not risk > 0 or t is None:
         return {}
-    out: dict[str, Any] = {}
     rest = minutes.loc[start_row + 1 :]
     rest = rest[(rest["day"] == entry_day) & (rest["clock"] < "16:00")]
     hit = rest[rest["low"] <= stop]
+    names = [f"r_{h}d" for h in HORIZONS] + ["r_trail_ma20", "r_q3_ma20", "r_time3d"]
+    names += ["r_time5d", "r_target8_5d"]
     if len(hit):
         r = (min(float(hit.iloc[0]["open"]), stop) - entry) / risk
-        out |= {f"r_{h}d": r for h in HORIZONS} | {"r_trail_ma20": r, "stopped_entry_day": True}
-        return out
-    out["stopped_entry_day"] = False
-    later = daily[daily["session_date"] > entry_day].reset_index(drop=True)
-    ma20 = daily.set_index("session_date")["close"].rolling(20).mean()
-    exit_r = None
+        return dict.fromkeys(names, r) | {"stopped_entry_day": True}
+    o, h, lo, c = daily.o, daily.h, daily.lo, daily.c
+    out: dict[str, Any] = {"stopped_entry_day": False}
+    n = len(c)
+    stopped_at = None
+    for d in range(t + 1, min(n, t + 1 + max(HORIZONS))):
+        if lo[d] <= stop:
+            stopped_at = d
+            break
+    stop_r = (min(o[stopped_at], stop) - entry) / risk if stopped_at is not None else None
+    for horizon in HORIZONS:
+        end = t + horizon
+        if stopped_at is not None and stopped_at <= end:
+            out[f"r_{horizon}d"] = stop_r
+        elif end < n:
+            out[f"r_{horizon}d"] = (c[end] - entry) / risk
     trail = None
-    for i, bar in later.iterrows():
-        if bar["low"] <= stop:
-            exit_r = (min(bar["open"], stop) - entry) / risk
-        horizon = i + 1
-        for h in HORIZONS:
-            if horizon == h and f"r_{h}d" not in out:
-                out[f"r_{h}d"] = exit_r if exit_r is not None else (bar["close"] - entry) / risk
-        if trail is None:
-            if exit_r is not None:
-                trail = exit_r
-            elif horizon >= 3 and bar["close"] < ma20.get(bar["session_date"], np.nan):
-                trail = (bar["close"] - entry) / risk
-        if exit_r is not None:
-            for h in HORIZONS:
-                out.setdefault(f"r_{h}d", exit_r)
+    for d in range(t + 1, min(n, t + 127)):
+        if lo[d] <= stop:
+            trail = (min(o[d], stop) - entry) / risk
             break
-        if horizon >= max(HORIZONS) and trail is not None:
+        if d - t >= 3 and c[d] < daily.ma20[d]:
+            trail = (c[d] - entry) / risk
             break
-    if trail is None and len(later):
-        trail = (later.iloc[min(len(later), 126) - 1]["close"] - entry) / risk
+    if trail is None and t + 1 < n:
+        trail = (c[min(n - 1, t + 126)] - entry) / risk
     out["r_trail_ma20"] = trail
+    out["r_q3_ma20"] = exits.partial_trail(
+        o, h, lo, c, daily.ma20, t, entry, stop, 1, 3, 1 / 3, 126
+    )[0]
+    out["r_time3d"] = exits.time_exit(o, h, lo, c, t, entry, stop, 1, 3)
+    out["r_time5d"] = exits.time_exit(o, h, lo, c, t, entry, stop, 1, 5)
+    out["r_target8_5d"] = exits.target_exit(o, h, lo, c, t, entry, stop, 1, 8, 5)
     return out
 
 
 def study_event(
     minutes: pd.DataFrame,
-    daily: pd.DataFrame,
+    daily,
     prev: dt.date,
     ep: dt.date,
     nxt: dt.date | None,
     adr_usd: float,
 ) -> list[dict[str, Any]]:
     """Every entry x stop for one EP."""
+    daily = daily if isinstance(daily, Daily) else Daily(daily)
     rows = []
     for name, (price, row, low) in entries(minutes, prev, ep, nxt).items():
         day = minutes.loc[row, "day"]
@@ -215,7 +240,7 @@ def run(events: pd.DataFrame, minutes_for, bars: pd.DataFrame, sessions: list) -
     """`events`: EP rows with session_date, ticker, adr20_pct, close (+ any grouping columns).
     `minutes_for(day, ticker)` gives each event's minute bars (or None)."""
     index = {d: i for i, d in enumerate(sessions)}
-    by_ticker = {t: g.sort_values("session_date") for t, g in bars.groupby("ticker")}
+    by_ticker = {t: Daily(g) for t, g in bars.groupby("ticker")}
     rows = []
     for event in events.to_dict("records"):
         raw = minutes_for(event["session_date"], event["ticker"])

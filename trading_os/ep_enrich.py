@@ -271,11 +271,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
     sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
-    run(
-        args.data_dir,
-        client,
-        sessions,
-        max_calls=args.max_calls,
-        deadline=deadline(time.time(), args.minutes, args.until),
-    )
-    return 0
+    from trading_os.logsafe import run_guarded
+
+    def fetch() -> int:
+        run(
+            args.data_dir,
+            client,
+            sessions,
+            max_calls=args.max_calls,
+            deadline=deadline(time.time(), args.minutes, args.until),
+        )
+        return 0
+
+    # Errors can carry a URL with a ticker in it: logs are public, so redact.
+    return run_guarded(fetch, args.data_dir / "logs", "EP enrich")
