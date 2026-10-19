@@ -107,6 +107,24 @@ def _check() -> int:
     except requests.HTTPError as exc:
         code = exc.response.status_code if exc.response is not None else "?"
         status(f"Massive check: news HTTP {code} (not on this plan?)")
+    day = oldest.isoformat()
+    probes = {
+        "minute bars (oldest session)": (f"/v2/aggs/ticker/AAPL/range/1/minute/{day}/{day}", {}),
+        "ticker list incl. delisted": ("/v3/reference/tickers", {"active": "false", "limit": 5}),
+        "ticker details as of a date": ("/v3/reference/tickers/AAPL", {"date": day}),
+        "financials": ("/vX/reference/financials", {"ticker": "AAPL", "limit": 4}),
+        "short interest": ("/stocks/v1/short-interest", {"ticker": "AAPL", "limit": 5}),
+        "news before the window start": (
+            "/v2/reference/news",
+            {"ticker": "AAPL", "published_utc.lte": day, "limit": 5},
+        ),
+    }
+    for label, (path, params) in probes.items():
+        try:
+            code, count = client.probe(path, params)
+            status(f"Massive check: {label}: HTTP {code}, {count} results")
+        except requests.RequestException as exc:
+            status(f"Massive check: {label}: {type(exc).__name__}")
     return 1 if failures else 0
 
 

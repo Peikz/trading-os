@@ -90,6 +90,18 @@ class MassiveClient:
             raise MassiveError(f"grouped daily {day}: status {body.get('status')!r}")
         return to_bars(body.get("results") or [], day, bool(body.get("adjusted", adjusted)))
 
+    def probe(self, path: str, params: dict | None = None) -> tuple[int, int]:
+        """(HTTP status, number of results) for an endpoint; to see what the plan includes."""
+        self._limiter.wait()
+        response = self._http.get(
+            self._base + path, params=params or {}, headers=self._headers, timeout=self._timeout
+        )
+        if not response.ok:
+            return response.status_code, 0
+        results = response.json().get("results")
+        count = len(results) if isinstance(results, list) else int(results is not None)
+        return response.status_code, count
+
     def news(self, ticker: str, limit: int = 3) -> list[dict]:
         """Latest headlines for a ticker: title, publisher, published time, url."""
         self._limiter.wait()
