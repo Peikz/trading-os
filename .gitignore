@@ -13,3 +13,6 @@ data-repo/
 
 # Local-only guide
 START-HERE.md
+
+# Local tool config (paths on this machine)
+.claude/

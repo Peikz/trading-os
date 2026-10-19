@@ -66,6 +66,22 @@ Two more local helpers (both print tickers, so never in Actions):
   trades flat to flat, linked to their signal, with R-multiples. See `docs/powerbi.md` for
   Power BI on top.
 
+## Dashboard
+
+A private web app over your local clone of the data repo: today's market and pushed scans
+with charts, every screen, watchlists, the trade journal (import fills, grade A/B/C, notes,
+screenshots), graded signals with outcomes, breadth history, statistics and the TradingView
+validation helper.
+
+```bash
+uv run --group app streamlit run app/streamlit_app.py
+```
+
+It opens at http://localhost:8501 and reads `../trading-os-data` (change it in the sidebar, or
+pass `-- --data-dir PATH`). Grades and notes are saved as append-only files in the data repo;
+"Save & push" in the sidebar sends them to GitHub. `.streamlit/config.toml` keeps it on this
+computer only. Never deploy it from this public repo with data in it.
+
 ## Secrets
 
 Set as GitHub Actions secrets on this repo, never in code:

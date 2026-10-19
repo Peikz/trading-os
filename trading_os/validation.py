@@ -59,11 +59,12 @@ def compare(
         side = "both" if in_system and in_screen else ("system only" if in_system else "TV only")
         info = by_ticker.loc[ticker].to_dict() if ticker in by_ticker.index else None
         if side == "TV only":
-            why = (
-                "; ".join(failed_rules(info, scan)) or "passes here; check the run time"
-                if info is not None
-                else "not in the logged-tier universe (excluded type/exchange or below a floor)"
-            )
+            if info is None:
+                why = "not in the logged-tier universe (excluded type/exchange or below a floor)"
+            elif scan.name in RULES:
+                why = "; ".join(failed_rules(info, scan)) or "passes here; check the run time"
+            else:
+                why = "in the universe but not on the system's list (check the scan's rules)"
         elif side == "system only":
             why = "check your screen's settings (RVOL column, primary listing, price/mcap floors)"
         else:

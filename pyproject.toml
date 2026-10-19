@@ -20,6 +20,9 @@ dependencies = [
 analysis = [
     "duckdb>=1.1",
 ]
+app = [
+    "streamlit>=1.40",
+]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]

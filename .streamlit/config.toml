@@ -1,0 +1,8 @@
+# Private by default: only this computer can open the dashboard.
+[server]
+address = "localhost"
+port = 8501
+headless = true
+
+[browser]
+gatherUsageStats = false
