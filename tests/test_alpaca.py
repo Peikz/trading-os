@@ -100,3 +100,30 @@ def test_ep_minutes_writes_one_file_per_month_and_skips_done_months(tmp_path):
     again = Fake()
     again.calls = []
     assert alpaca.ep_minutes(tmp_path, again, out, days) == {} and again.calls == []
+
+
+def test_daily_year_in_the_history_bars_shape_and_symbols_skip_otc():
+    import pandas as pd
+
+    from trading_os import alpaca
+
+    class Fake:
+        def assets(self, status_filter):
+            return (
+                [{"symbol": "AAA", "exchange": "NASDAQ"}, {"symbol": "OTCX", "exchange": "OTC"}]
+                if status_filter == "active"
+                else [{"symbol": "DEAD", "exchange": "NYSE"}]
+            )
+
+        def bars(self, symbols, timeframe, start, end):
+            ts = pd.Timestamp("2020-03-02T05:00:00Z")
+            return pd.DataFrame(
+                {"ticker": list(symbols), "ts": [ts] * len(symbols)}
+                | {k: 1.0 for k in ("open", "high", "low", "close", "volume", "vwap", "trades")}
+            )
+
+    assert alpaca.stock_symbols(Fake()) == ["AAA", "DEAD"]
+    year = alpaca.daily_year(Fake(), ["AAA", "DEAD"], 2020)
+    assert year["session_date"].tolist() == [dt.date(2020, 3, 2)] * 2 and set(year["source"]) == {
+        "alpaca"
+    }

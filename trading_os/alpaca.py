@@ -168,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ep-minutes", action="store_true", help="minute bars around EPs")
     parser.add_argument("--data-dir", type=Path, help="checkout of trading-os-data")
     parser.add_argument("--out", type=Path, help="folder for the monthly minute files")
+    parser.add_argument("--daily-years", help="FIRST-LAST, e.g. 2016-2024: daily bars per year")
     args = parser.parse_args(argv)
     key, secret = (
         os.environ.get("ALPACA_API_KEY_ID", ""),
@@ -184,7 +185,11 @@ def main(argv: list[str] | None = None) -> int:
         sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
         ep_minutes(args.data_dir, client, args.out, sessions)
         return 0
-    status("Alpaca: pass --check or --ep-minutes")
+    if args.daily_years:
+        first, last = (int(y) for y in args.daily_years.split("-"))
+        daily_history(client, args.out, first, last)
+        return 0
+    status("Alpaca: pass --check, --ep-minutes or --daily-years")
     return 1
 
 
@@ -234,3 +239,59 @@ def ep_minutes(data_dir, client: AlpacaClient, out_dir, sessions: list[dt.date])
         done[month] = int(month_bars["ticker"].nunique()) if len(month_bars) else 0
     status(f"Alpaca minutes: {len(done)} months written, {sum(done.values())} stock-months")
     return done
+
+
+YEAR_BATCH = 200  # symbols per daily-bar request
+
+
+def stock_symbols(client: AlpacaClient) -> list[str]:
+    """Every US equity Alpaca knows, listed or delisted, on an exchange (no OTC)."""
+    assets = client.assets("active") + client.assets("inactive")
+    return sorted(
+        {a["symbol"] for a in assets if a.get("exchange") not in ("OTC", None) and a.get("symbol")}
+    )
+
+
+def daily_year(client: AlpacaClient, symbols: list[str], year: int) -> pd.DataFrame:
+    """Daily bars for one calendar year in the history bars shape (source alpaca)."""
+    from trading_os.metrics import NEW_YORK
+
+    start = dt.datetime(year, 1, 1, tzinfo=dt.UTC)
+    end = dt.datetime(year, 12, 31, 23, 59, tzinfo=dt.UTC)
+    frames = []
+    for k in range(0, len(symbols), YEAR_BATCH):
+        bars = client.bars(symbols[k : k + YEAR_BATCH], "1Day", start, end)
+        if len(bars):
+            frames.append(bars)
+    if not frames:
+        return pd.DataFrame()
+    out = pd.concat(frames, ignore_index=True)
+    out["session_date"] = out["ts"].dt.tz_convert(NEW_YORK).dt.date
+    out["source"] = "alpaca"
+    columns = ["session_date", "ticker", "open", "high", "low", "close", "volume", "vwap", "trades"]
+    return out[[*columns, "source"]].sort_values(["ticker", "session_date"]).reset_index(drop=True)
+
+
+def daily_history(client: AlpacaClient, out_dir, first_year: int, last_year: int) -> list[int]:
+    """`YYYY.parquet` per year into `out_dir`; years already there are skipped."""
+    from pathlib import Path
+
+    from trading_os.store import PARQUET_OPTIONS
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    todo = [y for y in range(first_year, last_year + 1) if not (out_dir / f"{y}.parquet").exists()]
+    if not todo:
+        return []
+    symbols = stock_symbols(client)
+    status(f"Alpaca daily: {len(symbols)} symbols, years {todo}")
+    written = []
+    for year in todo:
+        bars = daily_year(client, symbols, year)
+        path = out_dir / f"{year}.parquet"
+        tmp = path.with_name(path.name + ".tmp")
+        bars.to_parquet(tmp, **PARQUET_OPTIONS)
+        tmp.replace(path)
+        written.append(year)
+        status(f"Alpaca daily: {year}: {bars['ticker'].nunique() if len(bars) else 0} stocks")
+    return written

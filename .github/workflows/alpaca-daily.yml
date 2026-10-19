@@ -1,0 +1,56 @@
+# Alpaca daily bars for every US stock, listed and delisted, one file per year (Emil, 19 Oct
+# 2026): the long history for the studies, back to 2016. About 1 GB in all, so the files go to
+# the private data repo as assets of the "bars-alpaca" release, not into git. Years already
+# uploaded are skipped. Manual runs only. This repo is public: counts only.
+
+name: Alpaca daily history
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "FIRST-LAST"
+        default: "2016-2024"
+
+permissions:
+  contents: read
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --no-dev
+
+      - name: Years already uploaded
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p years
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view bars-alpaca -R "$REPO" >/dev/null 2>&1 || gh release create bars-alpaca -R "$REPO" --title "Daily bars (Alpaca)" --notes "Daily bars for every US stock incl. delisted, one file per year." >/dev/null
+          for name in $(gh release view bars-alpaca -R "$REPO" --json assets -q '.assets[].name'); do
+            touch "years/$name"
+          done
+          echo "uploaded years: $(ls years | wc -l)"
+
+      - name: Fetch
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: uv run --frozen --no-dev python -m trading_os.alpaca_cli --daily-years "${{ inputs.years }}" --out years
+
+      - name: Upload new years
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          new=$(find years -name '*.parquet' -size +0 | sort)
+          [ -z "$new" ] && { echo "nothing new"; exit 0; }
+          gh release upload bars-alpaca $new -R "$REPO" --clobber
+          echo "uploaded: $(echo "$new" | wc -l) years"
