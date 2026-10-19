@@ -253,7 +253,7 @@ ep_history:                                 # EP study over the Massive bars (Em
   c5_stop_adr_max: 1.5
 
 sec:                                        # SEC EDGAR (free): exact earnings dates, EPS/revenue as filed
-  user_agent: "Peikz Trading-OS 182818002+Peikz@users.noreply.github.com"  # SEC wants a contact
+  user_agent: ""                            # contact from the SEC_USER_AGENT secret (not public)
   requests_per_second: 5                    # SEC allows 10
 
 report:                                     # Markdown report per run (reports/ in the data repo)

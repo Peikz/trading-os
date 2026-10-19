@@ -41,6 +41,7 @@ jobs:
 
       - name: SEC
         env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           CHECK: ${{ inputs.check && '--check' || '' }}
         run: uv run --frozen --no-dev python scripts/sec_fetch.py --data-dir data-repo $CHECK
 

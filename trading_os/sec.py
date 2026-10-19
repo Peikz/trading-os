@@ -1,6 +1,7 @@
 """SEC EDGAR for the EP study (Emil, 19 Oct 2026): exact earnings dates and quarterly EPS and
 revenue as filed, including companies delisted since. Free; SEC asks for a contact in the
-User-Agent (config `sec.user_agent`) and at most 10 requests a second.
+User-Agent (the SEC_USER_AGENT secret, kept out of this public repo) and at most 10 requests
+a second.
 
 - Earnings releases: 8-K filings with item 2.02 ("Results of Operations"), with the minute they
   were accepted, so an EP can be tagged earnings before the open, after the prior close, or
@@ -233,8 +234,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--check", action="store_true", help="three test requests, status only")
     args = parser.parse_args(argv)
+    import os
+
     conf = load_config().sec
-    client = SecClient(conf["user_agent"], conf["requests_per_second"])
+    agent = os.environ.get("SEC_USER_AGENT") or conf["user_agent"]
+    if "@" not in agent:
+        status("SEC: set SEC_USER_AGENT (a name and contact email; SEC requires one)")
+        return 1
+    client = SecClient(agent, conf["requests_per_second"])
     if args.check:
         return 0 if check(client) else 1
     study = latest_study(args.data_dir)
