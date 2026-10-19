@@ -160,7 +160,8 @@ def test_breadth_row_from_snapshot_history(cfg, tmp_path):
     assert row["qqq_trend"] == "up"
     assert row["scan_count_basis"] == "eod-bootstrap"
     lines = breadth.push_lines(row)
-    assert lines[0].startswith("Breadth: up ") and lines[1].startswith("Market Light: ")
+    assert lines[0].startswith("Breadth: up ") and lines[2].startswith("Market Light: ")
+    assert lines[1] == "Monitor: month 25% +0 / -0  50% +0 / -0  34d 13% n/a"  # no history yet
 
 
 def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
@@ -211,3 +212,20 @@ def test_premarket_lines_before_any_eod(cfg):
         "Market Light for today: n/a (waiting for an EOD run)",
         "Pre-market: up 4%+ 1 / down 4%+ 0",
     ]
+
+
+def test_market_monitor_counts_month_and_34_day_moves():
+    rules = load_config().scans["breadth"]
+    uni = pd.DataFrame(
+        {
+            "ret_22": [25.0, 24.9, 50.0, -25.0, -50.0, 0.0],
+            "hist_ret_34": [13.0, 12.9, -13.0, None, None, None],
+        }
+    )
+    m = breadth.market_monitor(uni, rules)
+    assert (m["up25m"], m["down25m"], m["up50m"], m["down50m"]) == (2, 2, 1, 1)
+    assert (m["up13_34d"], m["down13_34d"], m["mid_rows"]) == (1, 1, 3)
+    row = {**m, "breadth_n": 6}
+    assert breadth.monitor_line(row) == "Monitor: month 25% +2 / -2  50% +1 / -1  34d 13% +1 / -1"
+    assert breadth.monitor_line(row | {"mid_rows": 2}).endswith("34d 13% n/a")  # thin history
+    assert breadth.monitor_line({"up4": 3}) is None  # rows stored before 19 Oct

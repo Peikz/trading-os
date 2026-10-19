@@ -94,7 +94,16 @@ OUTCOME_KEYS = {"horizons"}
 CHART_KEYS = {"sessions"}
 REPORT_KEYS = {"max_rows_per_scan"}
 SIZING_KEYS = {"ep_stop_max_adr", "pm_stop_adr", "min_stop_adr", "fx_symbol"}
-CONTEXT_KEYS = {"max_per_scan", "news_max_tickers", "news_max_age_hours"}
+CONTEXT_KEYS = {
+    "max_per_scan",
+    "news_max_tickers",
+    "news_max_age_hours",
+    "earnings_soon_sessions",
+    "industry_min_members",
+    "industry_top_n",
+    "spy_symbol",
+    "vix_symbol",
+}
 STATS_KEYS = {"min_signals"}
 UNIVERSE_KEYS = {
     "market",
@@ -153,6 +162,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     "ep_ah": {"push_tier", "ah_change_min_pct", "price_min", "market_cap_min", "ah_volume_min"},
     "ep9m": {"push_tier", "volume_min", "chg_min_pct"},
     "ep9m_pace": {"push_tier", "volume_min", "chg_min_pct"},
+    "pivot_watch": {"push_tier", "near_pivot_pct"},
     "mb_up": {"chg_min_pct", "volume_min", "volume_gt_prior", "close_loc_min"},
     "mb_down": {"chg_max_pct", "volume_min", "volume_gt_prior"},
     "parabolic_short": {
@@ -168,6 +178,9 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "universe_volume_min",
         "ratio_windows",
         "quarter_move_pct",
+        "month_move_pct",
+        "month_big_move_pct",
+        "mid_move_pct",
         "ma_windows",
         "up_count_rule",
     },

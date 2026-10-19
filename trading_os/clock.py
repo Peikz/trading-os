@@ -59,6 +59,20 @@ def sessions_after(
     return [s.date() for s in cal.sessions_in_range(start, pd.Timestamp(until))][:count]
 
 
+def sessions_until(schedule: Schedule, session: dt.date, days: pd.Series) -> pd.Series:
+    """Trading sessions from `session` to each date: 0 on the session itself, NaN for a date
+    already past or unknown. Used for "earnings in N days"."""
+    cal = _calendar(schedule.calendar)
+    start = pd.Timestamp(session)
+    lookup = {}
+    for day in days.dropna().unique():
+        end = pd.Timestamp(day)
+        lookup[day] = (
+            float("nan") if end < start else float(len(cal.sessions_in_range(start, end)) - 1)
+        )
+    return days.map(lookup).astype("float64")
+
+
 def in_window(schedule: Schedule, slot: str, now: dt.datetime) -> bool:
     """True when `now` is inside the slot's New York window on a trading day.
 

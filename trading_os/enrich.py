@@ -21,6 +21,7 @@ HIST_COLUMNS = [
     "adr20_usd",
     "rvol50",
     "ret_22",
+    "ret_34",
     "ret_63",
     "ret_126",
     "avg_volume_20d",

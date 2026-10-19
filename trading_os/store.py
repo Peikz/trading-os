@@ -105,6 +105,17 @@ AUDIT_COLUMNS = [
     "plan_risk_usd",
     "plan_capped",
     "plan_fx_rate",
+    "bo_prior_move_pct",
+    "bo_ma_stacked",
+    "pivot_dist_pct",
+    "pivot_crossed",
+    "pivot_from_session",
+    "rs_pct",
+    "industry_rank",
+    "industry_of",
+    "earnings_in_sessions",
+    "earnings_soon",
+    "high_all_tv",
     "ctx_done",
     "ctx_eps_surprise_pct",
     "ctx_rev_surprise_pct",
@@ -197,6 +208,47 @@ def pushed_in(data_dir: Path, session: dt.date, slot: str) -> dict[str, set[str]
     cands = pd.read_parquet(path, columns=["scan", "ticker", "pushed"])
     sent = cands[cands["pushed"].fillna(False).astype(bool)]
     return {scan: set(group["ticker"]) for scan, group in sent.groupby("scan")}
+
+
+LEVEL_COLUMNS = [
+    "pivot",
+    "order_stop",
+    "risk_adr",
+    "base_len",
+    "contraction_depths",
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "bo_prior_move_pct",
+    "bo_ma_stacked",
+]
+
+
+def breakout_levels(
+    data_dir: Path, before: dt.date, tickers: set[str], max_runs: int
+) -> pd.DataFrame:
+    """Pivot, order stop and B-flags of each ticker's latest BO-Watch row, from the last
+    `max_runs` scheduled EOD runs before `before`. One row per ticker, with the session the
+    levels come from (`pivot_from_session`)."""
+    files = sorted((Path(data_dir) / "data" / "candidates").glob("*/*_eod.parquet"), reverse=True)
+    files = [f for f in files if dt.date.fromisoformat(f.stem[:10]) < before][:max_runs]
+    found: list[pd.DataFrame] = []
+    left = set(tickers)
+    for path in files:
+        if not left:
+            break
+        cands = pd.read_parquet(path)
+        rows = cands[(cands["scan"] == "breakout_watch") & cands["ticker"].isin(left)]
+        if rows.empty:
+            continue
+        keep = rows[["ticker", *[c for c in LEVEL_COLUMNS if c in rows]]].copy()
+        keep["pivot_from_session"] = path.stem[:10]
+        found.append(keep)
+        left -= set(rows["ticker"])
+    if not found:
+        return pd.DataFrame(columns=["ticker", *LEVEL_COLUMNS, "pivot_from_session"])
+    return pd.concat(found, ignore_index=True).drop_duplicates("ticker")
 
 
 def already_done(data_dir: Path, session: dt.date, slot: str) -> bool:

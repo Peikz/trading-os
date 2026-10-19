@@ -12,6 +12,8 @@ Entry and stop per scan (config `sizing:`):
   `pm_stop_adr` × ADR $ below until the open sets a day low (proposed).
 - Breakout trigger: entry at the close (B5 is checked at the close), stop = order stop (§6.4).
 - BO-Watch: buy-stop at the pivot, stop = order stop (§6.4).
+- BO pivot (intraday): over the pivot, entry at the last price; below it, buy-stop at the
+  pivot. Stop = order stop.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ PLAN_COLUMNS = [
 ]
 EP_CLOSE = ("ep_day", "ep9m", "ep9m_pace")  # intraday: the last price
 EP_PREMARKET = ("ep_pm", "ep9m_early", "watchlist_gappers")
+BREAKOUT_RULES = ("breakout_trigger", "breakout_watch", "pivot_watch")
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,11 @@ def plan(row: Mapping[str, Any], scan: str, rules: Mapping[str, Any]) -> tuple[f
         return row.get("close", nan), row.get("order_stop", nan), "order stop"
     if scan == "breakout_watch":
         return row.get("pivot", nan), row.get("order_stop", nan), "order stop, buy-stop at pivot"
+    if scan == "pivot_watch":  # intraday: over the pivot buys now, below it waits at the pivot
+        pivot, price = row.get("pivot", nan), row.get("close", nan)
+        if not pd.isna(price) and not pd.isna(pivot) and price >= pivot:
+            return price, row.get("order_stop", nan), "order stop"
+        return pivot, row.get("order_stop", nan), "order stop, buy-stop at pivot"
     return nan, nan, ""
 
 
@@ -131,7 +139,7 @@ def add_plans(
     risk_usd, account_usd = account.risk_usd(usd_rate), account.size_usd(usd_rate)
     out = {}
     for scan, hits in results.items():
-        if scan not in (*EP_CLOSE, *EP_PREMARKET, "breakout_trigger", "breakout_watch"):
+        if scan not in (*EP_CLOSE, *EP_PREMARKET, *BREAKOUT_RULES):
             out[scan] = hits
             continue
         rows = []

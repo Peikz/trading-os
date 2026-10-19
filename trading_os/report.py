@@ -111,6 +111,16 @@ for _scan in ("ep_day", "ep9m", "ep9m_pace", "ep_pm", "ep9m_early", "watchlist_g
     COLUMNS[_scan] = [*COLUMNS[_scan], *_PLAN]
 COLUMNS["breakout_watch"] = [*COLUMNS["breakout_watch"], *_PLAN[2:]]
 COLUMNS["breakout_trigger"] = [("Chg %", "chg_pct", "+.1f"), *COLUMNS["breakout_watch"]]
+COLUMNS["pivot_watch"] = [
+    ("Chg %", "chg_pct", "+.1f"),
+    ("Price", "close", ".2f"),
+    ("Pivot", "pivot", ".2f"),
+    ("vs pivot %", "pivot_dist_pct", "+.1f"),
+    ("Stop", "order_stop", ".2f"),
+    ("RVOL at time", "rvol_at_time_tv", ".1f"),
+    ("Levels from", "pivot_from_session", "text"),
+    *_PLAN,
+]
 
 
 def cell(value: Any, fmt: str) -> str:

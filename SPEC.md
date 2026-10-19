@@ -117,6 +117,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
 | EP9M pace (Emil, 19 Oct 2026; rule proposed) | EP9M's rule (§6.2) on the day's projected volume: change ≥ +4% and volume so far or pace ≥ 9M shares. Pace = TradingView's relative volume at this time of day (5-minute bars) × normal daily volume (today excluded), never below the volume so far. A name pushes once per session: the 12:00 check skips names sent at 10:15 | 1 | Push |
+| BO pivot (Emil, 19 Oct 2026; rule proposed) | Active BO-Watch names at or above their pivot, or at most 1% below it, during the session. Pivot and order stop from the name's latest EOD BO-Watch row (§6.4). Over the pivot: entry at the last price; under it: buy-stop at the pivot | 2 | Push |
 
 ### 6.2 End of day (22:20 CET)
 
@@ -129,7 +130,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Momentum Burst down (Stockbee) | Change ≤ −4%, volume > prior day, volume ≥ 100K | 1 | Log |
 | Parabolic Short (Kullamägi) | ≥ 50% gain in ≤ 10 days (mcap ≥ $1B) or ≥ 200% (mcap < $1B); ≥ 3 consecutive up days; distance from MA10 in ADR stored | 1 | Log |
 | Parabolic Long (Kullamägi) | ≥ 30% drop in ≤ 10 days; ≥ 3 consecutive down days; distance below MA10 in ADR stored | 1 | Log |
-| Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K | 1 | Push (one line) |
+| Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K. Extended 19 Oct 2026 (Emil) with the rest of Stockbee's Market Monitor: up/down ≥ 25% and ≥ 50% in a month (22 sessions), up/down ≥ 13% in 34 sessions (needs daily history); plus SPY and VIX next to QQQ | 1 | Push (top lines) |
 | Market Light (yours) | See §6.5. Computed daily; the scan count input only changes on Sundays | 1 | Push (one line) |
 | Universe snapshot | Every stock in the logged tier with all metrics | 1 | Log |
 | Breakout B1–B4 (yours) | See 6.4 | 2 | Push (BO-Watch) |
@@ -287,6 +288,11 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    York (§6.1b), so they can be acted on before the close. TradingView's data is 15 minutes delayed, so a
    check sees the market about 15 minutes earlier. Intraday runs store candidates (with the pace inputs),
    not a universe snapshot, to keep the data repo's growth flat. Outcomes enter at the price the run saw.
+11. ~~More facts per alert~~ — decided 19 Oct 2026 by Emil (ideas from breakoutshappen.com and the reference
+   repos): each fact line also shows relative strength (1-99, mean percentile of the 1/3/6-month returns),
+   "earnings in N days" when the next report is within 10 sessions, "at all-time high", and the stock's
+   industry rank (industries ranked by the median 1- and 3-month return of their members, at least 5
+   members; the weekly push lists the leaders). Facts only: none of them filters, scores or grades.
 
 ## 12. References
 

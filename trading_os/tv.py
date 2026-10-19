@@ -51,6 +51,7 @@ FIELDS: dict[str, str] = {
     "ma50": "SMA50",
     "ma200": "SMA200",
     "high_52w": "price_52_week_high",
+    "high_all_tv": "High.All",
     "perf_1m_tv": "Perf.1M",
     "perf_3m_tv": "Perf.3M",
     "perf_6m_tv": "Perf.6M",
@@ -135,6 +136,27 @@ def fetch_quote(symbol: str) -> dict[str, float]:
         "pm_change_pct": float(row["premarket_change"])
         if row["premarket_change"] is not None
         else float("nan"),
+    }
+
+
+def fetch_index(symbol: str) -> dict[str, float]:
+    """Close, change, pre-market change and SMA10/20/50/200 for an ETF or index (SPY, VIX).
+    Fields an index lacks (VIX has no pre-market) come back as NaN."""
+    fields = ["close", "change", "premarket_change", "SMA10", "SMA20", "SMA50", "SMA200"]
+    query = Query().select(*fields).set_tickers(symbol)
+    query.query.pop("filter2", None)
+    query.query["filter"] = []
+    query.query["ignore_unknown_fields"] = True
+    _, raw = query.get_scanner_data(timeout=30)
+    if len(raw) != 1:
+        raise TruncatedResult(f"expected 1 row for the quote, got {len(raw)}")
+    row = raw.iloc[0]
+    names = ["close", "chg_pct", "pm_change_pct", "sma10", "sma20", "sma50", "sma200"]
+    return {
+        name: float(row[field])
+        if row.get(field) is not None and not pd.isna(row[field])
+        else float("nan")
+        for name, field in zip(names, fields, strict=True)
     }
 
 

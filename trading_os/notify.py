@@ -31,6 +31,7 @@ SCAN_LABELS = {
     "ep_ah": "EP-AH",
     "ep9m": "EP9M",
     "ep9m_pace": "EP9M pace",
+    "pivot_watch": "BO pivot",
     "mb_up": "MB up",
     "mb_down": "MB down",
     "parabolic_short": "Parabolic short",
@@ -107,6 +108,19 @@ def format_pace(row: Mapping[str, Any]) -> str:
     return line
 
 
+def format_pivot(row: Mapping[str, Any]) -> str:
+    """`TICKER  +3.1%  45.62 over pivot 45.20 (+0.9%)  stop 42.10  RVOL at time 2.3`."""
+    where = "over" if bool(row["pivot_crossed"]) else "under"
+    line = (
+        f"{row['ticker']}  {row['chg_pct']:+.1f}%  {row['close']:.2f} {where} pivot "
+        f"{row['pivot']:.2f} ({row['pivot_dist_pct']:+.1f}%)  stop {row['order_stop']:.2f}"
+    )
+    rvol = row.get("rvol_at_time_tv")
+    if rvol is not None and not pd.isna(rvol):
+        line += f"  RVOL at time {rvol:.1f}"
+    return line
+
+
 def format_weekly(row: Mapping[str, Any], scan: str) -> str:
     """Weekly list lines: the numbers each list is about."""
     t = row["ticker"]
@@ -173,6 +187,8 @@ def build_message(
             lines = [_with_extras(format_breakout(row, name), row, name) for row in records]
         elif name == "ep9m_pace":
             lines = [_with_extras(format_pace(row), row, name) for row in records]
+        elif name == "pivot_watch":
+            lines = [_with_extras(format_pivot(row), row, name) for row in records]
         else:
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
             lines = [

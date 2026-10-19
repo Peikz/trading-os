@@ -21,6 +21,7 @@ from typing import Any
 
 import pandas as pd
 
+from trading_os import industries
 from trading_os.metrics import NEW_YORK, yoy_growth
 
 DETAIL_FIELDS = {
@@ -33,7 +34,7 @@ DETAIL_FIELDS = {
 }
 PREMARKET_SCANS = ("ep_pm", "ep9m_early", "watchlist_gappers")
 EP_SCANS = ("ep_day", "ep9m", "ep9m_pace", *PREMARKET_SCANS)
-BREAKOUT_SCANS = ("breakout_trigger", "breakout_watch")
+BREAKOUT_SCANS = ("breakout_trigger", "breakout_watch", "pivot_watch")
 CONTEXT_COLUMNS = [
     "ctx_eps_surprise_pct",
     "ctx_rev_surprise_pct",
@@ -141,6 +142,33 @@ def _missing(x: Any) -> bool:
     return x is None or pd.isna(x)
 
 
+def _high_text(price: Any, high_52w: Any, high_all: Any) -> str | None:
+    """`at all-time high`, `at 52w high` or `-12% from 52w high` (within 1 % counts as at)."""
+    if _missing(price):
+        return None
+    if not _missing(high_all) and high_all > 0 and price >= 0.99 * high_all:
+        return "at all-time high"
+    if _missing(high_52w) or not high_52w > 0:
+        return None
+    off = (price / high_52w - 1) * 100
+    return "at 52w high" if off >= -1 else f"{off:.0f}% from 52w high"
+
+
+def _common_tail(row: Mapping[str, Any]) -> list[str]:
+    """Shared ending of both lines: RS, earnings soon, industry with its rank."""
+    parts = []
+    rs = row.get("rs_pct")
+    if not _missing(rs):
+        parts.append(f"RS {int(rs)}")
+    soon, flagged = row.get("earnings_in_sessions"), row.get("earnings_soon")
+    if not _missing(flagged) and bool(flagged):  # within context.earnings_soon_sessions
+        parts.append("earnings today" if soon == 0 else f"earnings in {int(soon)} days")
+    group = industries.label(row)
+    if group:
+        parts.append(group)
+    return parts
+
+
 def _et(when: Any, fmt: str) -> str:
     if _missing(when) or when == "":
         return ""
@@ -178,14 +206,13 @@ def ep_line(row: Mapping[str, Any], *, premarket: bool = False) -> str:
     if prior:
         parts.append(f"6M before {prior}")
     price = row.get("pm_price" if premarket else "close")
-    high, ma200 = row.get("high_52w"), row.get("ma200")
-    if not _missing(price) and not _missing(high) and high > 0:
-        off = (price / high - 1) * 100
-        parts.append("at 52w high" if off >= -1 else f"{off:.0f}% from 52w high")
+    high = _high_text(price, row.get("high_52w"), row.get("high_all_tv"))
+    if high:
+        parts.append(high)
+    ma200 = row.get("ma200")
     if not _missing(price) and not _missing(ma200) and ma200 > 0:
         parts.append("above 200d" if price > ma200 else "below 200d")
-    if isinstance(row.get("industry"), str) and row["industry"]:
-        parts.append(row["industry"])
+    parts.extend(_common_tail(row))
     return "   " + " · ".join(parts)
 
 
@@ -199,9 +226,12 @@ def breakout_line(row: Mapping[str, Any], scan: str) -> str:
         value = _pct(row.get(column))
         if value:
             parts.append(f"{label} {value}")
-    high = row.get("pct_from_52w_high")
-    if high is not None and not pd.isna(high):
-        parts.append("at 52w high" if high >= -1 else f"{high:.0f}% from 52w high")
+    high = _high_text(row.get("close"), row.get("high_52w"), row.get("high_all_tv"))
+    if high is None and not _missing(row.get("pct_from_52w_high")):
+        off = row["pct_from_52w_high"]
+        high = "at 52w high" if off >= -1 else f"{off:.0f}% from 52w high"
+    if high:
+        parts.append(high)
     adr = row.get("adr20_pct")
     if adr is not None and not pd.isna(adr):
         parts.append(f"ADR {adr:.1f}%")
@@ -214,8 +244,7 @@ def breakout_line(row: Mapping[str, Any], scan: str) -> str:
         parts.append(f"EPS {eps}")
     if rev:
         parts.append(f"rev {rev}")
-    if isinstance(row.get("industry"), str) and row["industry"]:
-        parts.append(row["industry"])
+    parts.extend(_common_tail(row))
     return "   " + " · ".join(parts)
 
 

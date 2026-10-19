@@ -24,6 +24,7 @@ from trading_os import (
     enrich,
     epstudy,
     history,
+    industries,
     metrics,
     notify,
     outcomes,
@@ -112,14 +113,21 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     df["earnings_flag"] = metrics.earnings_flag(df["earnings_date_last"], session, previous)
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
+    uni, ranked_industries = _with_market_facts(uni, cfg, session)
 
     state = watchlists.current(watchlists.load_events(args.data_dir))
     for name in watchlists.LISTS:
         uni[f"on_{name}"] = uni["ticker"].isin(watchlists.active(state, name))
+    if slot in INTRADAY_SLOTS and cfg.scans["pivot_watch"].enabled:
+        uni = _with_breakout_levels(uni, args.data_dir, cfg, state, session)
     results = run_scans(uni, cfg, slot)
     if slot == "weekly":
         results = _with_cats(results, args.data_dir, cfg, session)
     extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
+    if slot in ("eod", "weekly") and not ranked_industries.empty:
+        extras["industries"] = ranked_industries
+    if slot == "weekly":
+        header = [*header, *industries.lines(ranked_industries, cfg.context["industry_top_n"])]
     if slot in ("pm", "eod"):
         events = watchlists.update(
             state,
@@ -174,6 +182,50 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
+
+
+def _with_market_facts(uni: pd.DataFrame, cfg, session) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-stock facts for the alert lines: RS percentile, industry rank, sessions to the next
+    earnings. Auxiliary: a problem here leaves them blank and never fails the run."""
+    try:
+        out = uni.copy()
+        windows = [int(d) for d in cfg.proxies["returns"]]
+        out["rs_pct"] = metrics.rs_percentile(out, windows)
+        next_day = metrics.ny_dates(out["earnings_date_next"])
+        out["earnings_in_sessions"] = clock.sessions_until(cfg.schedule, session, next_day)
+        out["earnings_soon"] = out["earnings_in_sessions"] <= cfg.context["earnings_soon_sessions"]
+        table = industries.rank(out, cfg)
+        out = industries.add_rank(out, table)
+        status(f"Industries: {len(table)} ranked")
+        return out, table
+    except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
+        status(f"Industries: FAILED ({type(exc).__name__}), facts without ranks")
+        return uni, pd.DataFrame(columns=industries.COLUMNS)
+
+
+def _with_breakout_levels(uni: pd.DataFrame, data_dir: Path, cfg, state, session) -> pd.DataFrame:
+    """Pivot and order stop of the active BO-Watch names, from their latest EOD row."""
+    names = watchlists.active(state, "bo_watch")
+    max_runs = cfg.watchlists["bo_watch_stale_sessions"] + 1
+    levels = store.breakout_levels(data_dir, session, names, max_runs)
+    status(f"BO levels: {len(levels)} of {len(names)} BO-Watch names have a pivot")
+    out = uni.drop(columns=[c for c in levels.columns if c != "ticker" and c in uni])
+    return out.merge(levels, on="ticker", how="left")
+
+
+def _index_quotes(cfg) -> dict:
+    """SPY and VIX for the market header. Auxiliary: missing quotes just drop the line."""
+    quotes = {}
+    for name in ("spy", "vix"):
+        try:
+            quotes[name] = once_more(
+                lambda n=name: tv.fetch_index(cfg.context[f"{n}_symbol"]),
+                label="TradingView",
+                wait_s=TV_RETRY_WAIT_S,
+            )
+        except Exception as exc:  # noqa: BLE001 - header extra only
+            status(f"{name.upper()} quote: FAILED ({type(exc).__name__})")
+    return quotes
 
 
 def _not_pushed_earlier(selected: dict, data_dir: Path, session, slot: str) -> dict:
@@ -324,12 +376,13 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
         label="TradingView",
         wait_s=TV_RETRY_WAIT_S,
     )
+    indexes = breadth.index_fields(_index_quotes(cfg))
     if slot == "pm":
         last = breadth.latest_eod_row(data_dir, session)
-        pm_row = breadth.premarket_row(uni, qqq, cfg, session, last)
+        pm_row = {**breadth.premarket_row(uni, qqq, cfg, session, last), **indexes}
         status("Pre-market breadth: saved")
         return {"breadth_pm": pd.DataFrame([pm_row])}, breadth.premarket_lines(pm_row, last)
-    row = breadth.breadth_row(uni, qqq, cfg, data_dir, session)
+    row = {**breadth.breadth_row(uni, qqq, cfg, data_dir, session), **indexes}
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
     return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)

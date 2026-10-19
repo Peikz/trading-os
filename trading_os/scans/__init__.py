@@ -23,6 +23,7 @@ from trading_os.scans.history_scans import (
     parabolic_short,
     tight_bases,
 )
+from trading_os.scans.intraday import pivot_watch
 from trading_os.scans.momentum import mb_down, mb_up
 from trading_os.scans.weekly import growth_bucket_1, growth_bucket_2, qm_gainers
 
@@ -36,6 +37,7 @@ REGISTRY: dict[str, ScanFn] = {
     "ep_ah": ep_ah,
     "ep9m": ep9m,
     "ep9m_pace": ep9m_pace,
+    "pivot_watch": pivot_watch,
     "mb_up": mb_up,
     "mb_down": mb_down,
     "parabolic_short": parabolic_short,

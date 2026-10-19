@@ -348,3 +348,51 @@ def test_intraday_script_picks_the_check_by_time(monkeypatch):
     assert module.pick_slot(["--data-dir", "x"]) == ("mid", ["--data-dir", "x"])
     monkeypatch.setattr(module.clock, "in_window", lambda schedule, slot, now: False)
     assert module.pick_slot([])[0] == "am"  # the time guard then turns it away
+
+
+def test_intraday_pivot_alert_uses_the_latest_eod_levels(tmp_path, capsys, sent, monkeypatch):
+    universe = intraday_universe()
+    universe.loc[universe["ticker"] == GAPPER, "rvol_at_time_tv"] = 2.0  # 2M pace: no EP9M
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: universe)
+    day = dt.date(2026, 10, 1)
+    events = pd.DataFrame(
+        [
+            {
+                "ticker": GAPPER,
+                "list": "bo_watch",
+                "status": "active",
+                "status_date": day,
+                "added_date": day,
+                "source_signal_id": "s",
+                "reason": "B1-B4 pass",
+                "run_ts": pd.Timestamp("2026-10-01 20:20", tz="UTC"),
+            }
+        ]
+    )
+    (tmp_path / "data" / "watchlists" / "2026").mkdir(parents=True)
+    events.to_parquet(tmp_path / "data" / "watchlists" / "2026" / "2026-10-01_eod.parquet")
+    levels = pd.DataFrame(
+        {
+            "scan": ["breakout_watch"],
+            "ticker": [GAPPER],
+            "tier": ["alert"],
+            "pushed": [True],
+            "pivot": [11.40],
+            "order_stop": [10.80],
+            "bo_prior_move_pct": [60.0],
+            "bo_ma_stacked": [True],
+        }
+    )
+    (tmp_path / "data" / "candidates" / "2026").mkdir(parents=True)
+    levels.to_parquet(tmp_path / "data" / "candidates" / "2026" / "2026-10-01_eod.parquet")
+    assert run_intraday("am", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert "BO levels: 1 of 1 BO-Watch names have a pivot" in out and GAPPER not in out + err
+    [message] = sent
+    assert f"{GAPPER}  +20.0%  11.50 over pivot 11.40 (+0.9%)  stop 10.80  RVOL at time 2.0" in (
+        message.body
+    )
+    assert "   prior move +60%" in message.body and "EP9M pace: no alerts" in message.body
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    row = pd.read_parquet(run_dir / "candidates.parquet").query("scan == 'pivot_watch'").iloc[0]
+    assert row["pivot_from_session"] == "2026-10-01" and bool(row["pivot_crossed"])

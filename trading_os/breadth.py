@@ -200,6 +200,7 @@ def breadth_row(
         w: float((universe["close"] > universe[f"ma{w}"]).mean() * 100) if len(universe) else np.nan
         for w in breadth["ma_windows"]
     }
+    monitor = market_monitor(universe, breadth)
 
     lookback = ml["qqq"]["slope_lookback"]
     before = clock.sessions_back(cfg.schedule, session, lookback + 1)[0]
@@ -220,6 +221,7 @@ def breadth_row(
         "up25q": up25,
         "down25q": down25,
         "quarter_basis": "tv:Perf.3M",
+        **monitor,
         **{f"pct_above_ma{w}": above[w] for w in breadth["ma_windows"]},
         "qqq_close": qqq["close"],
         "qqq_sma10": qqq["sma10"],
@@ -233,6 +235,84 @@ def breadth_row(
         "light": the_light,
         "light_missing": ", ".join(missing),
     }
+
+
+def market_monitor(universe: pd.DataFrame, breadth: Mapping[str, Any]) -> dict[str, Any]:
+    """The rest of Stockbee's Market Monitor: big moves in a month and in 34 sessions.
+
+    The month uses `ret_22` (exact once history exists, TradingView's Perf.1M before). The
+    34-session move exists only with daily history (`hist_ret_34`); `mid_rows` says how many
+    stocks had it, so a count from a thin history is never mistaken for the market.
+    """
+    nan = pd.Series(np.nan, index=universe.index)
+    month, mid = universe.get("ret_22", nan), universe.get("hist_ret_34", nan)
+    m, big, mid_pct = (
+        breadth["month_move_pct"],
+        breadth["month_big_move_pct"],
+        breadth["mid_move_pct"],
+    )
+    return {
+        "up25m": int((month >= m).sum()),
+        "down25m": int((month <= -m).sum()),
+        "up50m": int((month >= big).sum()),
+        "down50m": int((month <= -big).sum()),
+        "up13_34d": int((mid >= mid_pct).sum()),
+        "down13_34d": int((mid <= -mid_pct).sum()),
+        "mid_rows": int(mid.notna().sum()),
+    }
+
+
+def monitor_line(row: Mapping[str, Any]) -> str | None:
+    """`Monitor: month 25% +40 / -12  50% +6 / -1  34d 13% +900 / -400` (None for old rows)."""
+    if row.get("up25m") is None or pd.isna(row.get("up25m")):
+        return None
+    covered = row.get("mid_rows", 0) >= 0.5 * max(row.get("breadth_n", 0), 1)
+    mid = f"+{row['up13_34d']} / -{row['down13_34d']}" if covered else "n/a"
+    return (
+        f"Monitor: month 25% +{row['up25m']} / -{row['down25m']}  "
+        f"50% +{row['up50m']} / -{row['down50m']}  34d 13% {mid}"
+    )
+
+
+INDEX_MAS = (10, 20, 50, 200)
+
+
+def index_fields(quotes: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
+    """Flat breadth-row columns for SPY and VIX (whatever was fetched)."""
+    out: dict[str, Any] = {}
+    for name, q in quotes.items():
+        out[f"{name}_close"] = q["close"]
+        out[f"{name}_chg_pct"] = q["chg_pct"]
+        out[f"{name}_pm_change_pct"] = q["pm_change_pct"]
+        for w in INDEX_MAS:
+            out[f"{name}_sma{w}"] = q[f"sma{w}"]
+    return out
+
+
+def _ma_side(row: Mapping[str, Any], name: str) -> str:
+    close = row[f"{name}_close"]
+    above = [str(w) for w in INDEX_MAS if close > row.get(f"{name}_sma{w}", np.inf)]
+    below = [str(w) for w in INDEX_MAS if close <= row.get(f"{name}_sma{w}", -np.inf)]
+    parts = ([f"above MA {', '.join(above)}"] if above else []) + (
+        [f"below {', '.join(below)}"] if below else []
+    )
+    return "; ".join(parts)
+
+
+def index_line(row: Mapping[str, Any], premarket: bool = False) -> str | None:
+    """`SPY 767.59 +0.6% (above MA 50, 200; below 10, 20)  VIX 18.6 -7.1%`."""
+    parts = []
+    spy = row.get("spy_close")
+    if spy is not None and not pd.isna(spy):
+        change = row["spy_pm_change_pct"] if premarket else row["spy_chg_pct"]
+        move = "" if pd.isna(change) else f" {change:+.1f}%{' pre-market' if premarket else ''}"
+        side = "" if premarket else f" ({_ma_side(row, 'spy')})"
+        parts.append(f"SPY {spy:.2f}{move}{side}")
+    vix = row.get("vix_close")
+    if vix is not None and not pd.isna(vix):
+        change = row.get("vix_chg_pct")
+        parts.append(f"VIX {vix:.1f}" + ("" if pd.isna(change) else f" {change:+.1f}%"))
+    return "  ".join(parts) or None
 
 
 def push_lines(row: Mapping[str, Any]) -> list[str]:
@@ -256,7 +336,13 @@ def push_lines(row: Mapping[str, Any]) -> list[str]:
         )
     else:
         light_line = f"Market Light: n/a (waiting for {row['light_missing']})"
-    return [breadth_line, light_line]
+    monitor, indexes = monitor_line(row), index_line(row)
+    return [
+        breadth_line,
+        *([monitor] if monitor else []),
+        light_line,
+        *([indexes] if indexes else []),
+    ]
 
 
 # --- pre-market (Emil, 19 Oct 2026: breadth also runs pre-market; SPEC §6.1)
@@ -318,4 +404,5 @@ def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> l
     qqq = row["qqq_pm_change_pct"]
     qqq_text = "" if qqq is None or np.isnan(qqq) else f"  QQQ {qqq:+.1f}%"
     lines.append(f"Pre-market: up 4%+ {row['pm_up4']} / down 4%+ {row['pm_down4']}{qqq_text}")
-    return lines
+    indexes = index_line(row, premarket=True)
+    return [*lines, *([indexes] if indexes else [])]

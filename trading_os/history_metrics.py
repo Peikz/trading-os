@@ -18,7 +18,7 @@ import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
 MA_WINDOWS = (10, 20, 50, 200)
-RETURN_WINDOWS = (22, 63, 126)
+RETURN_WINDOWS = (22, 34, 63, 126)  # 34: Stockbee's 13 %-in-34-days Market Monitor count
 MA_SLOPE_LOOKBACK = 5  # SPEC §5: "MA today > MA 5 trading days ago"
 ADR_DAYS = 20
 RVOL_DAYS = 50

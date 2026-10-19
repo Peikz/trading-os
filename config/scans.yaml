@@ -75,6 +75,9 @@ scans:
   ep9m_pace:                                # (proposed) EP9M rule on pace for the day's volume
     {enabled: true, phase: 1, slot: [am, mid], action: push, push_tier: alert,
      volume_min: 9_000_000, chg_min_pct: 4}
+  pivot_watch:                              # BO-Watch names at/over their pivot (Emil, 19 Oct)
+    {enabled: true, phase: 2, slot: [am, mid], action: push, push_tier: alert,
+     near_pivot_pct: 1.0}                   # (proposed) up to 1 % below the pivot counts
   mb_up:
     {enabled: true, phase: 1, slot: eod, action: log,
      chg_min_pct: 4, volume_min: 100_000, volume_gt_prior: true, close_loc_min: 0.70}
@@ -95,7 +98,10 @@ scans:
     {enabled: true, phase: 1, slot: eod, action: push,
      universe_price_min: 5, universe_volume_min: 100_000,
      ratio_windows: [5, 10], quarter_move_pct: 25, ma_windows: [20, 40, 50],
-     up_count_rule: stockbee_4pct}
+     up_count_rule: stockbee_4pct,
+     # Rest of Stockbee's Market Monitor (Emil, 19 Oct 2026): up/down >= 25 % and >= 50 %
+     # in a month (22 sessions), up/down >= 13 % in 34 sessions (needs daily history)
+     month_move_pct: 25, month_big_move_pct: 50, mid_move_pct: 13}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
@@ -227,6 +233,11 @@ context:                                    # facts under pushed EPs/breakouts (
   max_per_scan: 5                           # top N per scan get a context line
   news_max_tickers: 8                       # Massive headline lookups per run (5 calls/min)
   news_max_age_hours: 48                    # and at least back to the previous session day
+  earnings_soon_sessions: 10                # "earnings in N days" when the next report is this close
+  industry_min_members: 5                   # (proposed) smaller groups aren't ranked
+  industry_top_n: 5                         # leading industries in the weekly push
+  spy_symbol: "AMEX:SPY"                    # market header next to QQQ
+  vix_symbol: "CBOE:VIX"
 
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25

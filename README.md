@@ -14,7 +14,7 @@ the jobs print counts and status only, because Actions logs here are public.
 | Job | Workflow | When | What |
 |---|---|---|---|
 | Pre-market | `premarket.yml` | 07:17 New York, trading days | EP-PM |
-| Intraday | `intraday.yml` | 10:17 and 12:03 New York, trading days | EP9M pace: up 4 %+ and on pace for 9M shares; each name once a day |
+| Intraday | `intraday.yml` | 10:17 and 12:03 New York, trading days | EP9M pace (up 4 %+ and on pace for 9M shares) and BO pivot (BO-Watch names at or over their pivot); each name once a day |
 | End of day | `eod.yml` | 16:17 New York, trading days | EP-Day, EP9M, Momentum Burst up/down, EP-AH (off by default), Parabolic Short/Long, Breakout watch (B1-B4) and trigger (B5) |
 | Weekly | `weekly.yml` | Sunday | Qullamaggie 1/3/6M gainers, Growth Bucket 1 and 2, tight bases |
 | Outcomes | `outcomes.yml` | after the EOD job | 5/10/20/60-session outcomes of past signals |
@@ -29,7 +29,9 @@ The top pushed EPs and breakouts also get a line of facts: for EPs, whether earn
 and when, EPS and revenue growth with the beat or miss, float traded, the move before the gap,
 52-week high and 200-day, plus the latest headline (Massive, when `MASSIVE_API_KEY` is set);
 for breakouts, the prior move, 3/6-month return, ADR and MA stack. Facts only, never a verdict
-(`config/scans.yaml` → `context:`).
+(`config/scans.yaml` → `context:`). Every fact line also carries RS (1-99), "earnings in N days" when
+a report is close, "at all-time high", and the industry's rank; the weekly push lists the leading
+industries, and the EOD header adds Stockbee's month/34-day counts and SPY/VIX.
 
 Scans that need daily history (Parabolic, breakouts, tight bases) find nothing until enough
 sessions of bars exist, from Massive or from the jobs' own EOD snapshots. Pushed candidates

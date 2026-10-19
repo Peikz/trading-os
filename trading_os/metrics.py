@@ -73,6 +73,18 @@ def yoy_growth(history: object, quarter: int, *, abs_base: bool) -> float:
     return (current - base) / (abs(base) if abs_base else base) * 100
 
 
+def rs_percentile(df: pd.DataFrame, windows: list[int]) -> pd.Series:
+    """1-99 relative strength (proposed): the mean of each stock's percentile rank on the
+    1-, 3- and 6-month returns within `df` (the logged-tier universe), Qullamaggie's windows."""
+    ranks = pd.concat([df[f"ret_{d}"].rank(pct=True) for d in windows], axis=1).mean(axis=1)
+    return (ranks * 98 + 1).round()
+
+
+def ny_dates(stamps: pd.Series) -> pd.Series:
+    """Calendar date in New York of each UTC timestamp (NaT stays missing)."""
+    return stamps.dt.tz_convert(NEW_YORK).dt.date.where(stamps.notna())
+
+
 def add_growth_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """Previous-quarter YoY growth from the history arrays, which are then dropped."""
     out = df.copy()
