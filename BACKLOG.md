@@ -58,11 +58,14 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ## Phase 3 — Outcomes and journal
 - [ ] Outcomes job (5/10/20/60 days) — built: `outcomes.py`, `outcomes.yml` (22:00 UTC weekdays); hand-computed tests; runs on EOD snapshots until Massive history exists
 - [ ] Before-shot chart PNGs per alert candidate — built: `charts.py`, drawn by the EOD and pre-market jobs for every pushed candidate into `data/charts/` (120 sessions, MA10/20/50, volume, pivot/stop when present); sparse until history exists
-- [ ] Write Breakout Log rows to EPStudyDatabase (Google service account)
+- [ ] Write Breakout Log rows to EPStudyDatabase (Google service account) — built (`epstudy.py`, EOD job, deduplicated by signal_id), off until you set `epstudy.enabled`, `sheet_id` and the secret `GOOGLE_SERVICE_ACCOUNT_JSON`; columns are config (proposed)
 
 ## Phase 4 — Trade tracking
-- [ ] Saxo fills import (OpenAPI or CSV) → journal with R-multiples
+- [ ] Saxo fills import (OpenAPI or CSV) → journal with R-multiples — built for CSV (`scripts/import_fills.py` and the dashboard's Journal page): map your export's headers in `journal.csv_columns` after the first Saxo export; trades flat to flat, linked to signals, R from the signal's order stop or a stops CSV
 - [ ] Power BI model over DuckDB/Parquet — groundwork: `scripts/build_duckdb.py` builds a views-only DuckDB file over the data repo (universe, candidates, outcomes, bars, signals_with_outcomes) for the DuckDB ODBC driver; the model itself waits for real trades
+
+## Phase 5 — Dashboard
+- [ ] Private dashboard — built: Streamlit app (`app/streamlit_app.py`, localhost by default): today, screens, watchlists, journal with grades/notes/screenshots, graded signals, market, stats, validation. Plus a Markdown report per run in the data repo. Phone access is your call (see Questions)
 
 ---
 
@@ -90,6 +93,7 @@ word and I flip it.
 | 14 | CATS weights | +1 growth bucket, +1 MB up/EP in the last 10 sessions, +1 if 30-day avg volume > 90-day, −0.5 per ADR beyond 3 ADR above MA10 | `cats:` |
 
 Still open (no default possible):
+- **Dashboard on your phone:** (a) Tailscale (free, private network between phone and PC; the app stays on your PC), (b) same Wi-Fi only (anyone on that network can open it; no login), (c) Streamlit Community Cloud as a private app (hosted; needs the data-repo token in its secrets, so your data sits on their servers). Recommendation: (a).
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
 - Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
 
@@ -108,3 +112,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Validation helper (TradingView CSV vs run, with reasons) and DuckDB views builder.
 - 2026-10-19 (later): On Emil's 'continue without me': EP9M early warning, breadth line + Market Light, watchlists + watchlist gappers, all on documented defaults (Questions table). Every Phase 1 scan is now built; waiting on secrets for the first Actions runs.
 - 2026-10-19 (later): Markdown report per run (`reports/` in the data repo, charts inline, readable in the GitHub app); CATS column; weekly outcome statistics (`reports/stats/`). Forced runs now keep charts in their manual folder.
+- 2026-10-19 (later): Phase 3 EPStudyDatabase writer (off until configured); Phase 4 journal (fills import, trades, R, signal links), DuckDB journal view and Power BI notes; Phase 5 private Streamlit dashboard, checked page by page on demo data.
