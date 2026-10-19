@@ -251,6 +251,12 @@ def main(argv: list[str] | None = None) -> int:
     ep = events(study)
     mapping = cik_map(args.data_dir, client)
     ciks = sorted({mapping[t] for t in ep["ticker"] if t in mapping})
+    used = {t: mapping[t] for t in ep["ticker"].unique() if t in mapping}
+    folder = args.data_dir / "data" / "ep_enrich" / "sec"
+    folder.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"ticker": list(used), "cik": list(used.values())}).to_parquet(
+        folder / "cik_map.parquet", **PARQUET_OPTIONS
+    )
     status(f"SEC: {len(ciks)} filers for {ep['ticker'].nunique()} EP tickers")
     since, until = min(ep["session_date"]), max(ep["session_date"])
     fetch(args.data_dir, client, ciks, since, until)

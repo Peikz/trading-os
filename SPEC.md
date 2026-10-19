@@ -310,6 +310,12 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    earnings timing are inferred from TradingView's quarterly history (no past report dates exist there).
    The five sheet criteria are yes/no facts; the grade stays the human's. Stored in the data repo
    (`data/ep_history/`, an EP Log-ordered xlsx in `data/exports/`) and on the dashboard's EP history page.
+14. ~~Strategy history~~ — decided 19 Oct 2026 by Emil: the same 2-year replay for every scan (EP9M, Momentum
+   Burst up/down, Parabolic long/short, breakout watch and trigger, QM gainers, tight bases), running the live
+   scan functions on rebuilt metrics, alert tier only, each measured on its side (shorts profit when it falls)
+   with its natural stop. Facts for grading and for tuning the proposed defaults; never a filter by itself.
+   The EP entry-timing study runs on Massive minute bars; Alpaca (free, back to 2016) for longer history
+   once its delisted coverage is checked. SEC EDGAR gives exact earnings release times (8-K item 2.02).
 
 ## 12. References
 

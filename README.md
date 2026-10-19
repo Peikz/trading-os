@@ -88,6 +88,13 @@ year, a year; R with the live entry and stop; exits under the 10/20-day MA). The
 `data/exports/` has the EPStudyDatabase's EP Log columns first, ready to import as its own tab.
 The dashboard's EP history page filters and groups it and charts any event with what came after.
 
+## Strategy history
+
+`scripts/strategy_history.py` replays every scan (EP9M, Momentum Burst, Parabolic, breakouts, QM gainers,
+tight bases) over the Massive bars with the live scan code and measures each hit on its side with its
+stop; the dashboard's Strategy history page compares them and splits by year, market and price.
+`scripts/entry_study.py` tests EP entry times on the minute bars (`ep-enrich.yml` fetches them).
+
 ## Dashboard
 
 A private web app over your local clone of the data repo: today's market and pushed scans

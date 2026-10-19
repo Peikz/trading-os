@@ -457,7 +457,7 @@ def write_sheet(df: pd.DataFrame, path) -> None:
                     for c in cell:
                         c.number_format = "0.0%"
         ws.freeze_panes = "C2"
-    tmp.rename(path)
+    tmp.replace(path)  # a --rebuild replaces the same date's file
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -473,6 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="EP history study over the Massive bars")
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--no-fundamentals", action="store_true", help="skip TradingView")
+    parser.add_argument("--rebuild", action="store_true", help="replace this date's build")
     args = parser.parse_args(argv)
     cfg = load_config()
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
@@ -482,8 +483,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     asof = sessions[-1].isoformat()
     out_path = args.data_dir / "data" / "ep_history" / f"ep_history_{asof}.parquet"
-    if out_path.exists():
-        status(f"EP history: {out_path.name} already built")
+    if out_path.exists() and not args.rebuild:
+        status(f"EP history: {out_path.name} already built (--rebuild replaces it)")
         return 0
     df = find(history.load_bars(args.data_dir, sessions), sessions, cfg)
     status(f"EP history: {label_counts(df)} over {len(sessions)} sessions")
@@ -494,8 +495,115 @@ def main(argv: list[str] | None = None) -> int:
         by_ticker = details.join(listed.set_index("tv_ticker")["ticker"]).set_index("ticker")
         df = add_fundamentals(df, by_ticker, cfg)
         status(f"EP history: fundamentals for {len(by_ticker)} still-listed stocks")
+    sec_tables = load_sec(args.data_dir)
+    if sec_tables is not None and len(df):
+        df = add_sec(df, *sec_tables, sessions, cfg.ep_history["c3_growth_min_pct"])
+        status(f"EP history: SEC facts for {int(df['earnings_sec'].notna().sum())} events")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out_path, **PARQUET_OPTIONS)
     write_sheet(df, args.data_dir / "data" / "exports" / f"ep_history_{asof}.xlsx")
     status(f"EP history: saved {out_path.name} and the EP Log export")
     return 0
+
+
+def _ny(day, hhmm: str) -> pd.Timestamp:
+    return pd.Timestamp(f"{day} {hhmm}", tz=NEW_YORK).tz_convert("UTC")
+
+
+def add_sec(
+    df: pd.DataFrame,
+    releases: pd.DataFrame,
+    quarters: pd.DataFrame,
+    cik_by_ticker: Mapping[str, int],
+    sessions: list,
+    c3_min: float = 50,
+) -> pd.DataFrame:
+    """Exact earnings facts from SEC EDGAR where the company files there (US filers):
+
+    - `earnings_sec`: an 8-K item 2.02 was accepted between the prior close and the EP close,
+      and `earnings_timing` says when (after the prior close, pre-market, during the session);
+    - `eps_growth_sec` / `sales_growth_sec`: YoY growth of the latest quarter whose results
+      had been released by the EP close (point in time: the release, not the later 10-Q).
+
+    Then `earnings`, `eps_growth_yoy`, `sales_growth_yoy` and C3 prefer SEC and fall back to
+    the TradingView estimate; `fundamentals_source` says which.
+    """
+    out = df.copy()
+    index = {d: i for i, d in enumerate(sessions)}
+    stamps = pd.to_datetime(releases["accepted"], utc=True).dt.tz_localize(None)  # UTC
+    by_cik = {int(cik): np.sort(group.to_numpy()) for cik, group in stamps.groupby(releases["cik"])}
+    q = quarters.assign(end=pd.to_datetime(quarters["end"])).sort_values("end")
+    q_by_cik = {int(cik): g.drop_duplicates("period", keep="last") for cik, g in q.groupby("cik")}
+    sec_cols = {"earnings_sec": None, "earnings_timing": None}
+    sec_cols |= {"eps_growth_sec": np.nan, "sales_growth_sec": np.nan}
+    for name, default in sec_cols.items():
+        out[name] = default
+    for i, row in out.iterrows():
+        cik = cik_by_ticker.get(row["ticker"])
+        if cik is None or int(cik) not in by_cik:
+            continue
+        times = by_cik[int(cik)]
+        day = row["session_date"]
+        k = index.get(day)
+        previous = sessions[k - 1] if k else day
+        start, close = _ny(previous, "16:00"), _ny(day, "16:00")
+        hits = times[(times > start.to_datetime64()) & (times <= close.to_datetime64())]
+        out.at[i, "earnings_sec"] = bool(len(hits))
+        if len(hits):
+            first = pd.Timestamp(hits[0], tz="UTC")
+            if first < _ny(day, "00:00"):
+                out.at[i, "earnings_timing"] = "after prior close"
+            elif first < _ny(day, "09:30"):
+                out.at[i, "earnings_timing"] = "pre-market"
+            else:
+                out.at[i, "earnings_timing"] = "during session"
+        table = q_by_cik.get(int(cik))
+        if table is None:
+            continue
+        known = []
+        for period, end in zip(table["period"], table["end"], strict=True):
+            after = times[times > end.tz_localize("UTC").to_datetime64()]
+            if len(after) and after[0] <= close.to_datetime64():
+                known.append(period)
+        if not known:
+            continue
+        latest = known[-1]
+        year, quarter = int(latest[2:6]), latest[6:]
+        base = f"CY{year - 1}{quarter}"
+        values = table.set_index("period")
+        if base not in values.index:
+            continue
+        for column, target, abs_base in (
+            ("eps", "eps_growth_sec", True),
+            ("revenue", "sales_growth_sec", False),
+        ):
+            now, then = values.at[latest, column], values.at[base, column]
+            if then == then and now == now and then != 0:
+                out.at[i, target] = (now - then) / (abs(then) if abs_base else then) * 100
+    inferred = out.get("earnings_inferred", pd.Series(None, index=out.index))
+    out["fundamentals_source"] = np.where(
+        out["earnings_sec"].notna(), "sec", np.where(inferred.notna(), "inferred", None)
+    )
+    out["earnings"] = out["earnings_sec"].where(out["earnings_sec"].notna(), inferred)
+    for target, sec_col in (
+        ("eps_growth_yoy", "eps_growth_sec"),
+        ("sales_growth_yoy", "sales_growth_sec"),
+    ):
+        tv = out.get(target, pd.Series(np.nan, index=out.index))
+        out[f"{target}_tv"] = tv
+        out[target] = out[sec_col].where(out[sec_col].notna(), tv)
+    best = out[["eps_growth_yoy", "sales_growth_yoy"]].max(axis=1)
+    out["c3_growth"] = (best >= c3_min).where(best.notna())
+    return out
+
+
+def load_sec(data_dir) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]] | None:
+    """The SEC tables and ticker -> CIK map from the data repo, or None before a SEC run."""
+    from pathlib import Path
+
+    folder = Path(data_dir) / "data" / "ep_enrich" / "sec"
+    names = ("earnings_releases.parquet", "quarterly.parquet", "cik_map.parquet")
+    if not all((folder / n).exists() for n in names):
+        return None
+    releases, quarters, mapping = (pd.read_parquet(folder / n) for n in names)
+    return releases, quarters, dict(zip(mapping["ticker"], mapping["cik"], strict=True))

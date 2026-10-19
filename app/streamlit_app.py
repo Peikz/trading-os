@@ -30,6 +30,7 @@ from trading_os import (
     outcomes,
     report,
     stats,
+    strategy_history,
     validation,
 )
 from trading_os.config import load_config
@@ -52,6 +53,7 @@ PAGES = [
     "Market",
     "Stats",
     "EP history",
+    "Strategy history",
     "Validation",
 ]
 
@@ -91,6 +93,11 @@ def read_parquet(path: str) -> pd.DataFrame:
 
 
 CHART_CACHE = Path(os.environ.get("TEMP", "/tmp")) / "trading-os-charts"
+
+
+@st.cache_data(ttl=600)
+def strategy_cached(folder: str) -> pd.DataFrame:
+    return strategy_history.load(folder)
 
 
 @st.cache_data(ttl=600)
@@ -507,6 +514,58 @@ elif page == "EP history":
             signal_session=row["session_date"],
             sessions=120,
             order_stop=row["plan_stop"],
+            after=63,
+        )
+        if drawn:
+            st.image(str(drawn))
+
+elif page == "Strategy history":
+    st.header("Strategy history")
+    hist = strategy_cached(str(data_dir))
+    if hist.empty:
+        st.info("No strategy history yet. Build it with `scripts/strategy_history.py`.")
+        st.stop()
+    st.caption(
+        "Every alert-tier hit of each live scan over the Massive bars, the market that day and "
+        "what happened after. P&L is in the strategy's direction (shorts profit when it falls). "
+        "Entries at the signal close; stops as listed in `strategy_history.py`. Facts, not advice."
+    )
+    names = sorted(hist["strategy"].unique())
+    picked = st.multiselect("Strategies", names, default=names)
+    view = hist[hist["strategy"].isin(picked)].copy()
+    view["year"] = view["session_date"].map(lambda d: d.year)
+    view["price_bucket"] = pd.cut(
+        view["close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
+    )
+    group = st.selectbox(
+        "Split by",
+        ["none", "year", "mkt_breadth_state", "mkt_qqq_trend", "price_bucket", "above_ma200"],
+    )
+    table = strategy_history.summary(view, None if group == "none" else [group])
+    st.dataframe(table.round(2), hide_index=True, width="stretch")
+    one = st.selectbox("Events of", picked or names)
+    events = view[view["strategy"] == one].sort_values("session_date", ascending=False)
+    columns = ["session_date", "ticker", "side", "entry", "stop", "stop_adr", "chg_pct"]
+    columns += ["pnl_5d", "pnl_21d", "pnl_63d", "r_21d", "r_trail_ma20", "mkt_breadth_state"]
+    st.dataframe(
+        events[[c for c in columns if c in events]], hide_index=True, width="stretch", height=300
+    )
+    labels = [f"{r.session_date} · {r.ticker}" for r in events.head(500).itertuples()]
+    pick = st.selectbox("Chart", ["—", *labels], key="strategy_chart")
+    if pick != "—":
+        day_text, ticker = pick.split(" · ")
+        row = events[
+            (events["ticker"] == ticker) & (events["session_date"].astype(str) == day_text)
+        ]
+        row = row.iloc[0]
+        path = Path(CHART_CACHE) / f"{one}_{ticker}_{day_text}.png"
+        drawn = charts.before_shot(
+            ticker_bars(str(data_dir), ticker),
+            path,
+            title=f"{ticker} · {one} {day_text} · then 63 sessions",
+            signal_session=row["session_date"],
+            sessions=120,
+            order_stop=row["stop"] if row["stop"] == row["stop"] else None,
             after=63,
         )
         if drawn:
