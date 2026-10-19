@@ -33,6 +33,7 @@ from trading_os import (
     journal,
     luk,
     minervini,
+    my_watchlists,
     outcomes,
     plans,
     report,
@@ -137,11 +138,31 @@ def candidates_of(run: dashboard.Run) -> pd.DataFrame:
 FORMATS = {"money": "compact", "shares": "compact", "int": "%d"}
 
 
-def show_table(scan: str, hits: pd.DataFrame) -> None:
-    """The same columns and number formats as the Markdown report."""
-    columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text"), ("Tier", "tier", "text")]
+def tradingview_url(ticker: str, exchange: str | None = None) -> str:
+    """The stock's TradingView chart (exchange-qualified when known)."""
+    symbol = f"{exchange}:{ticker}" if exchange else str(ticker)
+    return f"https://www.tradingview.com/chart/?symbol={symbol.replace(':', '%3A')}"
+
+
+@st.cache_data(ttl=600)
+def exchanges_of(universe_path: str) -> dict[str, str]:
+    """Ticker -> exchange from a run's universe snapshot (intraday runs have none)."""
+    path = Path(universe_path)
+    if not path.exists():
+        return {}
+    uni = pd.read_parquet(path)
+    if "exchange" not in uni:
+        return {}
+    return dict(zip(uni["ticker"], uni["exchange"], strict=True))
+
+
+def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> None:
+    """The same columns and number formats as the Markdown report, plus a TradingView link."""
+    columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text")]
+    columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
     view = hits.copy()
+    view["tradingview"] = [tradingview_url(t, (exchanges or {}).get(t)) for t in view["ticker"]]
     if scan.startswith("breakout_"):
         view["b_flags"] = [report._b_flags(r) for r in view.to_dict("records")]
     present = [(h, c, f) for h, c, f in columns if c in view.columns]
@@ -149,6 +170,8 @@ def show_table(scan: str, hits: pd.DataFrame) -> None:
     for header, _, fmt in present:
         if fmt == "flag":
             config[header] = st.column_config.CheckboxColumn(header)
+        elif fmt == "link":
+            config[header] = st.column_config.LinkColumn(header, display_text="TradingView ↗")
         elif fmt != "text":
             config[header] = st.column_config.NumberColumn(
                 header, format=FORMATS.get(fmt, f"%{fmt}")
@@ -360,7 +383,7 @@ if page == "Today":
             shown = hits[hits["tier"] == "alert"] if "push_tier" in CFG.scans[scan].params else hits
             label = report.SCAN_LABELS.get(scan, scan)
             st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
-            show_table(scan, shown)
+            show_table(scan, shown, exchanges_of(str(run.universe)))
             facts = report.fact_lines(scan, shown)
             if facts:
                 st.markdown("\n".join(facts))
@@ -384,9 +407,11 @@ elif page == "Screens":
     tiers = st.multiselect("Tier", ["alert", "log"], default=["alert", "log"])
     hits = hits[hits["tier"].isin(tiers)]
     st.caption(f"{len(hits)} hits")
-    show_table(scan, hits)
+    exchanges = exchanges_of(str(run.universe))
+    show_table(scan, hits, exchanges)
     if len(hits):
         ticker = st.selectbox("Look at", hits["ticker"].tolist())
+        st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
         row = hits[hits["ticker"] == ticker].iloc[0]
         chart = dashboard.chart_for(run, scan, ticker)
         if chart:
@@ -399,16 +424,72 @@ elif page == "Screens":
 
 elif page == "Watchlists":
     st.header("Watchlists")
+    st.subheader("My watchlists")
+    events = my_watchlists.load(data_dir)
+    names = my_watchlists.lists(events)
+    a, b = st.columns([2, 3])
+    choice = a.selectbox("List", [*names, "＋ New list"], key="wl_choice")
+    name = b.text_input("New list name") if choice == "＋ New list" else choice
+    with st.form("wl-add", clear_on_submit=True):
+        a, b = st.columns([3, 2])
+        typed = a.text_input("Add tickers (comma or space separated)")
+        note = b.text_input("Note (optional)")
+        export = st.file_uploader("…or import a TradingView watchlist export (.txt)", type=["txt"])
+        if st.form_submit_button("Add to list"):
+            tickers = my_watchlists.parse_tickers(typed)
+            if export is not None:
+                text = export.getvalue().decode("utf-8", errors="replace")
+                tickers += [t for t in my_watchlists.parse_tickers(text) if t not in tickers]
+            try:
+                added = my_watchlists.add(data_dir, name or "", tickers, note)
+                if added:
+                    st.success(f"Added {added} to {name}.")
+                else:
+                    st.warning("No tickers to add.")
+                st.cache_data.clear()
+            except ValueError as exc:
+                st.error(str(exc))
+    members = my_watchlists.current(my_watchlists.load(data_dir))
+    members = members[members["list"] == name] if name else members.iloc[0:0]
+    if members.empty:
+        st.caption("No tickers in this list yet.")
+    else:
+        eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+        universe = read_parquet(str(eod[0].universe)) if eod else pd.DataFrame()
+        hits = candidates_of(eod[0]) if eod else pd.DataFrame()
+        view = my_watchlists.with_market(members, universe, hits)
+        exchanges = exchanges_of(str(eod[0].universe)) if eod else {}
+        view.insert(1, "chart", [tradingview_url(t, exchanges.get(t)) for t in view["ticker"]])
+        if eod:
+            st.caption(f"Market data from {eod[0].label}. in_scans = the scans it hit that run.")
+        cols = ["ticker", "chart", "close", "chg_pct", "rvol50", "adr20_pct", "rs_pct"]
+        cols += ["pct_from_52w_high", "ret_22", "ret_63", "above_ma50", "above_ma200"]
+        cols += ["to_pivot_pct", "earnings_in_sessions", "in_scans", "industry", "note"]
+        st.dataframe(
+            view[[c for c in cols if c in view]].round(2),
+            hide_index=True,
+            width="stretch",
+            column_config={"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")},
+        )
+        a, b = st.columns([3, 1])
+        gone = a.multiselect("Remove from the list", members["ticker"].tolist(), key="wl_rm")
+        if b.button("Remove") and gone:
+            my_watchlists.remove(data_dir, name, gone)
+            st.cache_data.clear()
+            st.rerun()
+    st.caption("Saved in the data repo; use “Save & push” to send them to GitHub.")
+
+    st.subheader("Scan watchlists")
     state = dashboard.watchlist_state(data_dir)
     if state.empty:
-        st.info("Watchlists are empty until EP or breakout alerts come in.")
+        st.info("EP-Watch and BO-Watch fill up as EP and breakout alerts come in.")
         st.stop()
     show_all = st.toggle("Include triggered / expired")
-    for name in ("bo_watch", "ep_watch"):
-        rows = state[state["list"] == name]
+    for wl in ("bo_watch", "ep_watch"):
+        rows = state[state["list"] == wl]
         if not show_all:
             rows = rows[rows["status"] == "active"]
-        st.subheader(f"{'BO-Watch' if name == 'bo_watch' else 'EP-Watch'} ({len(rows)})")
+        st.markdown(f"**{'BO-Watch' if wl == 'bo_watch' else 'EP-Watch'}** ({len(rows)})")
         st.dataframe(
             rows[["ticker", "status", "added_date", "status_date", "reason"]],
             hide_index=True,

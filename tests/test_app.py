@@ -84,3 +84,14 @@ def test_journal_tabs_render_with_trades_positions_and_plans(data_repo, monkeypa
     texts = " ".join(str(m.value) for m in at.metric)
     assert "1" in texts  # one closed trade, one open position
     assert any("CCC" in str(df.value) for df in at.dataframe)  # the plan is listed
+
+
+def test_my_watchlists_render(data_repo, monkeypatch):
+    from trading_os import my_watchlists
+
+    my_watchlists.add(data_repo, "Leaders", ["AAA", "BBB"])
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Watchlists").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("AAA" in str(df.value) for df in at.dataframe)
