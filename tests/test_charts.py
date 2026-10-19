@@ -28,7 +28,7 @@ def synthetic_bars(n=150, ticker="AAA"):
 def test_before_shot_draws_once(tmp_path):
     bars = synthetic_bars()
     signal = bars["session_date"].iloc[-1]
-    path = charts.chart_path(tmp_path, signal, "eod", "ep_day", "BRK.B")
+    path = charts.chart_path(tmp_path, "ep_day", "BRK.B")
     assert path.name == "ep_day_BRK-B.png"
     out = charts.before_shot(
         bars, path, title="t", signal_session=signal, sessions=120, pivot=25.0, order_stop=23.0
@@ -56,4 +56,5 @@ def test_draw_for_run_skips_tickers_without_bars(tmp_path):
     bars = synthetic_bars()
     signal = bars["session_date"].iloc[-1]
     selected = {"ep_day": pd.DataFrame({"ticker": ["AAA", "ZZZ"], "rank": [1, 2]})}
-    assert charts.draw_for_run(tmp_path, signal, "eod", selected, bars, 120) == 1
+    drawn = charts.draw_for_run(tmp_path, signal, "eod", selected, bars, 120)
+    assert list(drawn) == [("ep_day", "AAA")]

@@ -22,10 +22,9 @@ UP, DOWN = "#2e7d32", "#c62828"
 MA_COLORS = {10: "#1565c0", 20: "#ef6c00", 50: "#6a1b9a"}
 
 
-def chart_path(data_dir: Path, session: dt.date, slot: str, scan: str, ticker: str) -> Path:
+def chart_path(charts_dir: Path, scan: str, ticker: str) -> Path:
     safe = ticker.replace("/", "-").replace(".", "-")
-    run = f"{session.isoformat()}_{slot}"
-    return Path(data_dir) / "data" / "charts" / str(session.year) / run / f"{scan}_{safe}.png"
+    return Path(charts_dir) / f"{scan}_{safe}.png"
 
 
 def before_shot(
@@ -89,15 +88,15 @@ def before_shot(
 
 
 def draw_for_run(
-    data_dir: Path,
+    charts_dir: Path,
     session: dt.date,
     slot: str,
     selected: dict[str, pd.DataFrame],
     bars: pd.DataFrame,
     sessions: int,
-) -> int:
+) -> dict[tuple[str, str], Path]:
     """One chart per pushed candidate. `bars` holds history up to the signal session."""
-    drawn = 0
+    drawn: dict[tuple[str, str], Path] = {}
     by_ticker = {t: g for t, g in bars.groupby("ticker")} if not bars.empty else {}
     for scan, hits in selected.items():
         for row in hits.to_dict("records"):
@@ -105,7 +104,7 @@ def draw_for_run(
             ticker_bars = by_ticker.get(ticker)
             if ticker_bars is None:
                 continue
-            path = chart_path(data_dir, session, slot, scan, ticker)
+            path = chart_path(charts_dir, scan, ticker)
             title = f"{ticker} · {scan} · {session.isoformat()} ({slot})"
             if before_shot(
                 ticker_bars,
@@ -116,5 +115,5 @@ def draw_for_run(
                 pivot=row.get("pivot"),
                 order_stop=row.get("order_stop"),
             ):
-                drawn += 1
+                drawn[(scan, ticker)] = path
     return drawn

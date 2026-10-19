@@ -23,6 +23,7 @@ from trading_os import (
     history,
     metrics,
     notify,
+    report,
     store,
     tv,
     universe,
@@ -145,8 +146,11 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
+    outputs = store.run_outputs(args.data_dir, ctx)
+    drawn = {}
     if slot in ("eod", "pm") and any(len(h) for h in selected.values()):
-        _charts(args.data_dir, cfg, session, slot, selected, df)
+        drawn = _charts(outputs["charts"], args.data_dir, cfg, session, slot, selected, df)
+    _report(ctx, cfg, results, selected, header, drawn, outputs["report"])
     if push_error is not None:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
@@ -174,7 +178,18 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
     return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)
 
 
-def _charts(data_dir: Path, cfg, session, slot: str, selected, df) -> None:
+def _report(ctx, cfg, results, selected, header, drawn, path: Path) -> None:
+    """The run's Markdown report. Like charts, a problem here never fails the run."""
+    try:
+        text = report.build(
+            ctx, results, selected, header, drawn, path, cfg.report["max_rows_per_scan"]
+        )
+        status("Report: saved" if report.write(path, text) else "Report: already exists")
+    except Exception as exc:  # noqa: BLE001 - auxiliary; the data is already saved
+        status(f"Report: FAILED ({type(exc).__name__}), run data unaffected")
+
+
+def _charts(charts_dir: Path, data_dir: Path, cfg, session, slot: str, selected, df) -> dict:
     """Before-shot PNGs for the pushed candidates. A chart problem never fails the run."""
     try:
         sessions = cfg.charts["sessions"] + max(charts.MA_COLORS)
@@ -182,10 +197,14 @@ def _charts(data_dir: Path, cfg, session, slot: str, selected, df) -> None:
         bars = history.load_bars(data_dir, [s for s in past if s != session])
         if slot == "eod":  # today's bar is the run itself (not written to history yet)
             bars = pd.concat([bars, enrich.todays_bars(df, session)], ignore_index=True)
-        drawn = charts.draw_for_run(data_dir, session, slot, selected, bars, cfg.charts["sessions"])
-        status(f"Charts: {drawn} saved")
+        drawn = charts.draw_for_run(
+            charts_dir, session, slot, selected, bars, cfg.charts["sessions"]
+        )
+        status(f"Charts: {len(drawn)} saved")
+        return drawn
     except Exception as exc:  # noqa: BLE001 - charts are auxiliary; the data is already saved
         status(f"Charts: FAILED ({type(exc).__name__}), run data unaffected")
+        return {}
 
 
 def main(slot: str, label: str, description: str, argv: list[str] | None = None) -> int:

@@ -138,6 +138,20 @@ def run_paths(data_dir: Path, ctx: RunContext, extras: tuple[str, ...] = ()) -> 
     }
 
 
+def run_outputs(data_dir: Path, ctx: RunContext) -> dict[str, Path]:
+    """Chart folder and Markdown report for a run. Forced runs keep both in their manual
+    folder, so tests never touch the session history."""
+    stem = f"{ctx.session.isoformat()}_{ctx.slot}"
+    if ctx.forced:
+        base = Path(data_dir) / "data" / "manual" / f"{stem}_{ctx.run_ts:%H%M%S}"
+        return {"charts": base / "charts", "report": base / "report.md"}
+    year = str(ctx.session.year)
+    return {
+        "charts": Path(data_dir) / "data" / "charts" / year / stem,
+        "report": Path(data_dir) / "reports" / year / f"{stem}.md",
+    }
+
+
 def already_done(data_dir: Path, session: dt.date, slot: str) -> bool:
     ctx = RunContext(session=session, slot=slot, run_ts=dt.datetime.now(dt.UTC), run_kind="")
     return any(path.exists() for path in run_paths(data_dir, ctx).values())
