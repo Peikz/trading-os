@@ -101,6 +101,12 @@ def _check() -> int:
             code = exc.response.status_code if exc.response is not None else "?"
             status(f"Massive check: {label} {session}: HTTP {code}")
             failures += 1
+    try:
+        items = client.news("AAPL", limit=3)
+        status(f"Massive check: news OK, {len(items)} headlines")
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else "?"
+        status(f"Massive check: news HTTP {code} (not on this plan?)")
     return 1 if failures else 0
 
 

@@ -58,9 +58,11 @@ def test_check_reports_counts_only(capsys, monkeypatch):
         lambda self, day, adjusted=True: FakeClient().grouped_daily(day),
     )
     monkeypatch.setattr(backfill.RateLimiter, "wait", lambda self: None)
+    monkeypatch.setattr(backfill.MassiveClient, "news", lambda self, t, limit=3: [{"title": "x"}])
     assert backfill.main(["--check"]) == 0
     out = capsys.readouterr().out
     assert out.count("OK, 1 tickers") == 2 and "AAA" not in out
+    assert "news OK, 1 headlines" in out
 
 
 def test_window_never_goes_past_the_plan():

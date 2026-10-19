@@ -16,6 +16,7 @@ import requests
 from trading_os.history import BAR_COLUMNS
 
 GROUPED_DAILY = "/v2/aggs/grouped/locale/us/market/stocks/{day}"
+NEWS = "/v2/reference/news"
 _FIELD_MAP = {
     "T": "ticker",
     "o": "open",
@@ -88,6 +89,26 @@ class MassiveClient:
         if body.get("status") not in _OK_STATUSES:
             raise MassiveError(f"grouped daily {day}: status {body.get('status')!r}")
         return to_bars(body.get("results") or [], day, bool(body.get("adjusted", adjusted)))
+
+    def news(self, ticker: str, limit: int = 3) -> list[dict]:
+        """Latest headlines for a ticker: title, publisher, published time, url."""
+        self._limiter.wait()
+        response = self._http.get(
+            self._base + NEWS,
+            params={"ticker": ticker, "limit": limit, "order": "desc", "sort": "published_utc"},
+            headers=self._headers,
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        return [
+            {
+                "title": item.get("title", ""),
+                "publisher": (item.get("publisher") or {}).get("name", ""),
+                "published_utc": item.get("published_utc", ""),
+                "url": item.get("article_url", ""),
+            }
+            for item in response.json().get("results") or []
+        ]
 
 
 def to_bars(results: list[dict], day: dt.date, adjusted: bool) -> pd.DataFrame:
