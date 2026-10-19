@@ -61,9 +61,16 @@ jobs:
             exit 0
           fi
           git commit -q -m "pm $(TZ=America/New_York date +%F): data (run ${{ github.run_id }})"
-          git pull -q --rebase
-          git push -q
-          echo "Data: committed and pushed"
+          # Jobs write different files, so a rebase never conflicts; retry a push race.
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
 
       - name: Notify failure
         if: failure()

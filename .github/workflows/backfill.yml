@@ -16,7 +16,7 @@ on:
         default: 504
 
 concurrency:
-  group: data-repo
+  group: backfill            # own queue: a long backfill must never delay the timed jobs
   cancel-in-progress: false
 
 permissions:
@@ -60,9 +60,16 @@ jobs:
             exit 0
           fi
           git commit -q -m "bars: backfill (run ${{ github.run_id }})"
-          git pull -q --rebase
-          git push -q
-          echo "Data: committed and pushed"
+          # Jobs write different files, so a rebase never conflicts; retry a push race.
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
 
       - name: Notify failure
         if: failure()
