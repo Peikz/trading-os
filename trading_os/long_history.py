@@ -50,7 +50,7 @@ def window(schedule, year: int, newest: dt.date) -> tuple[list[dt.date], list[dt
     """(all sessions of the run, the sessions inside `year`)."""
     first = dt.date(year, 1, 1)
     last = min(dt.date(year, 12, 31), newest)
-    inside = clock.sessions_after(schedule, first - dt.timedelta(days=1), 400, last)
+    inside = [s for s in clock.sessions_back(schedule, last, 300) if s >= first]
     before = clock.sessions_back(schedule, first - dt.timedelta(days=1), LEAD)
     after = clock.sessions_after(schedule, inside[-1], TAIL, newest) if inside else []
     return [*before, *inside, *after], inside

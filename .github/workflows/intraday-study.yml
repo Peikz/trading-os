@@ -11,6 +11,9 @@ on:
       minutes:
         description: "stop fetching after N minutes (the next run resumes)"
         default: "300"
+      long_years:
+        description: "FIRST-LAST for the 10-year fetch from Alpaca's daily bars (empty: 2 years)"
+        default: ""
 
 permissions:
   contents: read
@@ -50,11 +53,24 @@ jobs:
           echo "files already there: $(ls minutes | wc -l)"
           touch minutes/.start
 
+      - name: Ten-year inputs
+        if: inputs.long_years != ''
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          mkdir -p bars hist cands
+          gh release download bars-alpaca -R "$REPO" -D bars
+          gh release download history-10y -R "$REPO" -D hist
+          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y.parquet' 2>/dev/null || true
+          echo "bars: $(ls bars | wc -l), histories: $(ls hist | wc -l), cached candidates: $(ls cands | wc -l)"
+
       - name: Fetch
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
-        run: uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir data-repo --fetch minutes --minutes "${{ inputs.minutes }}"
+          LONG: ${{ inputs.long_years != '' && format('--long-bars bars --long-hits hist --years {0} --cands cands/candidates_10y.parquet', inputs.long_years) || '' }}
+        run: uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir data-repo --fetch minutes --minutes "${{ inputs.minutes }}" $LONG
 
       - name: Upload new files
         if: always()
@@ -66,3 +82,6 @@ jobs:
           [ -z "$new" ] && { echo "nothing new"; exit 0; }
           gh release upload intraday-minutes $new -R "$REPO" --clobber
           echo "uploaded: $(echo "$new" | wc -l) files"
+          if [ -f cands/candidates_10y.parquet ]; then
+            gh release upload intraday-minutes cands/candidates_10y.parquet -R "$REPO" --clobber
+          fi

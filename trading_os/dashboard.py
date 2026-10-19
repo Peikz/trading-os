@@ -204,6 +204,23 @@ def git(data_dir: Path, *args: str) -> tuple[bool, str]:
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 
+def download_release(data_dir: Path, tag: str, folder: Path) -> tuple[bool, str]:
+    """Download a release of the data repo (gh CLI, signed in on this PC) into `folder`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    ok, remote = git(data_dir, "remote", "get-url", "origin")
+    repo = remote.strip().removesuffix(".git").split("github.com/")[-1] if ok else ""
+    try:
+        done = subprocess.run(
+            ["gh", "release", "download", tag, "-R", repo, "-D", str(folder), "--clobber"],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    return done.returncode == 0, (done.stdout + done.stderr).strip()
+
+
 def pull(data_dir: Path) -> tuple[bool, str]:
     return git(data_dir, "pull", "--rebase", "--autostash")
 

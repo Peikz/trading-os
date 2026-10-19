@@ -52,3 +52,10 @@ def test_newest_universe_goes_by_the_date_in_the_name(tmp_path):
     snap(tmp_path / "data" / "universe" / "2026" / "2026-10-19_eod.parquet", 2.0)
     snap(tmp_path / "data" / "manual" / "2026-10-16_eod_133954" / "universe.parquet", 1.0)
     assert lh.newest_universe(tmp_path)["market_cap"].tolist() == [2.0]
+
+
+def test_years_whose_new_year_falls_on_a_weekend():
+    for year in (2017, 2022):  # 31 Dec 2016 and 1 Jan 2022: Saturdays
+        sessions, inside = lh.window(CFG.schedule, year, dt.date(2026, 10, 16))
+        assert inside[0].year == year and inside[-1].year == year
+        assert len(sessions) == lh.LEAD + len(inside) + lh.TAIL

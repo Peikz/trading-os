@@ -31,6 +31,7 @@ from trading_os import (
     history,
     intraday_study,
     journal,
+    long_history,
     luk,
     minervini,
     my_watchlists,
@@ -282,16 +283,74 @@ def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
 EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
 
+LONG_HISTORY = ("data", "history_10y")  # the history-10y release, downloaded
+HISTORY_COLUMNS = [
+    "strategy",
+    "side",
+    "session_date",
+    "ticker",
+    "entry",
+    "stop",
+    "stop_adr",
+    "close",
+    "chg_pct",
+    "gap_pct",
+    "rvol50",
+    "mkt_breadth_state",
+    "mkt_qqq_trend",
+    "above_ma200",
+    "pnl_1d",
+    "pnl_5d",
+    "pnl_21d",
+    "pnl_63d",
+    "r_5d",
+    "r_21d",
+    "r_63d",
+    "stop_hit_5d",
+    "r_trail_ma10",
+    "r_trail_ma20",
+    "r_trail_ema9",
+    "r_trail_ema21",
+    "r_q3_ma10",
+    "r_q3_ma20",
+    "r_q5_ma10",
+    "r_q5_ma20",
+    "r_time3d",
+    "r_time5d",
+    "r_target8_5d",
+]
+EP_COLUMNS = [
+    "is_ep_day",
+    "tier",
+    "plan_entry",
+    "plan_stop",
+    "months_sideways",
+    "earnings_inferred",
+    "eps_growth_yoy",
+    "sales_growth_yoy",
+    "ret_1d",
+    "ret_5d",
+    "ret_21d",
+    "ret_63d",
+]
+
+
 @st.cache_data(ttl=600)
-def history_cached(folder: str) -> pd.DataFrame:
+def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     """The strategy history plus the EP study's alert-tier EP-Days as strategy `ep_day`, in
     one shape: the EP study's returns become `pnl_*`, its planned entry and stop `entry` and
-    `stop`; its criteria and fundamentals columns come along for the EP filters."""
-    hist = strategy_cached(folder)
-    built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
-    if not built:
+    `stop`; its criteria and fundamentals columns come along for the EP filters. `10y`:
+    the yearly files of the history-10y release (only the columns the page uses)."""
+    if period == "10y":
+        long_dir = Path(folder).joinpath(*LONG_HISTORY)
+        hist = long_history.load(long_dir, "strategy", HISTORY_COLUMNS)
+        ep = long_history.load(long_dir, "ep", [*HISTORY_COLUMNS, *EP_COLUMNS, *EP_FLAGS])
+    else:
+        hist = strategy_cached(folder)
+        built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
+        ep = read_parquet(str(built[-1])) if built else pd.DataFrame()
+    if ep.empty:
         return hist
-    ep = read_parquet(str(built[-1]))
     ep = ep[ep["is_ep_day"] & (ep["tier"] == "alert")].copy()
     ep["session_date"] = pd.to_datetime(ep["session_date"]).dt.date
     outcome = re.compile(r"^ret_\d+d$")  # outcomes only; ret_22 etc. are features
@@ -814,7 +873,26 @@ elif page == "Stats":
 
 elif page == "History":
     st.header("History")
-    hist = history_cached(str(data_dir))
+    period = st.radio(
+        "Period",
+        ["2y", "10y"],
+        horizontal=True,
+        format_func=lambda p: "2 years (Massive)" if p == "2y" else "10 years (Alpaca, since 2016)",
+        key="hist_period",
+    )
+    long_dir = data_dir.joinpath(*LONG_HISTORY)
+    if period == "10y" and not list(long_dir.glob("strategy_*.parquet")):
+        st.info("The 10-year history isn't on this PC yet (the data repo's history-10y release).")
+        if st.button("Download it"):
+            ok, out = dashboard.download_release(data_dir, "history-10y", long_dir)
+            if ok:
+                st.success("Downloaded.")
+            else:
+                st.error(out)
+            st.cache_data.clear()
+            st.rerun()
+        st.stop()
+    hist = history_cached(str(data_dir), period)
     if hist.empty:
         st.info(
             "No history yet. Build it with `scripts/strategy_history.py` and "

@@ -169,3 +169,22 @@ def test_fetch_stops_at_the_deadline(tmp_path):
     fake = Fake()
     assert s.fetch(fake, s.fetch_windows(cands, days), tmp_path, deadline=0) == {}
     assert fake.calls == []
+
+
+def test_long_candidates_come_year_by_year_from_the_yearly_files(tmp_path):
+    from trading_os import clock
+
+    days = clock.sessions_after(CFG.schedule, dt.date(2018, 6, 1), 400, dt.date(2019, 6, 28))
+    bars = flat_bars(days, A)
+    gap_day = dt.date(2019, 3, 15)
+    bars.loc[bars["session_date"] == gap_day, ["open", "high"]] = [10.5, 10.6]  # +5 % gap
+    bars["vwap"], bars["source"] = bars["close"], "alpaca"
+    for year in (2018, 2019):
+        part = bars[pd.to_datetime(bars["session_date"]).dt.year == year]
+        part.to_parquet(tmp_path / f"{year}.parquet")
+    cands = s.long_candidates(CFG, tmp_path, None, 2019, 2019)
+    gap = cands[cands["group"] == "gap"]
+    assert gap["session_date"].tolist() == [gap_day] and gap["ticker"].tolist() == [A]
+    assert min(cands["session_date"]) >= dt.date(2019, 1, 1)  # 2018 is lead-in only
+    sessions = s.calendar_sessions(CFG, 2019, gap_day)
+    assert sessions[0] < dt.date(2019, 1, 2) and sessions[-1] == gap_day

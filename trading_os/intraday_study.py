@@ -617,6 +617,59 @@ def run_study(g, tickers, sessions, cands, minutes_dir, cfg) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+def long_hits(hits_dir) -> pd.DataFrame:
+    """Next-day signals from the 10-year histories (history-10y release files)."""
+    from trading_os import long_history
+
+    hits = long_history.load(hits_dir, "strategy", ["strategy", "session_date", "ticker"])
+    frames = [hits[hits["strategy"].isin(NEXT_DAY_STRATEGIES)]] if len(hits) else []
+    eps = long_history.load(hits_dir, "ep", ["session_date", "ticker", "is_ep_day", "tier"])
+    if len(eps):
+        ep = eps[eps["is_ep_day"] & (eps["tier"] == "alert")]
+        frames.append(ep[["session_date", "ticker"]].assign(strategy="ep_day"))
+    if not frames:
+        return pd.DataFrame(columns=["strategy", "session_date", "ticker"])
+    return pd.concat(frames, ignore_index=True)
+
+
+def long_candidates(cfg, bars_dir, hits_dir, first: int, last: int) -> pd.DataFrame:
+    """Candidate stock-days for the years first..last from Alpaca's yearly daily bars, one
+    year at a time (each with its lead-in sessions), so ten years fit in a runner."""
+    from trading_os import long_history
+    from trading_os.logsafe import status
+
+    hits = long_hits(hits_dir) if hits_dir else None
+    frames = []
+    for year in range(first, last + 1):
+        bars = long_history.load_years(bars_dir, year - 2, year)
+        if bars.empty:
+            continue
+        sessions, inside = long_history.window(cfg.schedule, year, bars["session_date"].max())
+        have = set(bars["session_date"])
+        sessions = [s for s in sessions if s in have]
+        g, tickers = daily(bars[bars["session_date"].isin(set(sessions))], sessions)
+        part = None
+        if hits is not None and len(hits):
+            part = hits[hits["session_date"].isin(set(sessions))]
+        cands = from_grids(g, tickers, sessions, cfg, part)
+        cands = cands[cands["session_date"].isin(set(inside))]
+        frames.append(cands)
+        status(f"Intraday study {year}: {len(cands)} candidate stock-days")
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def calendar_sessions(cfg, first: int, last_day) -> list:
+    """Every session from the year before `first` to `last_day` (fetch windows need the
+    session before each candidate day)."""
+    import datetime as dt
+
+    from trading_os import clock
+
+    start = dt.date(first - 1, 12, 1)
+    span = (last_day - start).days + 1  # more than the sessions in between
+    return [s for s in clock.sessions_back(cfg.schedule, last_day, span) if s >= start]
+
+
 def main(argv: list[str] | None = None) -> int:
     from trading_os.logsafe import run_guarded
 
@@ -640,12 +693,28 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fetch", type=Path, help="folder of the minute files to add to")
     parser.add_argument("--minutes", type=int, default=0, help="stop fetching after N minutes")
     parser.add_argument("--run", type=Path, help="folder of downloaded minute files: run it")
+    parser.add_argument("--long-bars", type=Path, help="Alpaca yearly bar files (10 years)")
+    parser.add_argument("--long-hits", type=Path, help="history-10y files (next-day signals)")
+    parser.add_argument("--years", default="2016-2026", help="FIRST-LAST with --long-bars")
+    parser.add_argument("--cands", type=Path, help="candidates file: reuse when it exists")
     args = parser.parse_args(argv)
     cfg = load_config()
-    files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
-    sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
-    g, tickers = daily(history.load_bars(args.data_dir, sessions), sessions)
-    cands = from_grids(g, tickers, sessions, cfg, next_day_hits(args.data_dir))
+    if args.long_bars:  # 10-year candidates, for the fetch only (the study runs per year)
+        first, last = (int(y) for y in args.years.split("-"))
+        if args.cands and args.cands.exists():
+            cands = pd.read_parquet(args.cands)
+            cands["session_date"] = pd.to_datetime(cands["session_date"]).dt.date
+        else:
+            cands = long_candidates(cfg, args.long_bars, args.long_hits, first, last)
+            if args.cands:
+                cands.to_parquet(args.cands, index=False)
+        sessions = calendar_sessions(cfg, first, max(cands["session_date"]))
+        g = tickers = None
+    else:
+        files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
+        sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
+        g, tickers = daily(history.load_bars(args.data_dir, sessions), sessions)
+        cands = from_grids(g, tickers, sessions, cfg, next_day_hits(args.data_dir))
     status(f"Intraday study: {cands.groupby('group').size().to_dict()} candidate stock-days")
     if args.fetch:
         key = os.environ.get("ALPACA_API_KEY_ID", "")
@@ -655,7 +724,7 @@ def _main(argv: list[str] | None = None) -> int:
             return 1
         deadline = time.time() + args.minutes * 60 if args.minutes else None
         fetch(AlpacaClient(key, secret), fetch_windows(cands, sessions), args.fetch, deadline)
-    if args.run:
+    if args.run and g is not None:
         trades = run_study(g, tickers, sessions, cands, args.run, cfg)
         folder = args.data_dir / "data" / "intraday_study" / sessions[-1].isoformat()
         write_results(trades, folder)
