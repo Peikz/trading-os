@@ -1,0 +1,26 @@
+# Alpaca market data check (Emil, 19 Oct 2026): access, history back to 2016, minute bars and
+# whether delisted stocks have bars. Manual runs only. This repo is public: counts only.
+
+name: Alpaca check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --no-dev
+      - name: Check
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: uv run --frozen --no-dev python scripts/alpaca_check.py
