@@ -441,6 +441,7 @@ def params(cfg) -> dict[str, Any]:
         "base_min_days": cfg.luk["base_min_days"],
         "min_stop_adr": cfg.sizing["min_stop_adr"],
         "wide_stop_adr": cfg.intraday_study["wide_stop_adr"],
+        "min_stop_pct": cfg.intraday_study["min_stop_pct"],
         "vcp_stop_max_pct": cfg.minervini["stop_max_pct"],
     }
 
@@ -484,6 +485,8 @@ def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataF
     j = trades["ticker"].map(col)
     trades = trades[t.notna() & j.notna()].reset_index(drop=True)
     t, j = t.dropna().astype(int).to_numpy(), j.dropna().astype(int).to_numpy()
+    ok = consistent(trades, g, t, j)
+    trades, t, j = trades[ok].reset_index(drop=True), t[ok], j[ok]
     results = intraday_exits.run(
         g,
         lines,
@@ -498,6 +501,23 @@ def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataF
     trades = trades.assign(**results)
     trades["risk_adr"] = (trades["price"] - trades["stop"]).abs() / trades["adr_usd"]
     return trades.drop(columns=["start", "exit0", "stopped0"])
+
+
+OFF_SESSION = ("ah_1800", "pm_0800", "pm_0915")
+MISMATCH = 0.03  # 3 % outside the day's daily range: the minute and daily data disagree
+
+
+def consistent(trades: pd.DataFrame, g: dict, t: np.ndarray, j: np.ndarray) -> np.ndarray:
+    """Entries whose price fits the daily bar of that day (within 3 %); outside the session,
+    within 0.5x-3x the prior close. A mismatch means the minute and daily data disagree for
+    that stock (a split, a reused symbol), so the trade is left out."""
+    price = trades["price"].to_numpy(dtype=float)
+    low, high = g["low"][t, j], g["high"][t, j]
+    inside = (price >= low * (1 - MISMATCH)) & (price <= high * (1 + MISMATCH))
+    prev = trades["prev_close"].to_numpy(dtype=float)
+    off = trades["entry"].isin(OFF_SESSION).to_numpy()
+    near = (price >= 0.5 * prev) & (price <= 3 * prev)
+    return np.where(off, near, inside)
 
 
 def exit_columns(df: pd.DataFrame) -> list[str]:
@@ -518,6 +538,7 @@ def summary(df: pd.DataFrame, by: list[str] | None = None) -> pd.DataFrame:
             name = column[2:]
             row[f"win_{name}%"] = (r > 0).mean() * 100 if len(r) else np.nan
             row[f"R_{name}"] = r.clip(upper=20).mean() if len(r) else np.nan
+            row[f"medR_{name}"] = r.median() if len(r) else np.nan
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -540,6 +561,7 @@ def best(table: pd.DataFrame, min_trades: int = 50, top: int = 3) -> pd.DataFram
                             "exit": name,
                             "trades": rec["trades"],
                             "mean_R": rec[column],
+                            "median_R": rec.get(f"medR_{name}"),
                             "win%": rec.get(f"win_{name}%"),
                         }
                     )

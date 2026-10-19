@@ -37,9 +37,11 @@ def before_shot(
     pivot: float | None = None,
     order_stop: float | None = None,
     after: int = 0,
+    marks: list[tuple] | None = None,
 ) -> Path | None:
     """Draw one ticker's bars (session_date, open, high, low, close, volume) up to the signal,
-    plus `after` sessions past it (the EP history study shows what happened next).
+    plus `after` sessions past it (the EP history study shows what happened next). `marks`:
+    (session, price, "buy" | "sell") fills drawn as triangles (the journal's trade charts).
 
     Returns None when there are no bars to draw. Never overwrites an existing chart.
     """
@@ -72,6 +74,20 @@ def before_shot(
     for level, label, style in ((pivot, "pivot", "--"), (order_stop, "order stop", ":")):
         if level is not None and not pd.isna(level):
             ax.axhline(level, color="#424242", linestyle=style, linewidth=1, label=label)
+    for session, price, side in marks or []:
+        at = x[data["session_date"] == session]
+        if len(at):
+            up = side == "buy"
+            ax.scatter(
+                at,
+                [price],
+                marker="^" if up else "v",
+                s=90,
+                zorder=5,
+                color=UP if up else DOWN,
+                edgecolors="#212121",
+                linewidths=0.6,
+            )
     signal_x = x[data["session_date"] == signal_session]
     for axis in (ax, vol):
         for sx in signal_x:

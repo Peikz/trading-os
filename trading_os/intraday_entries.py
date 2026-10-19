@@ -19,10 +19,10 @@ bar that started before 10:30.
 | next day (EOD hits)   | open, 5-min range high/low, prior          | the signal (prior       |
 |                       | high/low break, 10:30                      | close)                  |
 
-Stops for each entry, all at least `min_stop_adr` ADR away: `lod` (the low so far, or for a
-short the high so far), `adr` (`wide_stop_adr` ADR, the same for every entry, so only the
-timing differs), plus the strategy's own: `order` (breakout order stop) and `signal` (the
-signal day's low or high for next-day entries).
+Stops for each entry, all at least `min_stop_adr` ADR and `min_stop_pct` % away: `lod` (the
+low so far, or for a short the high so far), `adr` (`wide_stop_adr` ADR, the same for every
+entry, so only the timing differs), plus the strategy's own: `order` (breakout order stop)
+and `signal` (the signal day's low or high for next-day entries).
 
 Fills: a market order at a bar's open can be stopped inside that bar; a price "at T" or a
 stop order filled inside a bar starts the stop check at the next bar (`start`).
@@ -107,7 +107,7 @@ class Book:
         self.adr, self.p, self.rows = adr, p, []
 
     def add(self, strategy, entry, side, start, price, stops: dict, **features) -> None:
-        floor = self.p["min_stop_adr"] * self.adr
+        floor = max(self.p["min_stop_adr"] * self.adr, self.p["min_stop_pct"] / 100 * price)
         stops = dict(stops) | {"adr": price - side * self.p["wide_stop_adr"] * self.adr}
         for rule, level in stops.items():
             if level is None or not np.isfinite(level):

@@ -87,6 +87,7 @@ JOURNAL_KEYS = {
     "sell_values",
     "signal_lookback_sessions",
     "signal_scans",
+    "plan_valid_sessions",
 }
 HISTORY_KEYS = {
     "massive_base_url",
@@ -137,6 +138,7 @@ INTRADAY_STUDY_KEYS = {
     "gap_superset_pct",
     "ep9m_volume_superset",
     "wide_stop_adr",
+    "min_stop_pct",
     "pace_fraction",
 }
 EP_HISTORY_KEYS = {

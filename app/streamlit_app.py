@@ -26,12 +26,20 @@ from trading_os import (
     clock,
     dashboard,
     ep_history,
+    health,
+    history,
     intraday_study,
     journal,
+    luk,
+    minervini,
     outcomes,
+    plans,
     report,
+    review,
+    sizing,
     stats,
     strategy_history,
+    tv,
     validation,
 )
 from trading_os.config import load_config
@@ -56,6 +64,7 @@ PAGES = [
     "EP history",
     "Strategy history",
     "Entries & exits",
+    "System health",
     "Validation",
 ]
 
@@ -112,7 +121,10 @@ def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
     """One stock's daily bars from the Massive files (for the EP history charts)."""
     import pyarrow.dataset as ds
 
-    table = ds.dataset(Path(folder) / "data" / "bars", format="parquet").to_table(
+    root = Path(folder) / "data" / "bars"
+    if not root.exists():
+        return pd.DataFrame(columns=["session_date", "open", "high", "low", "close", "volume"])
+    table = ds.dataset(root, format="parquet").to_table(
         filter=ds.field("ticker") == ticker
     )
     bars = table.to_pandas()
@@ -145,6 +157,105 @@ def show_table(scan: str, hits: pd.DataFrame) -> None:
             )
     view = view[[c for _, c, _ in present]].rename(columns={c: h for h, c, _ in present})
     st.dataframe(view, hide_index=True, width="stretch", column_config=config)
+
+
+@st.cache_data(ttl=3600)
+def fx_rate(folder: str, currency: str) -> float | None:
+    """Units of the account currency per USD: live from TradingView, else the rate stored with
+    the newest planned alerts, else None (then sizes are not suggested)."""
+    if currency == "USD":
+        return 1.0
+    try:
+        return tv.fetch_fx(CFG.sizing["fx_symbol"].format(currency=currency))
+    except Exception:  # offline or TradingView down: fall back to the stored rate
+        for run in dashboard.list_runs(Path(folder))[:10]:
+            cands = read_parquet(str(run.candidates))
+            if "plan_fx_rate" in cands and cands["plan_fx_rate"].notna().any():
+                return float(cands["plan_fx_rate"].dropna().iloc[0])
+    return None
+
+
+def setup_names() -> list[str]:
+    """Live scans and the study-only setups, for tagging trades and plans."""
+    return sorted({*CFG.scans, *luk.STRATEGIES, *minervini.STRATEGIES} - {"breadth"})
+
+
+@st.cache_data(ttl=600)
+def recent_bars(folder: str, tickers: tuple[str, ...], sessions: int = 10) -> pd.DataFrame:
+    """The newest daily bars of a few tickers (Massive, else EOD snapshots)."""
+    days = clock.sessions_back(CFG.schedule, dt.date.today(), sessions)
+    try:
+        bars = history.load_bars(Path(folder), days)
+    except (KeyError, ValueError, OSError):  # a snapshot without the bar columns: no marks
+        return pd.DataFrame(columns=["ticker", "session_date", "close"])
+    return bars[bars["ticker"].isin(tickers)]
+
+
+def trade_bars(folder: str, trades: pd.DataFrame) -> pd.DataFrame:
+    """Daily bars of the traded tickers over the trades' dates."""
+    if trades.empty:
+        return pd.DataFrame()
+    frames = [ticker_bars(folder, t) for t in sorted(set(trades["ticker"]))]
+    frames = [
+        f.assign(ticker=t) for f, t in zip(frames, sorted(set(trades["ticker"])), strict=True)
+    ]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+@st.cache_data(ttl=600)
+def latest_hits(folder: str) -> pd.DataFrame:
+    """Planned hits (entry, stop) of the newest run, for starting a plan from a scan."""
+    runs = dashboard.list_runs(Path(folder))
+    if not runs:
+        return pd.DataFrame()
+    cands = read_parquet(str(runs[0].candidates))
+    if "plan_entry" not in cands:
+        return pd.DataFrame()
+    keep = cands.dropna(subset=["plan_entry", "plan_stop"])
+    return keep.sort_values(["scan", "rank"])[["ticker", "scan", "plan_entry", "plan_stop"]]
+
+
+@st.cache_data(ttl=600)
+def study_by_strategy(folder: str) -> dict[str, pd.DataFrame]:
+    """History-study trades per strategy (EP-Day from the EP study, alert tier)."""
+    hist = strategy_cached(folder)
+    out = {k: v for k, v in hist.groupby("strategy")} if len(hist) else {}
+    built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
+    if built:
+        ep = pd.read_parquet(built[-1], columns=["is_ep_day", "tier", "r_21d", "r_trail_ma20"])
+        out["ep_day"] = ep[ep["is_ep_day"] & (ep["tier"] == "alert")]
+    return out
+
+
+def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
+    """Daily chart around one trade with the fills marked and the stop line."""
+    bars = ticker_bars(str(data_dir), trade["ticker"])
+    if bars.empty:
+        st.caption("No daily bars for this ticker in the data repo.")
+        return
+    end = trade.get("exit_date") if not open_trade else None
+    end = end if end is not None and end == end else bars["session_date"].max()
+    held = (bars["session_date"] > trade["entry_date"]) & (bars["session_date"] <= end)
+    after = int(held.sum()) + 5
+    buy = "buy" if trade["direction"] == "long" else "sell"
+    sell = "sell" if buy == "buy" else "buy"
+    marks = [(trade["entry_date"], trade["entry_avg"], buy)]
+    if not open_trade and trade.get("exit_avg") == trade.get("exit_avg"):
+        marks.append((trade["exit_date"], trade["exit_avg"], sell))
+    stop = pd.to_numeric(trade.get("order_stop"), errors="coerce")
+    tag = f"{trade['ticker']}_{trade['entry_date']}_{end}_{len(marks)}"
+    drawn = charts.before_shot(
+        bars,
+        Path(CHART_CACHE) / f"trade_{tag}.png",
+        title=f"{trade['ticker']} · {trade['direction']} {trade['entry_date']} → {end}",
+        signal_session=trade["entry_date"],
+        sessions=60,
+        order_stop=stop if stop == stop else None,
+        after=after,
+        marks=marks,
+    )
+    if drawn:
+        st.image(str(drawn))
 
 
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
@@ -281,6 +392,11 @@ elif page == "Watchlists":
 
 elif page == "Journal":
     st.header("Journal")
+    st.caption(
+        "Fills are the record: imported from the broker or logged here by hand (a broker fill "
+        "later replaces the matching hand-logged one). Private: stays in the data repo; "
+        "use “Save & push” to send it to GitHub."
+    )
     with st.expander("Import broker fills (CSV)"):
         st.caption("Column names are mapped in config/scans.yaml → journal.csv_columns.")
         upload = st.file_uploader("Fills export", type=["csv"])
@@ -297,44 +413,239 @@ elif page == "Journal":
                 st.error(str(exc))
             finally:
                 tmp.unlink(missing_ok=True)
+
+    account = sizing.load_account(data_dir)
+    usd_rate = fx_rate(str(data_dir), account.currency if account else "USD")
+    account_usd = account.size_usd(usd_rate) if account and usd_rate else None
     trades = dashboard.latest_journal(data_dir)
-    if trades.empty:
-        st.info("No trades yet. Import a fills export above.")
-        st.stop()
-    notes = dashboard.notes_state(data_dir)
-    graded = notes[notes["kind"] == "trade"].set_index("ref_id")["grade"].to_dict()
-    trades = trades.assign(grade=trades["trade_id"].map(graded).fillna(""))
-    with_r = trades["r_multiple"].dropna()
-    a, b, c, d = st.columns(4)
-    a.metric("Closed trades", len(trades))
-    b.metric("Win rate", f"{(trades['pnl'] > 0).mean() * 100:.0f}%")
-    c.metric("Avg R", f"{with_r.mean():.2f}" if len(with_r) else "n/a")
-    d.metric("Total P&L", f"{trades['pnl'].sum():,.0f}")
-    if len(with_r):
-        curve = trades.dropna(subset=["r_multiple"]).sort_values("exit_date")
-        st.line_chart(curve.set_index("exit_date")["r_multiple"].cumsum(), height=200)
-    cols = [
-        "ticker",
-        "direction",
-        "entry_date",
-        "exit_date",
-        "entry_avg",
-        "exit_avg",
-        "quantity",
-        "pnl",
-        "r_multiple",
-        "signal_scan",
-        "grade",
-    ]
-    st.dataframe(trades[[c for c in cols if c in trades]], hide_index=True, width="stretch")
-    pick = st.selectbox(
-        "Journal a trade",
-        trades.to_dict("records"),
-        format_func=lambda t: (
-            f"{t['ticker']} {t['entry_date']} → {t['exit_date']} ({t['pnl']:,.0f})"
-        ),
+    positions = dashboard.latest_positions(data_dir)
+    setups = setup_names()
+    tab_open, tab_log, tab_plans, tab_closed, tab_real = st.tabs(
+        ["Open positions", "Log a trade", "Plans", "Closed trades", "Real vs study"]
     )
-    grade_form("trade", pick["trade_id"], f"{pick['ticker']} trade", f"tr-{pick['trade_id']}")
+
+    with tab_open:
+        if positions.empty:
+            st.info("No open positions. Log an entry under “Log a trade” or import fills.")
+        else:
+            last = recent_bars(str(data_dir), tuple(sorted(positions["ticker"])))
+            view = review.open_risk(positions, last, account_usd)
+            a, b, c = st.columns(3)
+            a.metric("Open positions", len(view))
+            b.metric("Open P&L", f"${view['open_pnl'].sum():,.0f}")
+            heat = view.get("at_risk_pct")
+            c.metric(
+                "At risk to stops",
+                f"${view['at_risk_usd'].sum():,.0f}"
+                + (f" · {heat.sum():.1f}%" if heat is not None else ""),
+            )
+            cols = ["ticker", "direction", "entry_date", "entry_avg", "open_quantity"]
+            cols += ["order_stop", "last_close", "last_date", "open_pnl", "open_r"]
+            cols += ["at_risk_usd", "at_risk_pct", "setup"]
+            st.dataframe(
+                view[[c for c in cols if c in view]].round(2), hide_index=True, width="stretch"
+            )
+            st.caption("Valued at the newest daily close in the data repo, not live prices.")
+            pick = st.selectbox("Chart", ["—", *view["ticker"]], key="open_chart")
+            if pick != "—":
+                row = view[view["ticker"] == pick].iloc[0]
+                show_trade_chart(row, open_trade=True)
+
+    with tab_log, st.form("log-trade", clear_on_submit=True):
+        st.markdown("**Log a fill** (an entry, an add, a partial sell or the exit)")
+        a, b, c = st.columns(3)
+        day = a.date_input("Date", dt.date.today())
+        ticker = b.text_input("Ticker").strip().upper()
+        side = c.radio("Side", ["buy", "sell"], horizontal=True)
+        a, b, c = st.columns(3)
+        qty = a.number_input("Shares", min_value=0.0, step=1.0)
+        price = b.number_input("Price", min_value=0.0, step=0.01, format="%.4f")
+        fees = c.number_input("Fees", min_value=0.0, step=0.5)
+        a, b = st.columns(2)
+        setup = a.selectbox("Setup", ["", *setups])
+        stop = b.number_input("Initial stop (entries)", min_value=0.0, step=0.01, format="%.4f")
+        if st.form_submit_button("Save fill"):
+            try:
+                fill = journal.manual_fill(day, ticker, side, qty, price, fees, setup or None)
+                journal.log_manual(data_dir, CFG, fill, stop or None)
+                st.success(f"Saved: {side} {qty:g} {ticker} @ {price:g}.")
+                st.cache_data.clear()
+            except ValueError as exc:
+                st.error(str(exc))
+
+    with tab_plans:
+        plan_events = plans.load(data_dir)
+        fills = journal.reconcile(journal.load_fills(data_dir))
+        today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
+        current = plans.status(
+            plan_events, fills, CFG.schedule, CFG.journal["plan_valid_sessions"], today
+        )
+        hits = latest_hits(str(data_dir))
+        options = ["—"] + [
+            f"{r['ticker']} · {r['scan']} · buy {r['plan_entry']:.2f} stop {r['plan_stop']:.2f}"
+            for r in hits.to_dict("records")
+        ]
+        prefill = st.selectbox("Start from a scan hit (latest run)", options, key="plan_from")
+        base = hits.iloc[options.index(prefill) - 1].to_dict() if prefill != "—" else {}
+        with st.form("new-plan", clear_on_submit=True):
+            st.markdown("**New plan**")
+            a, b, c = st.columns(3)
+            pday = a.date_input("For session", today)
+            pticker = b.text_input("Ticker", base.get("ticker", "")).strip().upper()
+            direction = c.radio("Direction", ["long", "short"], horizontal=True)
+            a, b, c = st.columns(3)
+            entry = a.number_input(
+                "Entry", min_value=0.0, value=float(base.get("plan_entry") or 0.0), format="%.4f"
+            )
+            pstop = b.number_input(
+                "Stop", min_value=0.0, value=float(base.get("plan_stop") or 0.0), format="%.4f"
+            )
+            psetup = c.selectbox(
+                "Setup",
+                ["", *setups],
+                index=([""] + setups).index(base["scan"]) if base.get("scan") in setups else 0,
+            )
+            suggestion = None
+            if account and usd_rate and entry and pstop:
+                suggestion = plans.shares_for(
+                    entry,
+                    pstop,
+                    account.risk_usd(usd_rate),
+                    account.size_usd(usd_rate),
+                    account.max_position_pct,
+                )
+            shares = st.number_input(
+                "Shares (suggested from your risk per trade)",
+                min_value=0,
+                value=int(suggestion["shares"]) if suggestion else 0,
+                step=1,
+            )
+            note = st.text_input("Note")
+            if st.form_submit_button("Save plan"):
+                try:
+                    plans.create(
+                        data_dir, pday, pticker, direction, entry, pstop, shares, psetup, note
+                    )
+                    st.success("Plan saved.")
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+        if suggestion:
+            st.caption(
+                f"Suggested: {suggestion['shares']:,} shares · ${suggestion['position_usd']:,.0f}"
+                f" · risk ${suggestion['risk_usd']:,.0f}"
+                + (" (capped by max position)" if suggestion["capped"] else "")
+            )
+        if current.empty:
+            st.info("No plans yet.")
+        else:
+            cols = ["status", "session_date", "ticker", "direction", "setup", "entry", "stop"]
+            cols += ["shares", "risk_usd", "fill_date", "fill_price", "slippage_pct"]
+            cols += ["slippage_r", "note", "plan_id"]
+            st.dataframe(
+                current[[c for c in cols if c in current]].round(3),
+                hide_index=True,
+                width="stretch",
+            )
+            open_ids = current.loc[current["status"] == "open", "plan_id"].tolist()
+            if open_ids:
+                a, b = st.columns([3, 1])
+                gone = a.selectbox("Cancel an open plan", open_ids, key="plan_cancel")
+                if b.button("Cancel plan"):
+                    plans.cancel(data_dir, gone)
+                    st.rerun()
+
+    with tab_closed:
+        if trades.empty:
+            st.info("No closed trades yet.")
+        else:
+            notes = dashboard.notes_state(data_dir)
+            graded = notes[notes["kind"] == "trade"].set_index("ref_id")["grade"].to_dict()
+            trades = trades.assign(grade=trades["trade_id"].map(graded).fillna(""))
+            bars = trade_bars(str(data_dir), trades)
+            trades = review.excursions(trades, bars)
+            with_r = trades["r_multiple"].dropna()
+            a, b, c, d = st.columns(4)
+            a.metric("Closed trades", len(trades))
+            b.metric("Win rate", f"{(trades['pnl'] > 0).mean() * 100:.0f}%")
+            c.metric("Avg R", f"{with_r.mean():.2f}" if len(with_r) else "n/a")
+            d.metric("Total P&L", f"{trades['pnl'].sum():,.0f}")
+            if len(with_r):
+                curve = trades.dropna(subset=["r_multiple"]).sort_values("exit_date")
+                st.line_chart(curve.set_index("exit_date")["r_multiple"].cumsum(), height=200)
+            cols = ["ticker", "direction", "setup", "entry_date", "exit_date", "entry_avg"]
+            cols += ["exit_avg", "quantity", "pnl", "r_multiple", "mfe_r", "mae_r"]
+            cols += ["exit_efficiency", "sessions_held", "signal_scan", "grade"]
+            st.dataframe(
+                trades[[c for c in cols if c in trades]].round(2),
+                hide_index=True,
+                width="stretch",
+            )
+            st.caption(
+                "MFE/MAE: best and worst price from the session after entry to the exit, in R. "
+                "Exit efficiency: the R you took as a share of the MFE."
+            )
+            pick = st.selectbox(
+                "Review a trade",
+                trades.to_dict("records"),
+                format_func=lambda t: (
+                    f"{t['ticker']} {t['entry_date']} → {t['exit_date']} ({t['pnl']:,.0f})"
+                ),
+            )
+            show_trade_chart(pick)
+            grade_form(
+                "trade", pick["trade_id"], f"{pick['ticker']} trade", f"tr-{pick['trade_id']}"
+            )
+
+    with tab_real:
+        if trades.empty:
+            st.info("Your real R per setup shows here once trades are closed.")
+        else:
+            daily = study_by_strategy(str(data_dir))
+            minute = intraday_cached(str(data_dir))
+            best = intraday_study.best(intraday_study.summary(minute), 50) if len(minute) else None
+            table = review.real_vs_study(trades, daily, best)
+            st.dataframe(table.round(2), hide_index=True, width="stretch")
+            st.caption(
+                "Study = the history replay of the same strategy (entry at the signal, its stop): "
+                "21-session hold and 20-day MA trail; minute best = the minute study's best "
+                "entry, stop and exit. The gap between your R and the study's is execution "
+                "(entries, exits, selection). Facts, not advice."
+            )
+
+elif page == "System health":
+    st.header("System health")
+    now = dt.datetime.now(dt.UTC)
+    st.caption(
+        "From your local copy of the data repo: pull first (sidebar) to see the latest runs."
+    )
+    st.subheader("Runs per session")
+    st.dataframe(health.run_grid(data_dir, CFG.schedule, now, 15), hide_index=True, width="stretch")
+    st.caption(
+        "✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · "
+        "⏳ not due yet. pm 07:15-07:55, am 10:10-11:30, mid 11:55-13:30, eod 16:15-23:59 ET."
+    )
+    st.subheader("Data freshness")
+    st.dataframe(health.freshness(data_dir, CFG.schedule, now), hide_index=True, width="stretch")
+    st.subheader("Failures (newest first)")
+    failures = health.errors(data_dir)
+    if failures.empty:
+        st.success("No failure logs.")
+    else:
+        st.dataframe(failures, hide_index=True, width="stretch")
+    st.subheader("GitHub runs")
+    if st.button("Load the latest runs from GitHub"):
+        st.session_state["gh_runs"] = health.github_runs()
+    gh_runs = st.session_state.get("gh_runs")
+    if gh_runs is not None:
+        if gh_runs.empty:
+            st.warning("No answer from GitHub (is the gh CLI installed and signed in?).")
+        else:
+            st.dataframe(gh_runs, hide_index=True, width="stretch")
+            st.caption(
+                "minutes_late: how long after its cron GitHub started a scheduled run. A run "
+                "that starts after its window closes exits without scanning."
+            )
 
 elif page == "Graded signals":
     st.header("Graded signals")

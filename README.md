@@ -127,11 +127,10 @@ computer only. Never deploy it from this public repo with data in it.
 
 1. Install Tailscale on this PC (tailscale.com/download) and on your phone; sign in with the
    same account on both.
-2. In the Tailscale admin console → DNS, turn on MagicDNS and HTTPS certificates.
-3. Start the dashboard with `scripts\start_dashboard.ps1`. It runs `tailscale serve --bg 8501`,
-   which publishes the app at `https://<this-pc>.<your-tailnet>.ts.net` to your devices only;
-   the app itself stays on localhost.
-4. Open that address on your phone (the PC has to be on).
+2. Start the dashboard with `scripts\start_dashboard.ps1`. It runs `tailscale serve --bg --http=80
+   8501`, which publishes the app at `http://<this-pc>.<your-tailnet>.ts.net` to your devices
+   only; the app itself stays on localhost.
+3. Open that address on your phone (the PC has to be on).
 
 ## Secrets
 

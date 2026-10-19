@@ -127,6 +127,12 @@ def latest_journal(data_dir: Path) -> pd.DataFrame:
     return pd.read_parquet(snapshots[-1]) if snapshots else pd.DataFrame()
 
 
+def latest_positions(data_dir: Path) -> pd.DataFrame:
+    """Open positions from the newest journal rebuild."""
+    snapshots = sorted((Path(data_dir) / "data" / "journal").glob("positions_*.parquet"))
+    return pd.read_parquet(snapshots[-1]) if snapshots else pd.DataFrame()
+
+
 # --- human inputs: grades, notes, screenshots (append-only events)
 
 

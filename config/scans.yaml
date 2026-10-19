@@ -208,6 +208,8 @@ journal:                                    # Phase 4: broker fills -> trades wi
   buy_values: [buy, b, bought]
   sell_values: [sell, s, sold]
   signal_lookback_sessions: 5               # link a trade to a signal from the last N sessions
+  plan_valid_sessions: 5                    # (proposed) a trade plan stays open this many
+                                            # sessions after its day, then expires
   signal_scans: [breakout_trigger, breakout_watch, ep_day, ep_pm, ep9m]
 
 history:                                    # Phase 2: Massive (formerly Polygon.io) grouped daily bars
@@ -267,6 +269,8 @@ intraday_study:                             # minute-bar entries and exits (Emil
   gap_superset_pct: 3                       # (proposed) fetch every opening gap >= 3 % ...
   ep9m_volume_superset: 1_500_000           # (proposed) ... and every +4 % day with >= 1.5M
   wide_stop_adr: 1.0                        # (proposed) the same-distance stop for every entry
+  min_stop_pct: 1.0                         # (proposed) no stop closer than 1 % of the entry
+                                            # (with 0.25 ADR: a quiet stock's stop was cents)
   pace_fraction: {"10:15": 0.22, "12:00": 0.42}  # (proposed) share of a normal day's volume
                                             # done by then; EP9M "on pace" = volume so far /
                                             # this >= 9M (the live scan uses TradingView's
