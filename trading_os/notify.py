@@ -65,6 +65,11 @@ SECTION_ICONS = {
     "growth_bucket_1": "📈",
     "growth_bucket_2": "📈",
 }
+# What the B-flag squares stand for, in order (SPEC §6.4); 🟩 passed, 🟥 failed.
+FLAG_LEGENDS = {
+    "breakout_trigger": "B: move · base · trend · tight · trigger",
+    "breakout_watch": "B: move · base · trend · tight",
+}
 # Short names for the notification title.
 TITLE_LABELS = {
     "ep_day": "EP",
@@ -353,6 +358,8 @@ def build_message(
         icon = SECTION_ICONS.get(name, "")
         header = f"━━ {icon} {label}{legend} · {size} ━━".replace("  ", " ")
         lines += [Line("gap", ""), Line("section", header)]
+        if name in FLAG_LEGENDS:
+            lines.append(Line("note", FLAG_LEGENDS[name]))
         for row in chosen.to_dict("records"):
             ticker = row["ticker"]
             if ticker in shown:
@@ -362,7 +369,9 @@ def build_message(
                 shown[ticker] = label
                 block = _block(row, name, ctx.slot)
             # A blank line between stocks, except between two one-line entries.
-            if lines[-1].role != "section" and (len(block) > 1 or lines[-1].role != "hit"):
+            if lines[-1].role not in ("section", "note") and (
+                len(block) > 1 or lines[-1].role != "hit"
+            ):
                 lines.append(Line("gap", ""))
             lines += block
         if len(partial):

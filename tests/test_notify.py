@@ -249,9 +249,10 @@ def test_full_setups_get_blocks_and_b5_only_get_one_line_each():
     assert msg.title == f"EOD Mon 19 Oct {DOT} BO 1 {DOT} B5-only 3"
     body = msg.body.splitlines()
     assert body[0] == f"━━ 🚀 Breakout {DOT} 1 of 4 ━━"
-    assert body[1] == "▸ BO0  +3.0%  RVOL 2.0  B🟩🟩🟩🟩🟩"
-    assert body[2] == f"   Pivot 10.00 {DOT} 🛑 9.50"
-    assert body[3:] == [
+    assert body[1] == f"B: move {DOT} base {DOT} trend {DOT} tight {DOT} trigger"
+    assert body[2] == "▸ BO0  +3.0%  RVOL 2.0  B🟩🟩🟩🟩🟩"
+    assert body[3] == f"   Pivot 10.00 {DOT} 🛑 9.50"
+    assert body[4:] == [
         "",
         f"B5 only {DOT} top 3 of 3:",
         "▸ BO1  +4.0%  RVOL 2.0  B🟩🟥🟩🟥🟩",
@@ -264,7 +265,8 @@ def test_b5_only_shown_under_a_section_without_full_setups():
     cfg = load_config()
     results = {"breakout_trigger": triggers().iloc[1:]}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.body.splitlines()[:2] == [
+    assert msg.body.splitlines()[:3] == [
         f"━━ 🚀 Breakout {DOT} no full setup ━━",
+        f"B: move {DOT} base {DOT} trend {DOT} tight {DOT} trigger",
         f"B5 only {DOT} top 3 of 3:",
     ]
