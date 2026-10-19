@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from trading_os.store import AlreadyWritten
+from trading_os.store import PARQUET_OPTIONS, AlreadyWritten
 
 BAR_COLUMNS = [
     "session_date",
@@ -74,7 +74,7 @@ def write_bars(data_dir: Path, source: str, session: dt.date, bars: pd.DataFrame
         raise ValueError(f"bars missing columns {sorted(missing)}")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    bars[BAR_COLUMNS].to_parquet(tmp, index=False)
+    bars[BAR_COLUMNS].to_parquet(tmp, **PARQUET_OPTIONS)
     tmp.rename(path)
     return path
 

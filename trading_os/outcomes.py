@@ -25,7 +25,7 @@ import pandas as pd
 from trading_os import clock, history
 from trading_os.config import load_config
 from trading_os.logsafe import run_guarded, status
-from trading_os.store import AlreadyWritten
+from trading_os.store import PARQUET_OPTIONS, AlreadyWritten
 
 OUTCOME_COLUMNS = [
     "signal_id",
@@ -146,7 +146,7 @@ def write_outcomes(data_dir: Path, run_session: dt.date, outcomes: pd.DataFrame)
         raise AlreadyWritten(path.name)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    outcomes.to_parquet(tmp, index=False)
+    outcomes.to_parquet(tmp, **PARQUET_OPTIONS)
     tmp.rename(path)
     return path
 

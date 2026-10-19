@@ -89,6 +89,7 @@ word and I flip it.
 | 13 | EP-Day ranking and `[earnings]` flag | Largest gap first; earnings on the signal session or the one before | `scans/ep.py` |
 
 Still open (no default possible):
+- **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
 - Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
 - **CATS score** (Phase 2): SPEC lists the parts (growth-bucket hit + recent MB/EP + RVOL trend − extension penalty) but no weights or windows.
 
