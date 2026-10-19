@@ -155,21 +155,20 @@ def scan_count(df: pd.DataFrame, cfg: Config) -> int:
 def latest_scan_count(data_dir: Path, session: dt.date) -> tuple[int | None, dt.date | None]:
     """The most recent Sunday scan count on or before `session`."""
     files = sorted((Path(data_dir) / "data" / "market_light_count").glob("*/*.parquet"))
-    best = None
+    best, best_day = None, None
     for f in files:
-        day = dt.date.fromisoformat(f.stem)
+        day = dt.date.fromisoformat(f.stem.split("_")[0])
         if day <= session:
-            best = f
+            best, best_day = f, day
     if best is None:
         return None, None
     row = pd.read_parquet(best).iloc[0]
-    return int(row["scan_count"]), dt.date.fromisoformat(best.stem)
+    return int(row["scan_count"]), best_day
 
 
 def stored_qqq_sma20(data_dir: Path, session: dt.date) -> float:
-    path = (
-        Path(data_dir) / "data" / "breadth" / str(session.year) / f"{session.isoformat()}.parquet"
-    )
+    name = f"{session.isoformat()}_eod.parquet"
+    path = Path(data_dir) / "data" / "breadth" / str(session.year) / name
     if not path.exists():
         return float("nan")
     return float(pd.read_parquet(path, columns=["qqq_sma20"]).iloc[0]["qqq_sma20"])

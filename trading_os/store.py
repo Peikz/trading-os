@@ -129,8 +129,8 @@ def run_paths(data_dir: Path, ctx: RunContext, extras: tuple[str, ...] = ()) -> 
         "universe": root / "universe" / year / f"{stem}.parquet",
         "candidates": root / "candidates" / year / f"{stem}.parquet",
         "export": root / "exports" / f"{stem}.xlsx",
-        # One row per session (breadth, the Sunday scan count): data/<name>/YYYY/<date>.parquet
-        **{name: root / name / year / f"{ctx.session.isoformat()}.parquet" for name in extras},
+        # Per-run tables (breadth, scan count, watchlist events): data/<name>/YYYY/<stem>.parquet
+        **{name: root / name / year / f"{stem}.parquet" for name in extras},
     }
 
 

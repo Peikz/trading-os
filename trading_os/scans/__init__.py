@@ -7,7 +7,7 @@ from collections.abc import Callable
 import pandas as pd
 
 from trading_os.config import Config, ScanConfig
-from trading_os.scans.ep import ep9m, ep9m_early, ep_ah, ep_day, ep_pm
+from trading_os.scans.ep import ep9m, ep9m_early, ep_ah, ep_day, ep_pm, watchlist_gappers
 from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
@@ -23,6 +23,7 @@ ScanFn = Callable[[pd.DataFrame, ScanConfig], pd.DataFrame]
 REGISTRY: dict[str, ScanFn] = {
     "ep_pm": ep_pm,
     "ep9m_early": ep9m_early,
+    "watchlist_gappers": watchlist_gappers,
     "ep_day": ep_day,
     "ep_ah": ep_ah,
     "ep9m": ep9m,

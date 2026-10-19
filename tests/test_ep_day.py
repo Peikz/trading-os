@@ -85,4 +85,5 @@ def test_run_scans_picks_enabled_scans_per_slot():
         "breakout_watch",
         "breakout_trigger",
     ]
-    assert list(run_scans(pd.DataFrame([full]), cfg, "pm")) == ["ep_pm", "ep9m_early"]
+    pm = list(run_scans(pd.DataFrame([full]), cfg, "pm"))
+    assert pm == ["ep_pm", "ep9m_early", "watchlist_gappers"]

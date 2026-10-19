@@ -137,6 +137,11 @@ market_light:                               # SPEC §6.5 — owner's rules, do n
     red_count_below: 15
     green_count_min: 50
 
+watchlists:                                 # SPEC §7 (proposed rules, pending Emil)
+  ep_watch_sources: [ep_day, ep_pm]         # alert-tier hits that enter EP-Watch
+  ep_watch_max_sessions: 63                 # an EP-Watch entry expires after ~3 months
+  bo_watch_stale_sessions: 10               # BO-Watch expires after 10 sessions without B1-B4
+
 breakout:                                   # SPEC §6.4. (proposed) = default, confirm in
                                             # the hand audit of 20 hits (SPEC §9, Phase 2)
   prior_move_min_pct: 30                    # B1: up >= 30 %

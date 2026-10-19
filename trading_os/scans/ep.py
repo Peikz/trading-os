@@ -40,6 +40,19 @@ def ep9m_early(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     return ranked(out, hit, "pm_volume")
 
 
+def watchlist_gappers(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Names on the configured watchlists gapping in pre-market. Ranked by the gap.
+
+    Membership comes from the `on_<list>` columns the job adds from the watchlist state.
+    """
+    out = df.assign(pm_gap_used=df[PM_GAP_COLUMNS[scan["pm_gap_basis"]]])
+    on_list = pd.Series(False, index=out.index)
+    for name in scan["lists"]:
+        on_list |= out.get(f"on_{name}", pd.Series(False, index=out.index)).fillna(False)
+    hit = on_list & (out["pm_gap_used"] >= scan["pm_gap_min_pct"])
+    return ranked(out, hit.astype(bool), "pm_gap_used")
+
+
 def ep_day(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """EP-Day: gap, RVOL, volume, price and market-cap floors. Ranked by gap, largest first."""
     hit = (

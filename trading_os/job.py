@@ -26,6 +26,7 @@ from trading_os import (
     store,
     tv,
     universe,
+    watchlists,
 )
 from trading_os.config import load_config
 from trading_os.history_metrics import LOOKBACK_SESSIONS
@@ -103,8 +104,23 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
 
+    state = watchlists.current(watchlists.load_events(args.data_dir))
+    for name in watchlists.LISTS:
+        uni[f"on_{name}"] = uni["ticker"].isin(watchlists.active(state, name))
     results = run_scans(uni, cfg, slot)
     extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
+    if slot in ("pm", "eod"):
+        events = watchlists.update(
+            state,
+            results,
+            session,
+            slot,
+            lambda day: len(clock.sessions_after(cfg.schedule, day, 10_000, session)),
+            cfg.watchlists,
+        )
+        if not events.empty:
+            extras["watchlists"] = events
+        status(f"Watchlists: {len(events)} events")
     selected = notify.select_for_push(results, cfg)
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
