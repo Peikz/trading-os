@@ -21,6 +21,7 @@ from trading_os import (
     charts,
     clock,
     enrich,
+    epstudy,
     history,
     metrics,
     notify,
@@ -158,6 +159,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     _report(ctx, cfg, results, selected, header, drawn, outputs["report"])
     if slot == "weekly":
         _stats(args.data_dir, cfg, session, outputs["stats"])
+    if slot == "eod" and not ctx.forced:
+        _epstudy(cfg, candidates)
     if push_error is not None:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
@@ -201,6 +204,25 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
     return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)
+
+
+def _epstudy(cfg, candidates: pd.DataFrame) -> None:
+    """Phase 3 Breakout Log rows. Off unless configured; never fails the run."""
+    conf = cfg.epstudy
+    secret = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if not conf["enabled"]:
+        return
+    if not conf["sheet_id"] or not secret:
+        status("EPStudy: enabled but sheet_id or GOOGLE_SERVICE_ACCOUNT_JSON missing, skipped")
+        return
+    try:
+        columns = list(conf["columns"])
+        rows = epstudy.rows_for(candidates, conf["scans"], columns)
+        http = epstudy.session_from_secret(secret)
+        added = epstudy.append_new(http, conf["sheet_id"], conf["worksheet"], columns, rows)
+        status(f"EPStudy: {added} rows appended")
+    except Exception as exc:  # noqa: BLE001 - auxiliary; the data is already saved
+        status(f"EPStudy: FAILED ({type(exc).__name__}), run data unaffected")
 
 
 def _stats(data_dir: Path, cfg, session, path: Path) -> None:

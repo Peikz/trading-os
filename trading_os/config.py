@@ -33,6 +33,7 @@ TOP_LEVEL_KEYS = {
     "watchlists",
     "cats",
     "breakout",
+    "epstudy",
     "history",
     "outcomes",
     "charts",
@@ -67,6 +68,7 @@ BREAKOUT_KEYS = {
     "trigger_rvol_min",
     "stop_adr_mult",
 }
+EPSTUDY_KEYS = {"enabled", "sheet_id", "worksheet", "scans", "columns"}
 HISTORY_KEYS = {
     "massive_base_url",
     "calls_per_minute",
@@ -227,6 +229,7 @@ class Config:
     watchlists: Mapping[str, Any]
     cats: Mapping[str, Any]
     breakout: Mapping[str, Any]
+    epstudy: Mapping[str, Any]
     history: Mapping[str, Any]
     outcomes: Mapping[str, Any]
     charts: Mapping[str, Any]
@@ -271,6 +274,9 @@ def parse_config(raw: Any) -> Config:
     _check_keys("cats", raw["cats"], CATS_KEYS)
     _check_keys("breakout", raw["breakout"], BREAKOUT_KEYS)
     _check_numbers("breakout", raw["breakout"])
+    _check_keys("epstudy", raw["epstudy"], EPSTUDY_KEYS)
+    if "signal_id" not in raw["epstudy"]["columns"]:
+        raise ConfigError("epstudy.columns: must include signal_id (used to skip duplicates)")
     _check_keys("history", raw["history"], HISTORY_KEYS)
     _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
     _check_keys("charts", raw["charts"], CHART_KEYS)
@@ -288,6 +294,7 @@ def parse_config(raw: Any) -> Config:
         watchlists=_freeze(raw["watchlists"]),
         cats=_freeze(raw["cats"]),
         breakout=_freeze(raw["breakout"]),
+        epstudy=_freeze(raw["epstudy"]),
         history=_freeze(raw["history"]),
         outcomes=_freeze(raw["outcomes"]),
         charts=_freeze(raw["charts"]),

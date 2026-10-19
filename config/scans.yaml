@@ -171,6 +171,14 @@ breakout:                                   # SPEC §6.4. (proposed) = default, 
   trigger_rvol_min: 1.5                     # B5: RVOL >= 1.5
   stop_adr_mult: 1.0                        # order stop = max(last contraction low, pivot - 1 x ADR $)
 
+epstudy:                                    # Phase 3: Breakout Log rows in the EPStudyDatabase sheet
+  enabled: false                            # needs sheet_id + secret GOOGLE_SERVICE_ACCOUNT_JSON
+  sheet_id: ""                              # from the sheet URL: /spreadsheets/d/<sheet_id>/
+  worksheet: Breakout Log
+  scans: [breakout_trigger, breakout_watch]
+  columns: [session_date, scan, ticker, tier, pivot, order_stop, risk_adr, base_len,
+            contraction_depths, b1, b2, b3, b4, b5, signal_id]  # (proposed) match the sheet
+
 history:                                    # Phase 2: Massive (formerly Polygon.io) grouped daily bars
   massive_base_url: https://api.massive.com
   calls_per_minute: 5                       # free-tier limit (CLAUDE.md)
