@@ -1,6 +1,7 @@
 # End-of-day job (SPEC §3): target 16:20 New York.
-# Two crons, one per US DST state; scripts/eod.py exits unless New York time is in
-# 16:15-17:30 on a trading day, and skips a session that is already saved.
+# Two crons, one per US DST state, plus a late fallback; scripts/eod.py exits unless New York
+# time is in 16:15-23:59 on a trading day, and skips a session that is already saved. GitHub
+# can start (or drop) scheduled runs hours late: the wide window and the third cron cover that.
 # This repo is public and so are these logs: the job prints counts and status only.
 
 name: EOD
@@ -9,6 +10,7 @@ on:
   schedule:
     - cron: "17 20 * * 1-5"   # 16:17 EDT
     - cron: "17 21 * * 1-5"   # 16:17 EST
+    - cron: "47 23 * * 1-5"   # 19:47 EDT / 18:47 EST: fallback if both above were dropped
   workflow_dispatch:
     inputs:
       force:

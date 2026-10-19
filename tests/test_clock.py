@@ -17,14 +17,16 @@ def utc(y, m, d, hh, mm):
     return dt.datetime(y, m, d, hh, mm, tzinfo=UTC)
 
 
-# The eod workflow fires at 20:17 and 21:17 UTC. Exactly one of them lands in 16:15-17:30 ET
-# in winter; in summer both do and the second one exits on "already done".
+# The eod workflow fires at 20:17, 21:17 and 23:47 UTC. The window runs 16:15-23:59 ET, so a
+# cron GitHub starts hours late still counts; later ones exit on "already done".
 @pytest.mark.parametrize(
     ("now", "expected"),
     [
         (utc(2026, 10, 19, 20, 17), True),  # Mon, EDT: 16:17 ET
         (utc(2026, 10, 19, 21, 17), True),  # Mon, EDT: 17:17 ET
         (utc(2026, 10, 19, 20, 10), False),  # 16:10 ET, too early
+        (utc(2026, 10, 20, 2, 30), True),  # Mon 22:30 EDT: hours late, still the session
+        (utc(2026, 10, 20, 4, 30), False),  # Tue 00:30 EDT: past midnight, too late
         (utc(2026, 10, 26, 20, 17), True),  # after EU DST change (25 Oct), US still EDT
         (utc(2026, 11, 2, 20, 17), False),  # after US DST change (1 Nov): 15:17 EST
         (utc(2026, 11, 2, 21, 17), True),  # 16:17 EST

@@ -61,7 +61,9 @@ non-trading days, because EU and US daylight-saving changes happen on different 
 
 Implementation: schedule each workflow with two UTC crons (one per DST state) plus a guard in the
 script that exits unless New York time is inside the target window (premarket 07:15–07:55 ET,
-eod 16:15–17:30 ET). GitHub cron can start 5–15 min late; schedule early, let the guard decide.
+eod 16:15–23:59 ET, widened by Emil 20 Oct 2026 after GitHub ran crons 5 h late; a third, later
+EOD cron is the fallback). GitHub cron can start minutes to hours late; schedule early, let the guard
+decide.
 All workflows also get `workflow_dispatch` for manual runs.
 
 ---

@@ -43,7 +43,9 @@ schedule:                                   # SPEC §3
     pm: ["07:15", "07:55"]
     am: ["10:10", "11:30"]                  # intraday checks (Emil, 19 Oct 2026)
     mid: ["11:55", "13:30"]
-    eod: ["16:15", "17:30"]
+    eod: ["16:15", "23:59"]                 # until midnight (Emil, 20 Oct 2026): GitHub's
+                                            # scheduler ran 5 h late on 19 Oct; the closing
+                                            # data is the same at 23:00 as at 16:20
   weekly_day: Sunday                        # New York date; the job reports the week's last session
 
 scans:

@@ -16,7 +16,7 @@ def raw():
 def test_default_config_loads():
     cfg = load_config()
     assert cfg.version == 1
-    assert cfg.schedule.windows_et["eod"] == (dt.time(16, 15), dt.time(17, 30))
+    assert cfg.schedule.windows_et["eod"] == (dt.time(16, 15), dt.time(23, 59))
     assert cfg.schedule.windows_et["pm"] == (dt.time(7, 15), dt.time(7, 55))
 
 
