@@ -62,6 +62,9 @@ Two more local helpers (both print tickers, so never in Actions):
   Phase 1 validation, with the reason for every difference.
 - `scripts/build_duckdb.py` (`uv run --group analysis ...`) builds a views-only DuckDB file
   over the data repo for ad-hoc queries and Power BI.
+- `scripts/import_fills.py` imports a broker fills CSV into the trade journal (Phase 4):
+  trades flat to flat, linked to their signal, with R-multiples. See `docs/powerbi.md` for
+  Power BI on top.
 
 ## Secrets
 

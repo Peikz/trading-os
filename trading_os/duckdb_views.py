@@ -17,6 +17,9 @@ VIEWS = {
     "candidates": "data/candidates/*/*.parquet",
     "outcomes": "data/outcomes/*/*.parquet",
     "bars_massive": "data/bars/massive/*/*.parquet",
+    "breadth": "data/breadth/*/*.parquet",
+    "watchlists": "data/watchlists/*/*.parquet",
+    "market_light_count": "data/market_light_count/*/*.parquet",
     "manual_candidates": "data/manual/*/candidates.parquet",
 }
 
