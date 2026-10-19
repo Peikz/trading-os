@@ -96,18 +96,38 @@ def _fields(row: dict, prefix: str) -> dict:
     return out
 
 
+def pick(hits: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
+    """Half of `n` from each kind (watch, trigger), one hit per stock so a base seen on several
+    days is audited once; a short kind's share goes to the other."""
+    if hits.empty:
+        return hits
+    shuffled = hits.sample(frac=1, random_state=seed)
+    kinds = {k: g.drop_duplicates("ticker") for k, g in shuffled.groupby("kind")}
+    want = {k: min(len(g), n // len(kinds)) for k, g in kinds.items()}
+    spare = n - sum(want.values())
+    for k, g in sorted(kinds.items(), key=lambda kv: len(kv[1]), reverse=True):
+        extra = min(spare, len(g) - want[k])
+        want[k] += extra
+        spare -= extra
+    parts = [g.sample(n=want[k], random_state=seed) for k, g in kinds.items() if want[k]]
+    return pd.concat(parts)
+
+
 def write_sheet(
     hits: pd.DataFrame, bars: pd.DataFrame, data_dir: Path, n: int, seed: int, today: dt.date
 ) -> Path:
     """Sample `n` hits and write the audit sheet with charts."""
     folder = Path(data_dir) / "docs" / f"breakout_audit_{today.isoformat()}"
-    picked = hits.sample(n=min(n, len(hits)), random_state=seed) if len(hits) else hits
+    picked = pick(hits, n, seed)
+    counts = hits["kind"].value_counts().to_dict() if len(hits) else {}
     lines = [
         f"# Breakout hand audit · {today.isoformat()}",
         "",
         f"{len(picked)} random hits out of {len(hits)} found by replaying B1-B5 over Massive "
-        f"history (seed {seed}). Tick each criterion you agree with; note what the code got "
-        "wrong.",
+        f"history (seed {seed}): {counts.get('watch', 0)} BO-Watch (B1-B4 pass) and "
+        f"{counts.get('trigger', 0)} triggers (B5). Half the sample is drawn from each kind, so "
+        "the rare BO-Watch hits get audited too. Tick each criterion you agree with; note what "
+        "the code got wrong.",
         "",
     ]
     by_ticker = {t: g for t, g in bars.groupby("ticker")}

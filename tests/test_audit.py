@@ -49,3 +49,16 @@ def test_replay_finds_the_textbook_breakout(tmp_path):
 def test_main_without_history(tmp_path, capsys):
     assert audit.main(["--data-dir", str(tmp_path)]) == 1
     assert "not enough history" in capsys.readouterr().out
+
+
+def test_pick_draws_half_from_each_kind():
+    hits = pd.DataFrame(
+        {"kind": ["watch"] * 3 + ["trigger"] * 50, "ticker": [f"T{i}" for i in range(53)]}
+    )
+    picked = audit.pick(hits, 20, seed=1)
+    assert picked["kind"].value_counts().to_dict() == {"trigger": 17, "watch": 3}
+    even = audit.pick(pd.concat([hits, hits.assign(kind="watch")]), 20, seed=1)
+    assert even["kind"].value_counts().to_dict() == {"trigger": 10, "watch": 10}
+    repeats = pd.DataFrame({"kind": ["watch"] * 4 + ["trigger"] * 4, "ticker": list("AABBCDEF")})
+    assert len(audit.pick(repeats, 20, seed=1)) == 6  # A and B once each
+    assert audit.pick(hits.iloc[0:0], 20, seed=1).empty
