@@ -7,7 +7,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 ### Setup
 - [x] Emil: create public repo `trading-os` (add SPEC.md, CLAUDE.md, BACKLOG.md, `.github/workflows/claude-backlog.yml`) and private repo `trading-os-data` — done 18 Oct via gh; backlog worker disabled until START-HERE Step 6
 - [ ] Emil: fine-grained PAT with contents read/write on `trading-os-data` only → secret `DATA_REPO_TOKEN` in `trading-os`
-- [ ] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules) — built in `eod.yml`, `premarket.yml` and `weekly.yml`, waiting for the first Actions run
+- [ ] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules) — built in `eod.yml`, `premarket.yml` and `weekly.yml`; the scan side already ran green on GitHub (`Pipeline check`, 19 Oct: TradingView reachable from Actions, public log counts only); the commit/push side waits for `DATA_REPO_TOKEN`
 - [x] Project skeleton: `pyproject.toml`, `ruff`, `pytest`, package layout per CLAUDE.md
 - [x] `config/scans.yaml` with every threshold from SPEC.md §4 and §6 (Phase 1 scans)
 - [x] Market calendar + New York time guard (premarket / eod windows, holidays)
@@ -22,7 +22,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run
 - [ ] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run
 - [ ] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run
-- [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive, or our own EOD snapshots). History-source question below still open
+- [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive backfill, or our own EOD snapshots; default 1 in Questions)
 - [ ] Breadth line + Market Light count — built: breadth row daily (`data/breadth/`), two push lines, light from the owner's table; Sunday scan count (`data/market_light_count/`). Light shows once QQQ's 5-session SMA20 slope and 10 days of counts exist; defaults 1, 4, 5 in Questions
 - [ ] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run
 
@@ -115,3 +115,4 @@ Still open (no default possible):
 - 2026-10-19 (later): Breadth also runs pre-market (Emil): today's Market Light, last close's breadth, pre-market movers and QQQ pre-market at the top of the pre-market push (SPEC §6.1, §11.9). Dashboard shows them; smoke test covers every page. Tailscale chosen for phone access; start script added.
 - 2026-10-19 (later): Massive key verified live; backfill window capped by date with 403 skip; breakout audit replay ready for after the backfill.
 - 2026-10-19 (later): Exact history metrics replace the TradingView proxies row by row as soon as history exists (SPEC §11.6 note); Phase 1 metrics item ticked.
+- 2026-10-19 (later): `Pipeline check` workflow ran EOD, pre-market and weekly on GitHub's runners (forced, no push): TradingView answers from Actions (4,517 rows), charts and reports work on Linux, public log has no tickers. Only the data-repo commit and the ntfy push are untested, both waiting for the secrets.
