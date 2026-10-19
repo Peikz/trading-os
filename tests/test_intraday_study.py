@@ -4,6 +4,7 @@ import datetime as dt
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from trading_os import intraday_study as s
 from trading_os.config import load_config
@@ -188,3 +189,22 @@ def test_long_candidates_come_year_by_year_from_the_yearly_files(tmp_path):
     assert min(cands["session_date"]) >= dt.date(2019, 1, 1)  # 2018 is lead-in only
     sessions = s.calendar_sessions(CFG, 2019, gap_day)
     assert sessions[0] < dt.date(2019, 1, 2) and sessions[-1] == gap_day
+
+
+def test_aggregate_pools_the_years_and_keeps_a_per_year_view(tmp_path):
+    for year, r in ((2019, [1.0, -1.0]), (2020, [3.0, -1.0])):
+        pd.DataFrame(
+            {
+                "strategy": "ep",
+                "entry": "open",
+                "stop_rule": "adr",
+                "session_date": [dt.date(year, 3, 1)] * 2,
+                "ticker": [A, B],
+                "r_hold_5d": r,
+                "stopped_0d": [False, False],
+            }
+        ).to_parquet(tmp_path / f"intraday_{year}.parquet")
+    overall, by_year = s.aggregate(tmp_path)
+    row = overall.iloc[0]
+    assert row["trades"] == 4 and row["R_hold_5d"] == pytest.approx(0.5)
+    assert by_year.set_index("year")["R_hold_5d"].to_dict() == {2019: 0.0, 2020: 1.0}

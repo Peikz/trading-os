@@ -139,6 +139,20 @@ _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]
 # zstd keeps the data repo ~15 % smaller than the default snappy; readers need no change.
 PARQUET_OPTIONS = {"index": False, "compression": "zstd", "compression_level": 9}
 
+_last_stamp: dt.datetime | None = None
+
+
+def unique_stamp() -> dt.datetime:
+    """Now (UTC), strictly later than the previous call in this process. Windows' clock ticks
+    every ~15 ms, so two quick saves could share a timestamp, a file name, and one would
+    overwrite the other (journal fills, stops, plans, watchlists)."""
+    global _last_stamp
+    now = dt.datetime.now(dt.UTC)
+    if _last_stamp is not None and now <= _last_stamp:
+        now = _last_stamp + dt.timedelta(microseconds=1)
+    _last_stamp = now
+    return now
+
 
 class AlreadyWritten(FileExistsError):
     """Refusing to overwrite a historical file."""

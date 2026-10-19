@@ -204,14 +204,28 @@ def git(data_dir: Path, *args: str) -> tuple[bool, str]:
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 
-def download_release(data_dir: Path, tag: str, folder: Path) -> tuple[bool, str]:
-    """Download a release of the data repo (gh CLI, signed in on this PC) into `folder`."""
+def download_release(
+    data_dir: Path, tag: str, folder: Path, patterns: list[str] | None = None
+) -> tuple[bool, str]:
+    """Download a release of the data repo (gh CLI, signed in on this PC) into `folder`,
+    all files or only those matching `patterns`."""
     folder.mkdir(parents=True, exist_ok=True)
     ok, remote = git(data_dir, "remote", "get-url", "origin")
     repo = remote.strip().removesuffix(".git").split("github.com/")[-1] if ok else ""
     try:
         done = subprocess.run(
-            ["gh", "release", "download", tag, "-R", repo, "-D", str(folder), "--clobber"],
+            [
+                "gh",
+                "release",
+                "download",
+                tag,
+                "-R",
+                repo,
+                "-D",
+                str(folder),
+                "--clobber",
+                *[arg for p in patterns or [] for arg in ("-p", p)],
+            ],
             capture_output=True,
             text=True,
             timeout=1800,

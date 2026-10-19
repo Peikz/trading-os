@@ -9,14 +9,13 @@ write. Tickers can be typed in or imported from a TradingView watchlist export (
 
 from __future__ import annotations
 
-import datetime as dt
 import re
 from pathlib import Path
 
 import pandas as pd
 
 from trading_os.journal import normalize_ticker
-from trading_os.store import PARQUET_OPTIONS
+from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
 COLUMNS = ["list", "ticker", "action", "note", "saved_ts"]
 TICKER = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -53,7 +52,7 @@ def add(data_dir: Path, list_name: str, tickers: list[str], note: str = "") -> i
         raise ValueError("the list needs a name")
     if not tickers:
         return 0
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     _write(
         data_dir,
         [
@@ -67,7 +66,7 @@ def add(data_dir: Path, list_name: str, tickers: list[str], note: str = "") -> i
 def remove(data_dir: Path, list_name: str, tickers: list[str]) -> None:
     if not tickers:
         return
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     rows = [
         {"list": list_name, "ticker": t, "action": "remove", "note": "", "saved_ts": stamp}
         for t in tickers

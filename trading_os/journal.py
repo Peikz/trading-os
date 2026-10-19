@@ -31,7 +31,7 @@ import pandas as pd
 
 from trading_os import clock, outcomes
 from trading_os.config import load_config
-from trading_os.store import PARQUET_OPTIONS
+from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
 FILL_COLUMNS = ["fill_id", "trade_date", "ticker", "side", "quantity", "price", "fees"]
 EXTRA_FILL_COLUMNS = ["source", "setup"]  # manual fills carry both; broker fills: source only
@@ -109,7 +109,7 @@ def manual_fill(
 ) -> pd.DataFrame:
     """One fill typed in by hand. Its id includes the time it was logged, so two identical
     fills on one day stay two fills."""
-    stamp = stamp or dt.datetime.now(dt.UTC)
+    stamp = stamp or unique_stamp()
     ticker = normalize_ticker(ticker)
     side = side.lower()
     if side not in ("buy", "sell") or not quantity > 0 or not price > 0:
@@ -159,7 +159,7 @@ def stops_path(data_dir: Path) -> Path:
 
 def save_stop(data_dir: Path, ticker: str, entry_date: dt.date, stop: float) -> Path:
     """Append the initial stop of a trade (the newest entry per ticker and date wins)."""
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     folder = stops_path(data_dir)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{stamp:%Y%m%dT%H%M%S%f}.parquet"
@@ -343,7 +343,7 @@ def rebuild(data_dir: Path, cfg, stamp: dt.datetime, extra_stops=None) -> tuple:
 
 def log_manual(data_dir: Path, cfg, fill: pd.DataFrame, stop: float | None = None) -> tuple:
     """Save a hand-typed fill (and the trade's initial stop for an entry), then rebuild."""
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     write_fills(data_dir, fill, stamp)
     row = fill.iloc[0]
     if stop is not None and stop > 0:
@@ -359,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = load_config()
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     existing = load_fills(args.data_dir)
     added = new_fills(existing, read_fills(args.csv, cfg.journal).assign(source="broker"))
     write_fills(args.data_dir, added, stamp)

@@ -1,0 +1,85 @@
+# The minute-bar entry/exit study over ten years (Emil, 20 Oct 2026): one job per year reads
+# that year's minute files (release "intraday-minutes") and the daily bars around it
+# ("bars-alpaca"), runs every entry and exit, and uploads intraday_<year>.parquet to the
+# "intraday-10y" release; a last job writes the summaries over all years. Manual runs only.
+# This repo is public: counts only.
+
+name: Intraday study 10y
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "JSON list of years"
+        default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+
+permissions:
+  contents: read
+
+jobs:
+  year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Inputs for the year
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          Y=${{ matrix.year }}
+          mkdir -p bars hist cands minutes
+          for y in $((Y-2)) $((Y-1)) $Y $((Y+1)); do
+            gh release download bars-alpaca -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null || true
+          done
+          gh release download history-10y -R "$REPO" -D hist
+          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y.parquet' 2>/dev/null || true
+          gh release download intraday-minutes -R "$REPO" -D minutes -p "$Y-*" 2>/dev/null || true
+          echo "bars $(ls bars | wc -l), minute files $(ls minutes | wc -l), cached candidates $(ls cands | wc -l)"
+
+      - name: Run the year
+        run: uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir . --long-bars bars --long-hits hist --cands cands/candidates_10y.parquet --run minutes --run-year ${{ matrix.year }} --out out
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view intraday-10y -R "$REPO" >/dev/null 2>&1 || gh release create intraday-10y -R "$REPO" --title "Minute study, 10 years" --notes "Entries and exits on minute bars since 2016: one trades file per year, and the summaries." >/dev/null 2>&1 || true
+          gh release upload intraday-10y out/intraday_${{ matrix.year }}.parquet -R "$REPO" --clobber
+
+  summary:
+    needs: year
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Summaries over all years
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          mkdir -p years
+          gh release download intraday-10y -R "$REPO" -D years -p 'intraday_[0-9]*.parquet'
+          uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir . --aggregate years --out out
+          gh release upload intraday-10y out/*.parquet -R "$REPO" --clobber

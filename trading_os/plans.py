@@ -21,7 +21,7 @@ import pandas as pd
 
 from trading_os import clock
 from trading_os.journal import normalize_ticker
-from trading_os.store import PARQUET_OPTIONS
+from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
 COLUMNS = [
     "plan_id",
@@ -90,7 +90,7 @@ def create(
         raise ValueError("direction is long or short")
     if (entry - stop) * (1 if direction == "long" else -1) <= 0:
         raise ValueError("the stop must be on the losing side of the entry")
-    stamp = dt.datetime.now(dt.UTC)
+    stamp = unique_stamp()
     ticker = normalize_ticker(ticker)
     key = f"{session_date}|{ticker}|{direction}|{entry:g}|{stop:g}|{stamp.isoformat()}"
     plan_id = hashlib.sha1(key.encode()).hexdigest()[:12]
@@ -116,7 +116,7 @@ def create(
 
 
 def cancel(data_dir: Path, plan_id: str) -> None:
-    _write(data_dir, {"plan_id": plan_id, "action": "cancel", "saved_ts": dt.datetime.now(dt.UTC)})
+    _write(data_dir, {"plan_id": plan_id, "action": "cancel", "saved_ts": unique_stamp()})
 
 
 def load(data_dir: Path) -> pd.DataFrame:

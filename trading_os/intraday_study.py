@@ -670,6 +670,46 @@ def calendar_sessions(cfg, first: int, last_day) -> list:
     return [s for s in clock.sessions_back(cfg.schedule, last_day, span) if s >= start]
 
 
+YEAR_COLUMNS = ["strategy", "entry", "stop_rule", "side", "session_date", "ticker", "risk_adr"]
+EXIT_TAIL = 70  # sessions after the year: the exits look 63 sessions ahead
+
+
+def run_year(cfg, year: int, bars_dir, hits_dir, minutes_dir, cands=None) -> pd.DataFrame:
+    """The minute study for one year of the 10-year set (a GitHub job per year): candidates
+    of that year, daily bars around it for the exits, the year's minute files."""
+    from trading_os import long_history
+
+    if cands is None or cands.empty:
+        cands = long_candidates(cfg, bars_dir, hits_dir, year, year)
+    cands = cands[pd.to_datetime(cands["session_date"]).dt.year == year]
+    bars = long_history.load_years(bars_dir, year - 2, year + 1)
+    if bars.empty or cands.empty:
+        return pd.DataFrame()
+    sessions, inside = long_history.window(cfg.schedule, year, bars["session_date"].max())
+    sessions = sessions[: sessions.index(inside[-1]) + 1 + EXIT_TAIL]
+    have = set(bars["session_date"])
+    sessions = [s for s in sessions if s in have]
+    g, tickers = daily(bars[bars["session_date"].isin(set(sessions))], sessions)
+    trades = run_study(g, tickers, sessions, cands, minutes_dir, cfg)
+    if trades.empty:
+        return trades
+    keep = [*YEAR_COLUMNS, *exit_columns(trades), "stopped_0d"]
+    out = trades[[c for c in keep if c in trades]].copy()
+    for column in out.select_dtypes("float64").columns:
+        out[column] = out[column].astype("float32")
+    return out
+
+
+def aggregate(folder) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(summary over every year, summary per year) from the `intraday_<year>.parquet` files."""
+    from pathlib import Path
+
+    files = sorted(Path(folder).glob("intraday_[0-9][0-9][0-9][0-9].parquet"))
+    trades = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    trades["year"] = pd.to_datetime(trades["session_date"]).dt.year
+    return summary(trades), summary(trades, ["year"])
+
+
 def main(argv: list[str] | None = None) -> int:
     from trading_os.logsafe import run_guarded
 
@@ -697,8 +737,29 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--long-hits", type=Path, help="history-10y files (next-day signals)")
     parser.add_argument("--years", default="2016-2026", help="FIRST-LAST with --long-bars")
     parser.add_argument("--cands", type=Path, help="candidates file: reuse when it exists")
+    parser.add_argument("--run-year", type=int, help="10-year set: run the study for one year")
+    parser.add_argument("--aggregate", type=Path, help="folder of intraday_<year>.parquet")
+    parser.add_argument("--out", type=Path, help="output folder for --run-year/--aggregate")
     args = parser.parse_args(argv)
     cfg = load_config()
+    if args.aggregate:
+        overall, by_year = aggregate(args.aggregate)
+        args.out.mkdir(parents=True, exist_ok=True)
+        overall.to_parquet(args.out / "intraday_summary_10y.parquet", index=False)
+        by_year.to_parquet(args.out / "intraday_summary_10y_by_year.parquet", index=False)
+        status(f"Intraday 10y: {len(overall)} entry/stop rows, {by_year['year'].nunique()} years")
+        return 0
+    if args.run_year:
+        cands = None
+        if args.cands and args.cands.exists():
+            cands = pd.read_parquet(args.cands)
+            cands["session_date"] = pd.to_datetime(cands["session_date"]).dt.date
+        trades = run_year(cfg, args.run_year, args.long_bars, args.long_hits, args.run, cands)
+        args.out.mkdir(parents=True, exist_ok=True)
+        trades.to_parquet(args.out / f"intraday_{args.run_year}.parquet", index=False)
+        counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
+        status(f"Intraday {args.run_year}: {len(trades)} trades {counts}")
+        return 0
     if args.long_bars:  # 10-year candidates, for the fetch only (the study runs per year)
         first, last = (int(y) for y in args.years.split("-"))
         if args.cands and args.cands.exists():

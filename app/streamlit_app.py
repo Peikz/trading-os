@@ -284,6 +284,7 @@ EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
 
 LONG_HISTORY = ("data", "history_10y")  # the history-10y release, downloaded
+MINUTE_10Y = ("data", "intraday_10y")  # the intraday-10y release's summaries, downloaded
 HISTORY_COLUMNS = [
     "strategy",
     "side",
@@ -998,6 +999,53 @@ elif page == "History":
 
 elif page == "Entries & exits":
     st.header("Entries & exits")
+    ie_period = st.radio(
+        "Period",
+        ["2y", "10y"],
+        horizontal=True,
+        format_func=lambda p: "2 years (all trades)" if p == "2y" else "10 years (summaries)",
+        key="ie_period",
+    )
+    if ie_period == "10y":
+        ten = data_dir.joinpath(*MINUTE_10Y)
+        files = [ten / "intraday_summary_10y.parquet", ten / "intraday_summary_10y_by_year.parquet"]
+        if not all(f.exists() for f in files):
+            st.info("The 10-year minute study isn't on this PC yet (release intraday-10y).")
+            if st.button("Download the summaries"):
+                ok, out = dashboard.download_release(
+                    data_dir, "intraday-10y", ten, ["intraday_summary_10y*.parquet"]
+                )
+                if ok:
+                    st.success("Downloaded.")
+                else:
+                    st.error(out)
+                st.rerun()
+            st.stop()
+        overall, by_year = (read_parquet(str(f)) for f in files)
+        min_trades = st.slider("Minimum trades", 50, 2000, 200, step=50, key="ie10_min")
+        st.subheader("Best entry, stop and exit per strategy, 10 years")
+        st.dataframe(
+            intraday_study.best(overall, min_trades).round(2), hide_index=True, width="stretch"
+        )
+        st.subheader("By year")
+        exit_name = st.selectbox(
+            "Exit",
+            [c[2:] for c in overall.columns if c.startswith("R_")],
+            index=0,
+            key="ie10_exit",
+        )
+        names = sorted(overall["strategy"].unique())
+        one = st.selectbox("Strategy", names, key="ie10_strategy")
+        part = by_year[(by_year["strategy"] == one) & (by_year["trades"] >= 20)]
+        table = part.pivot_table(
+            index=["entry", "stop_rule"], columns="year", values=f"R_{exit_name}"
+        )
+        st.dataframe(table.round(2), width="stretch")
+        st.caption(
+            f"Mean R per year for exit {exit_name} (groups of 20+ trades). A setup that only "
+            "works in some years shows it here. Facts, not advice."
+        )
+        st.stop()
     trades = intraday_cached(str(data_dir))
     if trades.empty:
         st.info(
