@@ -135,6 +135,9 @@ history:                                    # Phase 2: Massive (formerly Polygon
 outcomes:                                   # Phase 3 (SPEC §7)
   horizons: [5, 10, 20, 60]                 # trading sessions after the signal
 
+charts:                                     # Phase 3: before-shot PNG per alert candidate
+  sessions: 120                             # sessions shown up to the signal
+
 notify:                                     # SPEC §8
   server: https://ntfy.sh
   max_tickers_per_scan: 10

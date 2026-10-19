@@ -30,6 +30,7 @@ TOP_LEVEL_KEYS = {
     "market_light",
     "history",
     "outcomes",
+    "charts",
     "notify",
 }
 HISTORY_KEYS = {
@@ -40,6 +41,7 @@ HISTORY_KEYS = {
     "daily_catchup_calls",
 }
 OUTCOME_KEYS = {"horizons"}
+CHART_KEYS = {"sessions"}
 UNIVERSE_KEYS = {
     "market",
     "include_types",
@@ -178,6 +180,7 @@ class Config:
     market_light: Mapping[str, Any]
     history: Mapping[str, Any]
     outcomes: Mapping[str, Any]
+    charts: Mapping[str, Any]
     notify: Mapping[str, Any]
 
 
@@ -212,6 +215,7 @@ def parse_config(raw: Any) -> Config:
 
     _check_keys("history", raw["history"], HISTORY_KEYS)
     _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
+    _check_keys("charts", raw["charts"], CHART_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
 
     return Config(
@@ -223,6 +227,7 @@ def parse_config(raw: Any) -> Config:
         market_light=_freeze(market_light),
         history=_freeze(raw["history"]),
         outcomes=_freeze(raw["outcomes"]),
+        charts=_freeze(raw["charts"]),
         notify=_freeze(raw["notify"]),
     )
 

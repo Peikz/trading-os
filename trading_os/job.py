@@ -12,9 +12,10 @@ import datetime as dt
 import os
 from pathlib import Path
 
+import pandas as pd
 import requests
 
-from trading_os import clock, enrich, metrics, notify, store, tv, universe
+from trading_os import charts, clock, enrich, history, metrics, notify, store, tv, universe
 from trading_os.config import load_config
 from trading_os.history_metrics import LOOKBACK_SESSIONS
 from trading_os.logsafe import run_guarded, status
@@ -116,10 +117,26 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
+    if slot in ("eod", "pm") and any(len(h) for h in selected.values()):
+        _charts(args.data_dir, cfg, session, slot, selected, df)
     if push_error is not None:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
+
+
+def _charts(data_dir: Path, cfg, session, slot: str, selected, df) -> None:
+    """Before-shot PNGs for the pushed candidates. A chart problem never fails the run."""
+    try:
+        sessions = cfg.charts["sessions"] + max(charts.MA_COLORS)
+        past = clock.sessions_back(cfg.schedule, session, sessions)
+        bars = history.load_bars(data_dir, [s for s in past if s != session])
+        if slot == "eod":  # today's bar is the run itself (not written to history yet)
+            bars = pd.concat([bars, enrich.todays_bars(df, session)], ignore_index=True)
+        drawn = charts.draw_for_run(data_dir, session, slot, selected, bars, cfg.charts["sessions"])
+        status(f"Charts: {drawn} saved")
+    except Exception as exc:  # noqa: BLE001 - charts are auxiliary; the data is already saved
+        status(f"Charts: FAILED ({type(exc).__name__}), run data unaffected")
 
 
 def main(slot: str, label: str, description: str, argv: list[str] | None = None) -> int:
