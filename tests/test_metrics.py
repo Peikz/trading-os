@@ -56,6 +56,10 @@ def test_add_phase1_metrics_uses_config_proxies():
             "ma200": [12.0],
             "pm_price": [10.5],
             "pm_volume": [200_000.0],
+            "adr14_usd_tv": [0.5],
+            "perf_1m_tv": [10.0],
+            "perf_3m_tv": [20.0],
+            "perf_6m_tv": [30.0],
         }
     )
     out = metrics.add_phase1_metrics(df, load_config().proxies)
@@ -67,6 +71,10 @@ def test_add_phase1_metrics_uses_config_proxies():
     assert row["avg_volume_20d"] == 800_000
     assert row["avg_dollar_volume_20d"] == 8_000_000
     assert row["pm_dollar_volume"] == 2_100_000  # 10.50 × 200,000
+    assert row["adr20_pct"] == pytest.approx(5.0)  # 0.50 / 10.00 × 100
+    assert row["dist_ma10_adr"] == pytest.approx(2.0)  # (10 − 9) / 0.50
+    assert (row["ret_22"], row["ret_63"], row["ret_126"]) == (10.0, 20.0, 30.0)
+    assert row["returns_basis"] == "tv:Perf.1M/Perf.3M/Perf.6M"
     # MA position: above ma10, not above an equal ma20, missing ma50 is False, below ma200.
     assert [row[f"above_ma{w}"] for w in (10, 20, 50, 200)] == [True, False, False, False]
     assert "close_loc" not in df.columns  # input untouched
@@ -87,3 +95,28 @@ def test_earnings_flag_uses_new_york_dates():
     )
     flags = metrics.earnings_flag(released, dt.date(2026, 10, 16), dt.date(2026, 10, 15))
     assert flags.tolist() == [True, True, True, False, False]
+
+
+def test_yoy_growth_from_latest_first_history():
+    revenue = [130, 120, 110, 100, 100, 80, 90, 95]
+    assert metrics.yoy_growth(revenue, 0, abs_base=False) == pytest.approx(30.0)  # 130 vs 100
+    assert metrics.yoy_growth(revenue, 1, abs_base=False) == pytest.approx(50.0)  # 120 vs 80
+    eps = [0.5, 0.2, 0.1, 0.1, -0.25, 0.1]
+    # Loss to profit: (0.50 − (−0.25)) / |−0.25| = 300 %
+    assert metrics.yoy_growth(eps, 0, abs_base=True) == pytest.approx(300.0)
+    assert metrics.yoy_growth(eps, 1, abs_base=True) == pytest.approx(100.0)  # 0.2 vs 0.1
+
+
+@pytest.mark.parametrize("history", [None, [1, 2, 3, 4], [1, 2, 3, 4, 0], [None, 2, 3, 4, 5]])
+def test_yoy_growth_missing_data_is_nan(history):
+    assert pd.isna(metrics.yoy_growth(history, 0, abs_base=False))
+
+
+def test_add_growth_metrics_drops_arrays():
+    df = pd.DataFrame(
+        {"revenue_q_hist": [[130, 120, 110, 100, 100, 80]], "eps_q_hist": [[1, 1, 1, 1, 1, 0.5]]}
+    )
+    out = metrics.add_growth_metrics(df)
+    assert out["rev_growth_q_prev"].iloc[0] == pytest.approx(50.0)
+    assert out["eps_growth_q_prev"].iloc[0] == pytest.approx(100.0)
+    assert "revenue_q_hist" not in out.columns and "eps_q_hist" not in out.columns

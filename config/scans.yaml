@@ -28,6 +28,12 @@ proxies:                                    # SPEC §11.6, Phase 1 only (until M
   rvol_avg_days: 60                         # today, so metrics removes it: (60*avg - vol) / 59
   avg_volume_20d: average_volume_30d_calc
   avg_dollar_volume_20d: AvgValue.Traded_30d
+  returns:                                  # SPEC: 22/63/126 trading days; TV: calendar periods
+    "22": Perf.1M
+    "63": Perf.3M
+    "126": Perf.6M
+  adr: ADR                                  # SPEC: ADR(20) % = mean(high/low - 1); TV: 14-day mean
+                                            # range in $, so ADR % = ADR / close x 100
 
 schedule:                                   # SPEC §3
   timezone: America/New_York
@@ -35,6 +41,7 @@ schedule:                                   # SPEC §3
   windows_et:
     pm: ["07:15", "07:55"]
     eod: ["16:15", "17:30"]
+  weekly_day: Sunday                        # New York date; the job reports the week's last session
 
 scans:
   # --- Pre-market (SPEC §6.1) ---

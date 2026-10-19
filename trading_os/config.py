@@ -37,8 +37,16 @@ ALERT_TIER_KEYS = {
     "avg_volume_20d_min",
     "signal_dollar_volume_min",
 }
-PROXY_KEYS = {"rvol_avg_volume", "rvol_avg_days", "avg_volume_20d", "avg_dollar_volume_20d"}
-SCHEDULE_KEYS = {"timezone", "calendar", "windows_et"}
+PROXY_KEYS = {
+    "rvol_avg_volume",
+    "rvol_avg_days",
+    "avg_volume_20d",
+    "avg_dollar_volume_20d",
+    "returns",
+    "adr",
+}
+SCHEDULE_KEYS = {"timezone", "calendar", "windows_et", "weekly_day"}
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MARKET_LIGHT_KEYS = {
     "qqq": {"symbol", "sma_windows", "slope_lookback"},
     "breadth": {"strong_ratio10_min", "weak_ratio10_below", "thrust_ratio5_gt", "quarter_move_pct"},
@@ -130,6 +138,7 @@ class Schedule:
     timezone: str
     calendar: str
     windows_et: Mapping[str, tuple[dt.time, dt.time]]
+    weekly_weekday: int  # Monday = 0
 
 
 @dataclass(frozen=True)
@@ -160,6 +169,11 @@ def parse_config(raw: Any) -> Config:
     _check_numbers("universe.alert", universe["alert"])
 
     _check_keys("proxies", raw["proxies"], PROXY_KEYS)
+    windows = {str(w) for w in raw["scans"].get("qm_gainers", {}).get("return_windows", [])}
+    if not windows <= set(raw["proxies"]["returns"]):
+        raise ConfigError(
+            f"proxies.returns: missing windows {sorted(windows - set(raw['proxies']['returns']))}"
+        )
 
     market_light = raw["market_light"]
     _check_keys("market_light", market_light, set(MARKET_LIGHT_KEYS))
@@ -192,10 +206,13 @@ def _parse_schedule(raw: Any) -> Schedule:
         if start >= end:
             raise ConfigError(f"schedule.windows_et.{slot}: start must be before end")
         windows[slot] = (start, end)
+    if raw["weekly_day"] not in WEEKDAYS:
+        raise ConfigError(f"schedule.weekly_day: {raw['weekly_day']!r} not in {WEEKDAYS}")
     return Schedule(
         timezone=raw["timezone"],
         calendar=raw["calendar"],
         windows_et=MappingProxyType(windows),
+        weekly_weekday=WEEKDAYS.index(raw["weekly_day"]),
     )
 
 

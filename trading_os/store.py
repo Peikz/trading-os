@@ -63,6 +63,19 @@ AUDIT_COLUMNS = [
     "above_ma50",
     "above_ma200",
     "earnings_flag",
+    "dist_ma10_adr",
+    "adr20_pct",
+    "avg_dollar_volume_20d",
+    "ret_22",
+    "ret_63",
+    "ret_126",
+    "qm_lists",
+    "rev_growth_q",
+    "rev_growth_q_prev",
+    "eps_growth_q",
+    "eps_growth_q_prev",
+    "revenue_ttm",
+    "growth_quarters_checked",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]
@@ -155,6 +168,8 @@ def build_candidates(
         out = pd.DataFrame(
             columns=["signal_id", "scan", "ticker", "rank", "tier", "pushed", *AUDIT_COLUMNS]
         )
+    for column in ("rank", "growth_quarters_checked"):
+        out[column] = pd.to_numeric(out[column], errors="coerce").astype("Int64")
     # Breakout fields (Phase 2) stay empty for EP scans, so the schema is stable from day one.
     for column in _PHASE2_FLOAT:
         out[column] = pd.Series(pd.NA, index=out.index, dtype="Float64")

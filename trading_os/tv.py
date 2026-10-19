@@ -23,6 +23,7 @@ FIELDS: dict[str, str] = {
     "type": "type",
     "typespecs": "typespecs",
     "is_primary": "is_primary",
+    "country": "country",
     "sector": "sector",
     "industry": "industry",
     "open": "open",
@@ -56,6 +57,7 @@ FIELDS: dict[str, str] = {
     "earnings_date_next": "earnings_release_next_date",
     "rev_growth_q": "total_revenue_yoy_growth_fq",
     "eps_growth_q": "earnings_per_share_diluted_yoy_growth_fq",
+    "revenue_ttm": "total_revenue_ttm",
     "pm_change_pct": "premarket_change",
     "pm_gap_pct": "premarket_gap",
     "pm_volume": "premarket_volume",
@@ -63,7 +65,13 @@ FIELDS: dict[str, str] = {
     "ah_change_pct": "postmarket_change",
     "ah_volume": "postmarket_volume",
 }
-_CANONICAL = {tv: canon for canon, tv in FIELDS.items()}
+# Quarterly history arrays (32 quarters, latest first), fetched by the weekly job only.
+# metrics.add_growth_metrics turns them into scalar columns; the arrays are never stored.
+HISTORY_FIELDS: dict[str, str] = {
+    "revenue_q_hist": "total_revenue_fq_h",
+    "eps_q_hist": "earnings_per_share_diluted_fq_h",
+}
+_CANONICAL = {tv: canon for canon, tv in (FIELDS | HISTORY_FIELDS).items()}
 _EPOCH_FIELDS = ("earnings_date_last", "earnings_date_next")
 
 
@@ -98,8 +106,9 @@ def build_universe_query(universe: Mapping[str, Any], fields: list[str] | None =
     return query
 
 
-def fetch_universe(universe: Mapping[str, Any]) -> pd.DataFrame:
-    total, raw = build_universe_query(universe).get_scanner_data(timeout=30)
+def fetch_universe(universe: Mapping[str, Any], with_history: bool = False) -> pd.DataFrame:
+    fields = list(FIELDS.values()) + (list(HISTORY_FIELDS.values()) if with_history else [])
+    total, raw = build_universe_query(universe, fields).get_scanner_data(timeout=40)
     if len(raw) != total:
         raise TruncatedResult(f"TradingView matched {total} rows but returned {len(raw)}")
     return normalize(raw)
