@@ -105,7 +105,8 @@ scans:
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
+     push_if_all: [b1, b2, b3, b4]}         # Emil, 19 Oct: push only full setups; B5-only saved
   universe_snapshot:
     {enabled: true, phase: 1, slot: eod, action: log}
 

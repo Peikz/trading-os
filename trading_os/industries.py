@@ -63,14 +63,14 @@ def add_rank(uni: pd.DataFrame, table: pd.DataFrame) -> pd.DataFrame:
 
 
 def label(row: Mapping[str, Any]) -> str | None:
-    """`Semiconductors (#3 of 120)`, or the bare industry when it isn't ranked."""
+    """`Semiconductors #3/120`, or the bare industry when it isn't ranked."""
     industry = row.get("industry")
     if not isinstance(industry, str) or not industry:
         return None
     place, of = row.get("industry_rank"), row.get("industry_of")
     if place is None or pd.isna(place):
         return industry
-    return f"{industry} (#{int(place)} of {int(of)})"
+    return f"{industry} #{int(place)}/{int(of)}"
 
 
 def _pct(x: float) -> str:

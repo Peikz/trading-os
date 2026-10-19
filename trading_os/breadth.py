@@ -266,20 +266,30 @@ LIGHT_ICONS = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴", "STOP": "⛔"}
 INDEX_MAS = (10, 20, 50, 200)
 
 
+UP, DOWN = "🟢", "🔴"
+
+
+def _signed(x: Any) -> str:
+    """`🟢 +0.6%` / `🔴 -1.1%` (blank when unknown)."""
+    if x is None or pd.isna(x):
+        return ""
+    return f"{UP if x >= 0 else DOWN} {x:+.1f}%"
+
+
 def _ratio(x: Any) -> str:
     return "n/a" if x is None or pd.isna(x) else f"{x:.2f}"
 
 
 def monitor_lines(row: Mapping[str, Any]) -> list[str]:
     """Stockbee's quarter, month and 34-day counts (empty for rows stored before 19 Oct)."""
-    quarter = f"Qtr 25%: ▲{row['up25q']} ▼{row['down25q']}"
+    quarter = f"Qtr 25%: {UP}{row['up25q']} {DOWN}{row['down25q']}"
     if row.get("up25m") is None or pd.isna(row.get("up25m")):
         return [quarter]
     covered = row.get("mid_rows", 0) >= 0.5 * max(row.get("breadth_n", 0), 1)
-    mid = f"▲{row['up13_34d']} ▼{row['down13_34d']}" if covered else "n/a"
+    mid = f"{UP}{row['up13_34d']} {DOWN}{row['down13_34d']}" if covered else "n/a"
     return [
-        f"{quarter} · Mo 25%: ▲{row['up25m']} ▼{row['down25m']}",
-        f"Mo 50%: ▲{row['up50m']} ▼{row['down50m']} · 34d 13%: {mid}",
+        f"{quarter} · Mo 25%: {UP}{row['up25m']} {DOWN}{row['down25m']}",
+        f"Mo 50%: {UP}{row['up50m']} {DOWN}{row['down50m']} · 34d 13%: {mid}",
     ]
 
 
@@ -312,7 +322,7 @@ def index_lines(row: Mapping[str, Any], premarket: bool = False) -> list[str]:
     if spy is not None and not pd.isna(spy):
         change = row["spy_pm_change_pct"] if premarket else row["spy_chg_pct"]
         label = "SPY pre-market" if premarket else f"SPY {spy:.2f}"
-        parts.append(label + ("" if pd.isna(change) else f" {change:+.1f}%"))
+        parts.append(f"{label} {_signed(change)}".rstrip())
     vix = row.get("vix_close")
     if vix is not None and not pd.isna(vix):
         change = row.get("vix_chg_pct")
@@ -343,7 +353,7 @@ def breadth_lines(row: Mapping[str, Any]) -> list[str]:
     )
     ratios = f"5d {_ratio(row['ratio_5d'])} · 10d {_ratio(row['ratio_10d'])}"
     return [
-        f"4%: ▲{up} ▼{row['down4']} · {ratios}",
+        f"4%: {UP}{up} {DOWN}{row['down4']} · {ratios}",
         *monitor_lines(row),
         f"Above {above}",
     ]
@@ -405,6 +415,6 @@ def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> l
     if last:
         lines.append(f"Last close {breadth_lines(last)[0]}")
     qqq = row["qqq_pm_change_pct"]
-    qqq_text = "" if qqq is None or np.isnan(qqq) else f" · QQQ {qqq:+.1f}%"
-    lines.append(f"Pre-market 4%: ▲{row['pm_up4']} ▼{row['pm_down4']}{qqq_text}")
+    qqq_text = "" if qqq is None or np.isnan(qqq) else f" · QQQ {_signed(qqq)}"
+    lines.append(f"Pre-market 4%: {UP}{row['pm_up4']} {DOWN}{row['pm_down4']}{qqq_text}")
     return [*lines, *index_lines(row, premarket=True)]

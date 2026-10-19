@@ -165,15 +165,16 @@ def _md_text(text: str) -> str:
 
 def fact_lines(scan: str, hits: pd.DataFrame) -> list[str]:
     """One bullet per pushed name with the facts behind it, the headline linked below."""
+    if scan not in (*context.EP_SCANS, *context.BREAKOUT_SCANS):
+        return []
     lines = []
     for row in hits.to_dict("records"):
         if not context.has_context(row):
             continue
-        facts = [x.strip() for x in context.lines(row, scan) if not x.startswith("   news: ")]
-        if not facts:
+        parts, found = context.parts(row, scan), context.headline(row, max_chars=200)
+        if not parts and found is None:
             continue
-        lines.append(f"- **{row['ticker']}** · {facts[0]}")
-        found = context.headline(row, max_chars=200)
+        lines.append(f"- **{row['ticker']}**" + (f" · {' · '.join(parts)}" if parts else ""))
         if found is not None:
             title, where = found
             url = row.get("ctx_news_url")

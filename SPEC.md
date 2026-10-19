@@ -297,6 +297,10 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    "earnings in N days" when the next report is within 10 sessions, "at all-time high", and the stock's
    industry rank (industries ranked by the median 1- and 3-month return of their members, at least 5
    members; the weekly push lists the leaders). Facts only: none of them filters, scores or grades.
+12. ~~Which breakout triggers push~~ — decided 19 Oct 2026 by Emil, after the history replay showed
+   B5 alone firing ~42 times a day (1 of 2,503 with B1–B4): a trigger pushes only when B1–B4 also pass.
+   B5-only triggers are still saved with their B-flags (for the audit and the stats); the push counts
+   how many were held back.
 
 ## 12. References
 

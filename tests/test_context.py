@@ -92,9 +92,9 @@ def test_ep_line_reads_like_the_spec_example():
         "industry": "Financial Conglomerates",
     }
     assert context.ep_line(row) == (
-        f"   earnings 10-15 after close {DOT} EPS +128% / +80% (beat +6%) {DOT} "
+        f"   📢 earnings 10-15 after close {DOT} EPS +128% / +80% (beat +6%) {DOT} "
         f"rev +106% / +80% (miss -4%) {DOT} float 19M (8.8x traded) {DOT} 6M before -70% {DOT} "
-        f"-60% from 52w high {DOT} below 200d {DOT} Financial Conglomerates"
+        f"-60% from 52w high {DOT} ❌ below 200d {DOT} Financial Conglomerates"
     )
 
 
@@ -107,7 +107,7 @@ def test_ep_line_premarket_measures_the_gap_from_the_pm_price():
         "ma200": 12.0,
     }
     line = context.ep_line(row, premarket=True)
-    assert line == f"   no earnings report {DOT} at 52w high {DOT} above 200d"
+    assert line == f"   at 52w high {DOT} ✅ above 200d"
     assert "below 200d" in context.ep_line(row)  # the close is under the 200d
 
 
@@ -126,7 +126,7 @@ def test_breakout_line_uses_the_trigger_columns():
     }
     assert context.breakout_line(row, "breakout_trigger") == (
         f"   prior move +85% {DOT} 3M +40% {DOT} 6M +120% {DOT} -2% from 52w high {DOT} "
-        f"ADR 6.3% {DOT} MA 10>20>50 {DOT} EPS +45% {DOT} rev +30% {DOT} Semiconductors"
+        f"ADR 6.3% {DOT} ✅ MA 10>20>50 {DOT} EPS +45% {DOT} rev +30% {DOT} Semiconductors"
     )
     assert context.breakout_line(row, "breakout_watch").startswith("   prior move +10%")
 

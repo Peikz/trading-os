@@ -41,7 +41,7 @@ def test_format_hit():
         "dollar_volume": 82e6,
         "earnings_flag": True,
     }
-    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $82M  earnings"
+    assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 5.1  $82M  📢"
     row |= {"dollar_volume": 2.34e9, "earnings_flag": False, "rvol50": 333.0}
     assert notify.format_hit(row) == "ABCD  +14.2%  RVOL 333  $2.3B"
     # EP9M shows the day's change instead of the gap.
@@ -63,8 +63,8 @@ def test_message_title_counts_and_sections():
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
     assert msg.title == f"EOD Mon 19 Oct {DOT} EP 2"
     assert msg.body.splitlines() == [
-        f"━━ EP-Day {DOT} 2 of 3 ━━",
-        "▸ T00  +30.0%  RVOL 5.1  $82M  earnings",
+        f"━━ ⚡ EP-Day {DOT} 2 of 3 ━━",
+        "▸ T00  +30.0%  RVOL 5.1  $82M  📢",
         "▸ T01  +29.0%  RVOL 5.1  $82M",
     ]
     assert msg.click is None
@@ -97,7 +97,7 @@ def test_a_stock_shown_above_gets_one_line():
     nine = day.assign(chg_pct=40.0)
     results = {"ep_day": day, "ep9m": nine}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert "▸ T00  +40.0%  (see EP-Day)" in msg.body
+    assert "▸ T00  +40.0%  ↑ see EP-Day" in msg.body
     assert msg.body.count("\n   ") == 1  # the facts appear once, under EP-Day
 
 
@@ -145,10 +145,12 @@ def test_breakout_lines_show_flags_and_the_plan():
         "chg_pct": 6.8,
         "trig_rvol": 2.5,
     }
-    assert notify.format_breakout(row, "breakout_watch") == "BRKO  base 12d  B1,2,4"
-    assert notify.format_breakout(row | {"b3": True}, "breakout_watch") == "BRKO  base 12d  B1-4"
-    assert notify.format_breakout(row, "breakout_trigger") == "BRKO  +6.8%  RVOL 2.5  B1,2,4,5"
-    assert notify.plan_lines(row) == [f"Pivot 15.12 {DOT} stop 14.88"]  # no account file
+    assert notify.format_breakout(row, "breakout_watch") == "BRKO  base 12d  B🟩🟩🟥🟩"
+    assert (
+        notify.format_breakout(row | {"b3": True}, "breakout_watch") == "BRKO  base 12d  B🟩🟩🟩🟩"
+    )
+    assert notify.format_breakout(row, "breakout_trigger") == "BRKO  +6.8%  RVOL 2.5  B🟩🟩🟥🟩🟩"
+    assert notify.plan_lines(row) == [f"Pivot 15.12 {DOT} 🛑 14.88"]  # no account file
     sized = row | {
         "plan_shares": 1500,
         "plan_entry": 15.12,
@@ -159,7 +161,7 @@ def test_breakout_lines_show_flags_and_the_plan():
         "plan_capped": False,
     }
     assert notify.plan_lines(sized) == [
-        f"Buy-stop 15.12 {DOT} stop 14.88 (1.0 ADR)",
+        f"Buy-stop 15.12 {DOT} 🛑 14.88 (1.0 ADR)",
         f"1,500 sh {DOT} $22.7k {DOT} risk $360",
     ]
 
@@ -172,7 +174,7 @@ def test_facts_only_for_rows_with_them_and_wrapped():
     facts = row | {"ctx_done": True, "earnings_flag": False, "ctx_news_title": "Deal signed"}
     facts |= {"rs_pct": 88.0, "industry": "Semis", "ctx_news_publisher": "PR"}
     lines = [x.text for x in notify._block(facts, "ep_day", "eod")]
-    assert lines[1] == f"   no earnings report {DOT} RS 88 {DOT} Semis"
+    assert lines[1] == f"   RS 88 {DOT} Semis"
     assert lines[2] == "   📰 Deal signed (PR)"
     assert all(len(x) <= notify.WIDTH for x in lines)
 
@@ -214,7 +216,7 @@ def test_fit_drops_headlines_then_facts_from_the_bottom_then_cuts():
 def test_format_pace_and_pivot():
     row = {"ticker": "ABCD", "chg_pct": 6.2, "volume": 4.1e6, "proj_volume": 11.4e6}
     row |= {"dollar_volume": 82e6, "earnings_flag": True}
-    assert notify.format_pace(row) == "ABCD  +6.2%  4.1M → pace 11M  earnings"
+    assert notify.format_pace(row) == "ABCD  +6.2%  4.1M → pace 11M  📢"
     pivot = {"ticker": "ABCD", "chg_pct": 3.1, "pivot_crossed": True, "pivot_dist_pct": 0.9}
     assert notify.format_pivot(pivot | {"rvol_at_time_tv": 2.34}) == (
         "ABCD  +3.1%  over pivot +0.9%  RVOL 2.3"

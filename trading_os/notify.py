@@ -50,6 +50,21 @@ SCAN_LABELS = {
     "growth_bucket_2": "Growth 2",
     "tight_bases": "Tight bases",
 }
+# An icon per section, so the eye finds the setup type (no meaning beyond the type).
+SECTION_ICONS = {
+    "ep_day": "⚡",
+    "ep9m": "📊",
+    "ep9m_pace": "⏱️",
+    "ep_pm": "🌅",
+    "ep9m_early": "🌅",
+    "watchlist_gappers": "👀",
+    "pivot_watch": "🎯",
+    "breakout_trigger": "🚀",
+    "breakout_watch": "🎯",
+    "qm_gainers": "🏆",
+    "growth_bucket_1": "📈",
+    "growth_bucket_2": "📈",
+}
 # Short names for the notification title.
 TITLE_LABELS = {
     "ep_day": "EP",
@@ -99,8 +114,25 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
         eligible = hits
         if "push_tier" in scan.params:
             eligible = hits[hits["tier"] == scan["push_tier"]]
+        if "push_if_all" in scan.params:  # e.g. a breakout trigger pushes only with B1-B4
+            eligible = eligible[_all_pass(eligible, scan["push_if_all"])]
         selected[name] = eligible.sort_values("rank").head(limit)
     return selected
+
+
+def _all_pass(hits: pd.DataFrame, flags: Iterable[str]) -> pd.Series:
+    flags = list(flags)
+    if not set(flags) <= set(hits.columns):
+        return pd.Series(False, index=hits.index)
+    return hits[flags].fillna(False).astype(bool).all(axis=1)
+
+
+def _flag_names(flags: Iterable[str]) -> str:
+    """`B1-B4` for b1..b4 in a row, else `B1, B3`."""
+    nums = [int(f[1:]) for f in flags]
+    if nums == list(range(nums[0], nums[-1] + 1)) and len(nums) > 2:
+        return f"B{nums[0]}-B{nums[-1]}"
+    return ", ".join(f"B{n}" for n in nums)
 
 
 # ---------------------------------------------------------------- first line of a stock
@@ -111,7 +143,8 @@ def _rvol(x: float) -> str:
 
 
 def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct", slot: str = "eod") -> str:
-    """`ABCD  +14.2%  RVOL 5.1  $82M  earnings` (the scan's move, RVOL, dollar volume).
+    """`ABCD  +14.2%  RVOL 5.1  $82M  📢`: the scan's move, RVOL, dollar volume, and 📢 when
+    earnings came out on the signal session.
 
     Pre-market lines show pre-market volume and dollar volume, since the day's volume fields
     still hold the prior session then.
@@ -126,16 +159,16 @@ def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct", slot: str = 
             f"{row['ticker']}  {row[pct_column]:+.1f}%  RVOL {_rvol(row['rvol50'])}  "
             f"{_money(row['dollar_volume'])}"
         )
-    return line + ("  earnings" if bool(row.get("earnings_flag", False)) else "")
+    return line + ("  📢" if bool(row.get("earnings_flag", False)) else "")
 
 
 def format_pace(row: Mapping[str, Any]) -> str:
-    """`ABCD  +6.2%  4.1M → pace 11M  earnings` (volume so far, projected day)."""
+    """`ABCD  +6.2%  4.1M → pace 11M  📢` (volume so far, projected day)."""
     line = (
         f"{row['ticker']}  {row['chg_pct']:+.1f}%  {row['volume'] / 1e6:.1f}M → "
         f"pace {row['proj_volume'] / 1e6:.0f}M"
     )
-    return line + ("  earnings" if bool(row.get("earnings_flag", False)) else "")
+    return line + ("  📢" if bool(row.get("earnings_flag", False)) else "")
 
 
 def format_pivot(row: Mapping[str, Any]) -> str:
@@ -147,10 +180,8 @@ def format_pivot(row: Mapping[str, Any]) -> str:
 
 
 def _flags(row: Mapping[str, Any], last: int) -> str:
-    passed = [str(i) for i in range(1, last + 1) if bool(row.get(f"b{i}"))]
-    if passed == [str(i) for i in range(1, last + 1)]:
-        return f"B1-{last}"
-    return "B" + ",".join(passed) if passed else "B none"
+    """B1..B5 as green (passed) and red (failed) squares: `B🟩🟥🟩🟩🟩`."""
+    return "B" + "".join("🟩" if bool(row.get(f"b{i}")) else "🟥" for i in range(1, last + 1))
 
 
 def format_breakout(row: Mapping[str, Any], scan: str) -> str:
@@ -203,7 +234,7 @@ def plan_lines(row: Mapping[str, Any]) -> list[str]:
         pivot, stop = row.get("pivot"), row.get("order_stop")
         if pivot is None or pd.isna(pivot) or stop is None or pd.isna(stop):
             return []
-        return [f"Pivot {pivot:.2f} · stop {stop:.2f}"]
+        return [f"Pivot {pivot:.2f} · 🛑 {stop:.2f}"]
     basis = str(row.get("plan_stop_basis") or "")
     buy = "Buy-stop" if "buy-stop" in basis else "Buy"
     basis = basis.replace(", buy-stop at pivot", "").replace(", move to day low", " → day low")
@@ -214,7 +245,7 @@ def plan_lines(row: Mapping[str, Any]) -> list[str]:
     money = f"${position / 1000:.1f}k" if position >= 1000 else f"${position:.0f}"
     capped = " (capped)" if bool(row.get("plan_capped")) else ""
     return [
-        f"{buy} {row['plan_entry']:.2f} · stop {row['plan_stop']:.2f} ({basis})",
+        f"{buy} {row['plan_entry']:.2f} · 🛑 {row['plan_stop']:.2f} ({basis})",
         f"{int(shares):,} sh · {money}{capped} · risk ${row['plan_risk_usd']:.0f}",
     ]
 
@@ -247,13 +278,17 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     return out
 
 
-def _quiet(label: str, hits: pd.DataFrame, tiered: bool) -> str:
+def _quiet(label: str, hits: pd.DataFrame, scan) -> str:
     """How a scan without alerts appears in the closing `Nothing new:` line."""
-    if not tiered or hits.empty:
+    if "push_tier" not in scan.params or hits.empty:
         return label
-    alerts = int((hits["tier"] == "alert").sum()) if "tier" in hits else 0
-    if alerts:  # the 12:00 check, when every alert went out at 10:15
-        return f"{label} ({alerts} sent earlier)"
+    alerts = hits[hits["tier"] == "alert"] if "tier" in hits else hits.iloc[0:0]
+    if len(alerts) and "push_if_all" in scan.params:
+        held = int((~_all_pass(alerts, scan["push_if_all"])).sum())
+        if held:
+            return f"{label} ({held} without {_flag_names(scan['push_if_all'])})"
+    if len(alerts):  # the 12:00 check, when every alert went out at 10:15
+        return f"{label} ({len(alerts)} sent earlier)"
     return f"{label} ({len(hits)} below alert tier)"
 
 
@@ -278,23 +313,25 @@ def build_message(
     counts, quiet, shown = [], [], {}
     for name, chosen in selected.items():
         label = SCAN_LABELS.get(name, name)
-        tiered = "push_tier" in cfg.scans[name].params
         if chosen.empty:
-            quiet.append(_quiet(label, results[name], tiered))
+            quiet.append(_quiet(label, results[name], cfg.scans[name]))
             continue
         counts.append(f"{TITLE_LABELS.get(name, label)} {len(chosen)}")
         total = len(results[name])
         more = f" of {total}" if total > len(chosen) else ""
         legend = " 1M/3M/6M" if name == "qm_gainers" else ""
+        icon = SECTION_ICONS.get(name, "")
         lines += [
             Line("gap", ""),
-            Line("section", f"━━ {label}{legend} · {len(chosen)}{more} ━━"),
+            Line(
+                "section", f"━━ {icon} {label}{legend} · {len(chosen)}{more} ━━".replace("  ", " ")
+            ),
         ]
         for row in chosen.to_dict("records"):
             ticker = row["ticker"]
             if ticker in shown:
                 first = _first_line(row, name, ctx.slot).split("  ")[:2]
-                block = [Line("hit", f"▸ {'  '.join(first)}  (see {shown[ticker]})")]
+                block = [Line("hit", f"▸ {'  '.join(first)}  ↑ see {shown[ticker]}")]
             else:
                 shown[ticker] = label
                 block = _block(row, name, ctx.slot)

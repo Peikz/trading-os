@@ -45,7 +45,7 @@ def test_rank_by_median_returns_with_qm_members():
     assert (semis["industry_rank"], semis["industry_of"], semis["members"]) == (1, 2, 6)
     assert semis["qm_members"] == 1 and table.iloc[1]["qm_members"] == 0
     ranked = industries.add_rank(universe(), table).set_index("ticker")
-    assert industries.label(ranked.loc["S0"]) == "Semis (#1 of 2)"
+    assert industries.label(ranked.loc["S0"]) == "Semis #1/2"
     assert industries.label(ranked.loc["T0"]) == "Tiny"  # shown, not ranked
     assert industries.label(ranked.loc["X"]) is None
     lines = industries.lines(table, 5)
@@ -89,7 +89,7 @@ def test_facts_show_rs_earnings_soon_ath_and_industry_rank():
     }
     line = context.ep_line(row)
     assert line.endswith(
-        f"at all-time high {DOT} RS 97 {DOT} 📅 earnings in 4 days {DOT} Semis (#3 of 120)"
+        f"at all-time high {DOT} RS 97 {DOT} 📅 earnings in 4 days {DOT} Semis #3/120"
     )
     later = context.ep_line(row | {"earnings_soon": False, "high_all_tv": 80.0})
     assert "earnings in" not in later and "at 52w high" in later
@@ -113,10 +113,10 @@ def test_index_line_for_close_and_premarket():
     }
     row = breadth.index_fields(quotes)
     assert breadth.index_lines(row) == [
-        "SPY 767.59 +0.6% · VIX 18.6 -7.1%",
+        "SPY 767.59 🟢 +0.6% · VIX 18.6 -7.1%",
         "SPY above MA50, 200 · below 10, 20",
     ]
-    assert breadth.index_lines(row, premarket=True) == ["SPY pre-market +0.3% · VIX 18.6 -7.1%"]
+    assert breadth.index_lines(row, premarket=True) == ["SPY pre-market 🟢 +0.3% · VIX 18.6 -7.1%"]
     assert breadth.index_lines({}) == []
 
 

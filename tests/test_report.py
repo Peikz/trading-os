@@ -96,7 +96,7 @@ def test_fact_lines_link_the_headline_and_skip_rows_without_facts():
     )
     lines = report.fact_lines("ep_day", hits)
     assert lines == [
-        "- **ABCD** · no earnings report",
+        "- **ABCD**",
         r"  - [Wins \[big\] contract](https://example.com/a) (PR, 10-16 12:05 ET)",
     ]
     assert report.fact_lines("mb_up", hits) == []

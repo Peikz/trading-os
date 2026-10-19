@@ -185,12 +185,10 @@ def ep_parts(row: Mapping[str, Any], *, premarket: bool = False) -> list[str]:
     """The EP facts, each a short phrase (joined into one line in the report, wrapped on
     the phone)."""
     parts = []
-    if bool(row.get("earnings_flag")):
+    if bool(row.get("earnings_flag")):  # silence otherwise: no line means no report
         day = _et(row.get("earnings_date_last"), "%m-%d")
         timing = TIMING.get(row.get("ctx_earnings_time"), "")
-        parts.append(" ".join(p for p in ("earnings", day, timing) if p))
-    else:
-        parts.append("no earnings report")
+        parts.append(" ".join(p for p in ("📢 earnings", day, timing) if p))
     eps = _growth(
         row.get("ctx_eps_growth_q"),
         row.get("ctx_eps_growth_q_prev"),
@@ -217,7 +215,7 @@ def ep_parts(row: Mapping[str, Any], *, premarket: bool = False) -> list[str]:
         parts.append(high)
     ma200 = row.get("ma200")
     if not _missing(price) and not _missing(ma200) and ma200 > 0:
-        parts.append("above 200d" if price > ma200 else "below 200d")
+        parts.append("✅ above 200d" if price > ma200 else "❌ below 200d")
     parts.extend(_common_tail(row))
     return parts
 
@@ -248,7 +246,7 @@ def breakout_parts(row: Mapping[str, Any], scan: str) -> list[str]:
         parts.append(f"ADR {adr:.1f}%")
     stacked = row.get(f"{prefix}ma_stacked", row.get("bo_ma_stacked"))
     if stacked is not None and not pd.isna(stacked):
-        parts.append("MA 10>20>50" if bool(stacked) else "MAs not stacked")
+        parts.append("✅ MA 10>20>50" if bool(stacked) else "❌ MAs not stacked")
     eps = _growth(row.get("ctx_eps_growth_q"), None, None)
     rev = _growth(row.get("ctx_rev_growth_q"), None, None)
     if eps:

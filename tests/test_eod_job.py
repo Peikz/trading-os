@@ -128,8 +128,8 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     [message] = sent
     assert message.title.startswith("Pre-market ")
     assert "⚪ Market Light n/a (needs an EOD run)" in message.body
-    assert "SPY pre-market +0.3% · VIX 18.6 -7.1%" in message.body  # stubbed quotes
-    assert "Pre-market 4%: ▲1 ▼0" in message.body
+    assert "SPY pre-market 🟢 +0.3% · VIX 18.6 -7.1%" in message.body  # stubbed quotes
+    assert "Pre-market 4%: 🟢1 🔴0" in message.body
     assert f"▸ {GAPPER}  +12.0% PM  vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"
@@ -217,7 +217,7 @@ def test_push_carries_position_size_when_account_is_set(tmp_path, capsys, sent, 
     # 2,500 DKK / 6.667 = $374.98 -> 374 shares ($4.3k), risk $374.
     dot = "·"
     assert f"{GAPPER}  +18.0%" in message.body
-    assert f"   Buy 11.50 {dot} stop 10.50 (day low)\n   374 sh {dot} $4.3k {dot} risk $374" in (
+    assert f"   Buy 11.50 {dot} 🛑 10.50 (day low)\n   374 sh {dot} $4.3k {dot} risk $374" in (
         message.body
     )
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
@@ -250,7 +250,7 @@ def test_push_carries_facts_and_headline(tmp_path, capsys, sent, monkeypatch):
     assert "Context: added" in out and "supply deal" not in out
     assert asked == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
     [message] = sent
-    assert "   no earnings report" in message.body
+    assert "no earnings" not in message.body  # silence means no report
     assert "float 6M (50% traded)" in message.body and "rev +50% / +40%" in message.body
     assert "   📰 Signs a supply deal (PR)" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
@@ -393,7 +393,7 @@ def test_intraday_pivot_alert_uses_the_latest_eod_levels(tmp_path, capsys, sent,
     out, err = capsys.readouterr()
     assert "BO levels: 1 of 1 BO-Watch names have a pivot" in out and GAPPER not in out + err
     [message] = sent
-    assert f"▸ {GAPPER}  +20.0%  over pivot +0.9%  RVOL 2.0\n   Pivot 11.40 · stop 10.80" in (
+    assert f"▸ {GAPPER}  +20.0%  over pivot +0.9%  RVOL 2.0\n   Pivot 11.40 · 🛑 10.80" in (
         message.body
     )
     assert "   prior move +60%" in message.body and "Nothing new: EP9M pace" in message.body
