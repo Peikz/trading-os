@@ -34,6 +34,7 @@ jobs:
       - name: EOD (forced)
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           PUSH: ${{ inputs.push && 'yes' || '' }}
         run: |
           if [ "$PUSH" = "yes" ]; then

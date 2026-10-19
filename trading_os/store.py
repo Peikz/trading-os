@@ -102,6 +102,21 @@ AUDIT_COLUMNS = [
     "plan_risk_usd",
     "plan_capped",
     "plan_fx_rate",
+    "ctx_done",
+    "ctx_eps_surprise_pct",
+    "ctx_rev_surprise_pct",
+    "ctx_earnings_time",
+    "ctx_perf_1y",
+    "ctx_eps_growth_q",
+    "ctx_eps_growth_q_prev",
+    "ctx_rev_growth_q",
+    "ctx_rev_growth_q_prev",
+    "ctx_prior_6m_pct",
+    "ctx_float_turnover",
+    "ctx_news_title",
+    "ctx_news_publisher",
+    "ctx_news_time",
+    "ctx_news_url",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

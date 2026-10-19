@@ -137,6 +137,16 @@ def fetch_quote(symbol: str) -> dict[str, float]:
     }
 
 
+def fetch_details(tv_tickers: list[str], fields: list[str]) -> pd.DataFrame:
+    """Extra fields for a handful of symbols (the pushed names), indexed by tv_ticker."""
+    query = Query().select(*fields).set_tickers(*tv_tickers).limit(len(tv_tickers))
+    query.query.pop("filter2", None)
+    query.query["filter"] = []
+    query.query["ignore_unknown_fields"] = True
+    _, raw = query.get_scanner_data(timeout=30)
+    return raw.rename(columns={"ticker": "tv_ticker"}).set_index("tv_ticker")
+
+
 def fetch_fx(symbol: str) -> float:
     """Last price of a currency pair, e.g. FX_IDC:USDDKK (DKK per USD)."""
     query = Query().select("close").set_tickers(symbol)

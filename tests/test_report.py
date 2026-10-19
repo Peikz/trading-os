@@ -77,3 +77,26 @@ def test_breakout_flags_column():
     )
     lines = report.scan_table("breakout_watch", hits, 25)
     assert lines[-1] == "| 1 | BO | alert | 15.12 | 14.88 | 1.00 | 27 | 14.7,7.6 | 12-4- |  |  |"
+
+
+def test_fact_lines_link_the_headline_and_skip_rows_without_facts():
+    hits = pd.DataFrame(
+        [
+            {
+                "ticker": "ABCD",
+                "ctx_done": True,
+                "earnings_flag": False,
+                "ctx_news_title": "Wins [big] contract",
+                "ctx_news_publisher": "PR",
+                "ctx_news_time": "2026-10-16T16:05:00Z",
+                "ctx_news_url": "https://example.com/a",
+            },
+            {"ticker": "EFGH", "ctx_done": None, "earnings_flag": False},
+        ]
+    )
+    lines = report.fact_lines("ep_day", hits)
+    assert lines == [
+        "- **ABCD** · no earnings on this session",
+        r"  - [Wins \[big\] contract](https://example.com/a) (PR, 10-16 12:05 ET)",
+    ]
+    assert report.fact_lines("mb_up", hits) == []

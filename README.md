@@ -24,6 +24,12 @@ Each pushed alert also gets a position-size line (entry, stop, shares, position 
 USD). The method is in `config/scans.yaml` → `sizing:`; your account size and risk per trade
 live only in the private data repo (`settings/account.yaml`) and never appear in logs.
 
+The top pushed EPs and breakouts also get a line of facts: for EPs, whether earnings came out
+and when, EPS and revenue growth with the beat or miss, float traded, the move before the gap,
+52-week high and 200-day, plus the latest headline (Massive, when `MASSIVE_API_KEY` is set);
+for breakouts, the prior move, 3/6-month return, ADR and MA stack. Facts only, never a verdict
+(`config/scans.yaml` → `context:`).
+
 Scans that need daily history (Parabolic, breakouts, tight bases) find nothing until enough
 sessions of bars exist, from Massive or from the jobs' own EOD snapshots. Pushed candidates
 get a before-shot chart PNG in the data repo.

@@ -217,6 +217,8 @@ def detect(
                 "trig_b2": before.b2,
                 "trig_b3": before.b3,
                 "trig_b4": before.b4,
+                "trig_prior_move_pct": before.prior_move_pct,
+                "trig_ma_stacked": before.ma_stacked,
                 "trig_range_adr": float(day_range / before.adr_usd),
                 "trig_rvol": float(col["rvol"][t]),
                 "trig_b5": bool(

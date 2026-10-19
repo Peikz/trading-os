@@ -180,6 +180,9 @@ if page == "Today":
             label = report.SCAN_LABELS.get(scan, scan)
             st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
             show_table(scan, shown)
+            facts = report.fact_lines(scan, shown)
+            if facts:
+                st.markdown("\n".join(facts))
             charts = [(t, dashboard.chart_for(run, scan, t)) for t in shown["ticker"].head(10)]
             charts = [(t, p) for t, p in charts if p is not None]
             if charts:

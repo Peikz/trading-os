@@ -46,6 +46,7 @@ jobs:
       - name: Run EOD scans
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: uv run --frozen --no-dev python scripts/eod.py --data-dir data-repo $FORCE

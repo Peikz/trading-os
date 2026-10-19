@@ -71,8 +71,10 @@ def sent(monkeypatch):
     monkeypatch.setattr(job.notify, "send", lambda server, topic, msg: messages.append(msg))
     qqq = {"close": 100.0, "sma10": 98.0, "sma20": 97.0, "sma50": 95.0}
     monkeypatch.setattr(job.tv, "fetch_quote", lambda symbol: qqq)
+    monkeypatch.setattr(job.tv, "fetch_details", lambda symbols, fields: pd.DataFrame())
     monkeypatch.setenv("NTFY_TOPIC", "test-topic")
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+    monkeypatch.delenv("MASSIVE_API_KEY", raising=False)
     return messages
 
 
@@ -216,3 +218,54 @@ def test_push_carries_position_size_when_account_is_set(tmp_path, capsys, sent, 
     cands = pd.read_parquet(run_dir / "candidates.parquet")
     ep = cands[cands["scan"] == "ep_day"].iloc[0]
     assert ep["plan_shares"] > 0 and ep["plan_fx_rate"] == 6.667
+
+
+def test_push_carries_facts_and_headline(tmp_path, capsys, sent, monkeypatch):
+    universe = synthetic_universe()
+    universe["tv_ticker"] = "NASDAQ:" + universe["ticker"]
+    universe["float_shares"] = 6e6
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: universe)
+    asked = []
+
+    def details(symbols, fields):
+        asked.append(symbols)
+        return pd.DataFrame(
+            {"eps_surprise_percent_fq": [12.0], "revenue_surprise_percent_fq": [3.0]},
+            index=pd.Index([f"NASDAQ:{GAPPER}"], name="tv_ticker"),
+        ).assign(total_revenue_fq_h=[[150, 140, 120, 110, 100, 100, 90, 80]])
+
+    monkeypatch.setattr(job.tv, "fetch_details", details)
+    monkeypatch.setenv("MASSIVE_API_KEY", "test-key")
+    fresh = pd.Timestamp.now(tz="UTC").isoformat()
+    item = {"title": "Signs a supply deal", "publisher": "PR", "published_utc": fresh, "url": ""}
+    monkeypatch.setattr(job_massive(), "news", lambda self, ticker, limit=3: [item])
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
+    out, _ = capsys.readouterr()
+    assert "Context: added" in out and "supply deal" not in out
+    assert asked == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
+    [message] = sent
+    assert "   no earnings on this session" in message.body
+    assert "float 6M (0.5x traded)" in message.body and "rev +50% / +40%" in message.body
+    assert '   news: "Signs a supply deal" (PR, ' in message.body
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    ep = pd.read_parquet(run_dir / "candidates.parquet").query("scan == 'ep_day'").iloc[0]
+    assert ep["ctx_eps_surprise_pct"] == 12.0 and ep["ctx_news_title"] == "Signs a supply deal"
+
+
+def test_context_failure_still_pushes(tmp_path, capsys, sent, monkeypatch):
+    def down(symbols, fields):
+        raise RuntimeError(f"{GAPPER} not found")
+
+    monkeypatch.setattr(job.tv, "fetch_details", down)
+    monkeypatch.setattr(job, "TV_RETRY_WAIT_S", 0)
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert "Context: FAILED (RuntimeError)" in out and GAPPER not in out + err
+    [message] = sent
+    assert GAPPER in message.body and "no earnings" not in message.body
+
+
+def job_massive():
+    from trading_os.massive import MassiveClient
+
+    return MassiveClient

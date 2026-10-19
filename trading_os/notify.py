@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 import requests
 
-from trading_os import sizing
+from trading_os import context, sizing
 from trading_os.config import Config
 from trading_os.store import RunContext
 
@@ -149,14 +149,16 @@ def build_message(
         if ctx.slot == "weekly":
             lines = [format_weekly(row, name) for row in records]
         elif name.startswith("breakout_"):
-            lines = [_with_plan(format_breakout(row, name), row) for row in records]
+            lines = [_with_extras(format_breakout(row, name), row, name) for row in records]
         else:
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
-            lines = [_with_plan(format_hit(row, pct_column, ctx.slot), row) for row in records]
+            lines = [
+                _with_extras(format_hit(row, pct_column, ctx.slot), row, name) for row in records
+            ]
         blocks.append("\n".join([header, *lines]))
     if header_lines:
         blocks.insert(0, "\n".join(header_lines))
-    return Message(title=title, body="\n\n".join(blocks) or "No pushing scans ran.")
+    return Message(title=title, body=fit("\n\n".join(blocks) or "No pushing scans ran."))
 
 
 def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> None:
@@ -169,10 +171,36 @@ def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> N
     response.raise_for_status()
 
 
-def _with_plan(line: str, row: Mapping[str, Any]) -> str:
-    """The alert line plus its position-size line, when the account is set up."""
+def _with_extras(line: str, row: Mapping[str, Any], scan: str) -> str:
+    """The alert line, its position size and (for the top names) the facts behind it."""
+    out = [line]
     plan = sizing.plan_line(row)
-    return f"{line}\n{plan}" if plan else line
+    if plan:
+        out.append(plan)
+    if context.has_context(row):
+        out.extend(context.lines(row, scan))
+    return "\n".join(out)
+
+
+NTFY_LIMIT = 3900  # ntfy turns longer messages into attachments (4096 bytes)
+
+
+def fit(body: str, limit: int = NTFY_LIMIT) -> str:
+    """Keep the message under ntfy's size limit: drop headlines, then facts, then cut."""
+    if len(body.encode("utf-8")) <= limit:
+        return body
+    lines = [x for x in body.split("\n") if not x.startswith("   news: ")]
+    body = "\n".join(lines)
+    if len(body.encode("utf-8")) <= limit:
+        return body
+    keep = [x for x in lines if not x.startswith("   ") or x.startswith("   buy ")]
+    body = "\n".join(keep)
+    if len(body.encode("utf-8")) <= limit:
+        return body
+    return (
+        body.encode("utf-8")[: limit - 40].decode("utf-8", errors="ignore")
+        + "\n… (full list in the report)"
+    )
 
 
 def _pair(latest: float, previous: float) -> str:

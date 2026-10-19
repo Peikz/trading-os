@@ -116,3 +116,29 @@ def test_breakout_lines_show_pivot_stop_risk_and_flags():
     assert notify.format_breakout(row, "breakout_trigger") == (
         "BRKO  +6.8%  RVOL 2.5  pivot 15.12  stop 14.88  risk 1.0 ADR  B12-45"
     )
+
+
+def test_context_line_only_for_rows_with_facts():
+    row = {"ticker": "ABCD", "gap_pct": 14.2, "rvol50": 5.1, "dollar_volume": 82e6}
+    plain = notify._with_extras(notify.format_hit(row), row, "ep_day")
+    assert plain == "ABCD  +14.2%  RVOL 5.1  $82M"
+    assert notify._with_extras("x", row | {"ctx_done": float("nan")}, "ep_day") == "x"
+    facts = row | {"ctx_done": True, "earnings_flag": False, "ctx_news_title": "Deal signed"}
+    lines = notify._with_extras("x", facts, "ep_day").split("\n")
+    assert lines[1].startswith("   no earnings on this session")
+    assert lines[2] == '   news: "Deal signed"'
+
+
+def test_fit_drops_headlines_then_facts_then_cuts():
+    alert, plan = "ABCD  +14.2%", "   buy 10.00 · stop 9.50"
+    facts, news = "   earnings 10-15 " + "f" * 60, '   news: "' + "n" * 60 + '"'
+    body = "\n".join([alert, plan, facts, news] * 3)
+    size = len(body.encode("utf-8"))
+    assert notify.fit(body, limit=size) == body
+    no_news = notify.fit(body, limit=size - 10)
+    assert "news:" not in no_news and "earnings" in no_news
+    facts_only = "\n".join([alert, plan, facts] * 3)
+    bare = notify.fit(body, limit=len(facts_only.encode("utf-8")) - 1)
+    assert bare == "\n".join([alert, plan] * 3)
+    cut = notify.fit(body, limit=60)
+    assert len(cut.encode("utf-8")) <= 60 and cut.endswith("(full list in the report)")

@@ -39,6 +39,7 @@ TOP_LEVEL_KEYS = {
     "outcomes",
     "charts",
     "sizing",
+    "context",
     "report",
     "stats",
     "notify",
@@ -91,6 +92,7 @@ OUTCOME_KEYS = {"horizons"}
 CHART_KEYS = {"sessions"}
 REPORT_KEYS = {"max_rows_per_scan"}
 SIZING_KEYS = {"ep_stop_max_adr", "pm_stop_adr", "min_stop_adr", "fx_symbol"}
+CONTEXT_KEYS = {"max_per_scan", "news_max_tickers", "news_max_age_hours"}
 STATS_KEYS = {"min_signals"}
 UNIVERSE_KEYS = {
     "market",
@@ -247,6 +249,7 @@ class Config:
     outcomes: Mapping[str, Any]
     charts: Mapping[str, Any]
     sizing: Mapping[str, Any]
+    context: Mapping[str, Any]
     report: Mapping[str, Any]
     stats: Mapping[str, Any]
     notify: Mapping[str, Any]
@@ -297,6 +300,7 @@ def parse_config(raw: Any) -> Config:
     _check_keys("charts", raw["charts"], CHART_KEYS)
     _check_keys("sizing", raw["sizing"], SIZING_KEYS)
     _check_numbers("sizing", raw["sizing"])
+    _check_keys("context", raw["context"], CONTEXT_KEYS)
     _check_keys("report", raw["report"], REPORT_KEYS)
     _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
@@ -317,6 +321,7 @@ def parse_config(raw: Any) -> Config:
         outcomes=_freeze(raw["outcomes"]),
         charts=_freeze(raw["charts"]),
         sizing=_freeze(raw["sizing"]),
+        context=_freeze(raw["context"]),
         report=_freeze(raw["report"]),
         stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),

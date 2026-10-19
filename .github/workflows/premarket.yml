@@ -46,6 +46,7 @@ jobs:
       - name: Run pre-market scans
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: uv run --frozen --no-dev python scripts/premarket.py --data-dir data-repo $FORCE
 

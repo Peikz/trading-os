@@ -14,6 +14,7 @@ from typing import Any
 
 import pandas as pd
 
+from trading_os import context
 from trading_os.notify import SCAN_LABELS, SLOT_LABELS
 from trading_os.store import RunContext
 
@@ -142,6 +143,29 @@ def scan_table(scan: str, hits: pd.DataFrame, max_rows: int) -> list[str]:
     return lines
 
 
+def _md_text(text: str) -> str:
+    return text.replace("[", r"\[").replace("]", r"\]")
+
+
+def fact_lines(scan: str, hits: pd.DataFrame) -> list[str]:
+    """One bullet per pushed name with the facts behind it, the headline linked below."""
+    lines = []
+    for row in hits.to_dict("records"):
+        if not context.has_context(row):
+            continue
+        facts = [x.strip() for x in context.lines(row, scan) if not x.startswith("   news: ")]
+        if not facts:
+            continue
+        lines.append(f"- **{row['ticker']}** · {facts[0]}")
+        found = context.headline(row, max_chars=200)
+        if found is not None:
+            title, where = found
+            url = row.get("ctx_news_url")
+            text = f"[{_md_text(title)}]({url})" if isinstance(url, str) and url else title
+            lines.append(f"  - {text}" + (f" ({where})" if where else ""))
+    return lines
+
+
 def build(
     ctx: RunContext,
     results: Mapping[str, pd.DataFrame],
@@ -171,6 +195,9 @@ def build(
                 lines += ["_No hits._", ""]
                 continue
             lines += [*scan_table(name, hits, max_rows), ""]
+            facts = fact_lines(name, selected.get(name, hits.iloc[:0]))
+            if facts:
+                lines += ["Facts (not a grade):", "", *facts, ""]
             for row in selected.get(name, pd.DataFrame(columns=["ticker"])).to_dict("records"):
                 chart = charts.get((name, row["ticker"]))
                 if chart is not None:

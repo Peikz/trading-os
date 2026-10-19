@@ -20,6 +20,7 @@ from trading_os import (
     cats,
     charts,
     clock,
+    context,
     enrich,
     epstudy,
     history,
@@ -133,6 +134,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
     selected = notify.select_for_push(results, cfg)
+    results, selected = _with_context(results, selected, cfg, session)
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
     if args.no_push:
@@ -187,6 +189,81 @@ def _with_cats(results: dict, data_dir: Path, cfg, session) -> dict:
         if name in out:
             out[name] = cats.add_cats(out[name], growth, recent, rules)
     return out
+
+
+def _with_context(results: dict, selected: dict, cfg, session) -> tuple[dict, dict]:
+    """Facts behind the top pushed EPs and breakouts. Auxiliary: never fails the run."""
+    conf = cfg.context
+    names = [
+        n
+        for n, hits in selected.items()
+        if n in (*context.EP_SCANS, *context.BREAKOUT_SCANS) and len(hits)
+    ]
+    if not names:
+        return results, selected
+    try:
+        tops = {n: selected[n].head(conf["max_per_scan"]) for n in names}
+        symbols = sorted({t for top in tops.values() for t in top.get("tv_ticker", [])})
+        details = once_more(
+            lambda: tv.fetch_details(symbols, list(context.DETAIL_FIELDS)),
+            label="TradingView",
+            wait_s=TV_RETRY_WAIT_S,
+        )
+        details = context.growth_columns(details.rename(columns=context.DETAIL_FIELDS))
+        news = _news_lookup(cfg, session)
+        out_results, out_selected = dict(results), dict(selected)
+        for name, top in tops.items():
+            facts = context.add_context(
+                top,
+                details,
+                news if name in context.EP_SCANS else None,
+                premarket=name in context.PREMARKET_SCANS,
+            )
+            extra = [c for c in (*context.CONTEXT_COLUMNS, "ctx_done") if c in facts]
+            by_ticker = facts.set_index("ticker")[extra]
+            for frame_map in (out_results, out_selected):
+                frame = frame_map[name]
+                for column in extra:
+                    frame = frame.assign(**{column: frame["ticker"].map(by_ticker[column])})
+                frame_map[name] = frame
+        status("Context: added")
+        return out_results, out_selected
+    except Exception as exc:  # noqa: BLE001 - alerts still go out, just without the facts
+        status(f"Context: FAILED ({type(exc).__name__}), alerts sent without it")
+        return results, selected
+
+
+def _news_lookup(cfg, session):
+    """Latest fresh headline per ticker from Massive, capped per run; None without a key."""
+    key = os.environ.get("MASSIVE_API_KEY", "")
+    if not key:
+        return None
+    from trading_os.massive import MassiveClient, RateLimiter
+
+    client = MassiveClient(
+        key, cfg.history["massive_base_url"], RateLimiter(cfg.history["calls_per_minute"])
+    )
+    conf, cache = cfg.context, {}
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=conf["news_max_age_hours"])
+
+    def lookup(ticker: str):
+        if ticker in cache:
+            return cache[ticker]
+        if len(cache) >= conf["news_max_tickers"]:
+            return None
+        try:
+            items = client.news(ticker, limit=3)
+        except requests.RequestException:
+            items = []
+        fresh = [
+            i
+            for i in items
+            if i.get("published_utc") and pd.Timestamp(i["published_utc"]) >= cutoff
+        ]
+        cache[ticker] = fresh[0] if fresh else None
+        return cache[ticker]
+
+    return lookup
 
 
 def _with_sizing(results: dict, data_dir: Path, cfg) -> dict:
