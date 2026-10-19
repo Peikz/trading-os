@@ -84,7 +84,7 @@ word and I flip it.
 | 5 | Breadth up count | Stockbee style: up >= 4 % on volume above the prior day (no close-location rule) | `breadth.up_count_rule` |
 | 6 | Watchlist rules | EP-Watch from EP-Day and EP-PM alert hits, expires after 63 sessions; BO-Watch expires after 10 sessions without B1-B4 | `watchlists:` |
 | 7 | Breakout parameters SPEC leaves open | Swing >= 1 ADR $, >= 2 contractions, quiet volume = base avg below 50-day avg, right side = 5 sessions < 1.5 x ADR $ | `breakout:` |
-| 8 | Breakout trigger | Pushes only when B1-B4 also pass (Emil, 19 Oct, SPEC §11.12); B5-only triggers saved with their flags, not pushed | `breakout_trigger.push_if_all` |
+| 8 | Breakout trigger | Full block only when B1-B4 also pass (Emil, 19 Oct, SPEC §11.12); the top 5 B5-only triggers follow as one line each with their B-flags | `breakout_trigger.push_if_all`, `partial_top_n` |
 | 9 | Breakout and EP push tier | Alert tier, same as EP-Day (SPEC §11.7) | `push_tier` |
 | 10 | EP-PM price floor | Prior close | `scans/ep.py` |
 | 11 | QM gainers | Top 2 % over the whole logged-tier universe, then the floors; TradingView Perf.1M/3M/6M and ADR(14)/close | `proxies:` |
@@ -131,3 +131,4 @@ Still open (no default possible):
 - 2026-10-19 (later): From breakoutshappen.com and the reference repos (Emil chose all four): Stockbee Market Monitor month/34-day counts and SPY/VIX in the header; weekly industry ranking with the rank in every fact line; RS, earnings-soon and all-time-high facts; intraday BO pivot alert at 10:15/12:00.
 - 2026-10-19 (later): Push messages laid out for a phone (Emil: "very hard to read"): counts in the title, short market lines with ▲/▼, one block per stock, repeats collapsed, facts trimmed from the bottom up under ntfy's 4 KB limit (before, one long message dropped every fact line), tap opens the report. Breakout audit sheet (10 BO-Watch, 10 triggers) in the data repo; trigger push rule waits on Emil.
 - 2026-10-19 (later): Emil: breakout triggers push only with B1-B4 (SPEC §11.12). Push colours: 🟩/🟥 B-flags, 🟢/🔴 market counts and moves, section icons, 🛑 stop, 📢 earnings, ✅/❌ for the 200d and MA stack; the "no earnings" filler line is gone and the industry rank reads #3/112.
+- 2026-10-19 (later): Emil wants the B5-only triggers visible too: top 5 as one line each under the full setups (`B5 only · top 5 of 13`).

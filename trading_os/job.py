@@ -268,7 +268,11 @@ def _with_context(results: dict, selected: dict, cfg, session) -> tuple[dict, di
     if not names:
         return results, selected
     try:
-        tops = {n: selected[n].head(conf["max_per_scan"]) for n in names}
+        tops = {
+            n: selected[n][~notify.partial_rows(selected[n])].head(conf["max_per_scan"])
+            for n in names
+        }
+        tops = {n: top for n, top in tops.items() if len(top)}
         symbols = sorted({t for top in tops.values() for t in top.get("tv_ticker", [])})
         details = once_more(
             lambda: tv.fetch_details(symbols, list(context.DETAIL_FIELDS)),

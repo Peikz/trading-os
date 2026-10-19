@@ -300,7 +300,8 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 12. ~~Which breakout triggers push~~ — decided 19 Oct 2026 by Emil, after the history replay showed
    B5 alone firing ~42 times a day (1 of 2,503 with B1–B4): a trigger pushes only when B1–B4 also pass.
    B5-only triggers are still saved with their B-flags (for the audit and the stats); the push counts
-   how many were held back.
+   how many were held back. Later the same day Emil asked to see them too: the top 5 B5-only triggers
+   follow as one line each with their B-flags, no size or facts (`partial_top_n`).
 
 ## 12. References
 

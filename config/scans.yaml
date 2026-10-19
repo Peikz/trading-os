@@ -106,7 +106,8 @@ scans:
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
-     push_if_all: [b1, b2, b3, b4]}         # Emil, 19 Oct: push only full setups; B5-only saved
+     push_if_all: [b1, b2, b3, b4],         # Emil, 19 Oct: full blocks only for full setups
+     partial_top_n: 5}                      # top B5-only triggers as one line each below them
   universe_snapshot:
     {enabled: true, phase: 1, slot: eod, action: log}
 

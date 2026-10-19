@@ -114,10 +114,23 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
         eligible = hits
         if "push_tier" in scan.params:
             eligible = hits[hits["tier"] == scan["push_tier"]]
-        if "push_if_all" in scan.params:  # e.g. a breakout trigger pushes only with B1-B4
-            eligible = eligible[_all_pass(eligible, scan["push_if_all"])]
+        if "push_if_all" in scan.params:
+            # A breakout trigger with B1-B4 gets a full block; the top B5-only ones get one
+            # line each below (`push_partial`), so trigger days stay visible without the noise.
+            full = _all_pass(eligible, scan["push_if_all"])
+            top = eligible[full].sort_values("rank").head(limit).assign(push_partial=False)
+            rest = eligible[~full].sort_values("rank").head(scan.params.get("partial_top_n", 0))
+            selected[name] = pd.concat([top, rest.assign(push_partial=True)])
+            continue
         selected[name] = eligible.sort_values("rank").head(limit)
     return selected
+
+
+def partial_rows(hits: pd.DataFrame) -> pd.Series:
+    """Rows shown as one line only (B5-only triggers)."""
+    if "push_partial" not in hits:
+        return pd.Series(False, index=hits.index)
+    return hits["push_partial"].fillna(False).astype(bool)
 
 
 def _all_pass(hits: pd.DataFrame, flags: Iterable[str]) -> pd.Series:
@@ -278,6 +291,18 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     return out
 
 
+def _partial_lines(name, partial, hits, scan, shown, slot) -> list[Line]:
+    """`B5 only · top 5 of 13:` and one line per trigger (its squares show what's missing)."""
+    alerts = hits[hits["tier"] == "alert"] if "tier" in hits else hits
+    held = int((~_all_pass(alerts, scan["push_if_all"])).sum())
+    out = [Line("note", f"B5 only · top {len(partial)} of {held}:")]
+    for row in partial.to_dict("records"):
+        first = _first_line(row, name, slot)
+        seen = shown.get(row["ticker"])
+        out.append(Line("hit", f"▸ {first}" + (f"  ↑ see {seen}" if seen else "")))
+    return out
+
+
 def _quiet(label: str, hits: pd.DataFrame, scan) -> str:
     """How a scan without alerts appears in the closing `Nothing new:` line."""
     if "push_tier" not in scan.params or hits.empty:
@@ -311,22 +336,23 @@ def build_message(
 ) -> Message:
     lines = [Line("head", text) for text in header_lines or []]
     counts, quiet, shown = [], [], {}
-    for name, chosen in selected.items():
+    for name, both in selected.items():
         label = SCAN_LABELS.get(name, name)
-        if chosen.empty:
+        chosen, partial = both[~partial_rows(both)], both[partial_rows(both)]
+        if both.empty:
             quiet.append(_quiet(label, results[name], cfg.scans[name]))
             continue
-        counts.append(f"{TITLE_LABELS.get(name, label)} {len(chosen)}")
+        if len(chosen):
+            counts.append(f"{TITLE_LABELS.get(name, label)} {len(chosen)}")
+        if len(partial):
+            counts.append(f"B5-only {len(partial)}")
         total = len(results[name])
         more = f" of {total}" if total > len(chosen) else ""
+        size = f"{len(chosen)}{more}" if len(chosen) else "no full setup"
         legend = " 1M/3M/6M" if name == "qm_gainers" else ""
         icon = SECTION_ICONS.get(name, "")
-        lines += [
-            Line("gap", ""),
-            Line(
-                "section", f"━━ {icon} {label}{legend} · {len(chosen)}{more} ━━".replace("  ", " ")
-            ),
-        ]
+        header = f"━━ {icon} {label}{legend} · {size} ━━".replace("  ", " ")
+        lines += [Line("gap", ""), Line("section", header)]
         for row in chosen.to_dict("records"):
             ticker = row["ticker"]
             if ticker in shown:
@@ -339,6 +365,10 @@ def build_message(
             if lines[-1].role != "section" and (len(block) > 1 or lines[-1].role != "hit"):
                 lines.append(Line("gap", ""))
             lines += block
+        if len(partial):
+            if len(chosen):
+                lines.append(Line("gap", ""))
+            lines += _partial_lines(name, partial, results[name], cfg.scans[name], shown, ctx.slot)
     if quiet:
         lines += [Line("gap", ""), Line("note", "Nothing new: " + " · ".join(quiet))]
     if click:

@@ -185,7 +185,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "up_count_rule",
     },
     "breakout_watch": {"push_tier"},
-    "breakout_trigger": {"push_tier", "push_if_all"},
+    "breakout_trigger": {"push_tier", "push_if_all", "partial_top_n"},
     "universe_snapshot": set(),
     "qm_gainers": {
         "top_pct",

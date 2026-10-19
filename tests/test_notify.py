@@ -227,3 +227,44 @@ def test_weekly_growth_caps_tiny_bases():
     row = {"ticker": "ABCD", "eps_growth_q": 432900.0, "eps_growth_q_prev": 115.0}
     row |= {"rev_growth_q": 36.0, "rev_growth_q_prev": float("nan")}
     assert notify.format_weekly(row, "growth_bucket_2") == "ABCD  EPS >+999% / +115%  rev +36%"
+
+
+def triggers():
+    rows = []
+    for i, flags in enumerate([(1, 1, 1, 1), (1, 0, 1, 0), (0, 0, 1, 0), (1, 1, 0, 1)]):
+        row = {"ticker": f"BO{i}", "rank": i + 1, "tier": "alert", "chg_pct": 3.0 + i}
+        row |= {"trig_rvol": 2.0, "pivot": 10.0, "order_stop": 9.5, "b5": True}
+        row |= {f"b{k + 1}": bool(v) for k, v in enumerate(flags)}
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_full_setups_get_blocks_and_b5_only_get_one_line_each():
+    cfg = load_config()
+    results = {"breakout_trigger": triggers()}
+    chosen = notify.select_for_push(results, cfg)["breakout_trigger"]
+    assert chosen["ticker"].tolist() == ["BO0", "BO1", "BO2", "BO3"]
+    assert chosen["push_partial"].tolist() == [False, True, True, True]
+    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
+    assert msg.title == f"EOD Mon 19 Oct {DOT} BO 1 {DOT} B5-only 3"
+    body = msg.body.splitlines()
+    assert body[0] == f"━━ 🚀 Breakout {DOT} 1 of 4 ━━"
+    assert body[1] == "▸ BO0  +3.0%  RVOL 2.0  B🟩🟩🟩🟩🟩"
+    assert body[2] == f"   Pivot 10.00 {DOT} 🛑 9.50"
+    assert body[3:] == [
+        "",
+        f"B5 only {DOT} top 3 of 3:",
+        "▸ BO1  +4.0%  RVOL 2.0  B🟩🟥🟩🟥🟩",
+        "▸ BO2  +5.0%  RVOL 2.0  B🟥🟥🟩🟥🟩",
+        "▸ BO3  +6.0%  RVOL 2.0  B🟩🟩🟥🟩🟩",
+    ]
+
+
+def test_b5_only_shown_under_a_section_without_full_setups():
+    cfg = load_config()
+    results = {"breakout_trigger": triggers().iloc[1:]}
+    msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
+    assert msg.body.splitlines()[:2] == [
+        f"━━ 🚀 Breakout {DOT} no full setup ━━",
+        f"B5 only {DOT} top 3 of 3:",
+    ]
