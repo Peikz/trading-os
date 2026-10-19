@@ -6,8 +6,8 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 ### Setup
 - [x] Emil: create public repo `trading-os` (add SPEC.md, CLAUDE.md, BACKLOG.md, `.github/workflows/claude-backlog.yml`) and private repo `trading-os-data` — done 18 Oct via gh; backlog worker disabled until START-HERE Step 6
-- [ ] Emil: fine-grained PAT with contents read/write on `trading-os-data` only → secret `DATA_REPO_TOKEN` in `trading-os`
-- [ ] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules) — built in `eod.yml`, `premarket.yml` and `weekly.yml`; the scan side already ran green on GitHub (`Pipeline check`, 19 Oct: TradingView reachable from Actions, public log counts only); the commit/push side waits for `DATA_REPO_TOKEN`
+- [x] Emil: fine-grained PAT with contents read/write on `trading-os-data` only → secret `DATA_REPO_TOKEN` in `trading-os` — added 19 Oct (needed repository access plus Contents read/write)
+- [x] Data-repo client: checkout, write, commit, push from workflows; log only counts/status (SPEC §2 two-repo rules) — built in `eod.yml`, `premarket.yml` and `weekly.yml`; the scan side already ran green on GitHub (`Pipeline check`, 19 Oct: TradingView reachable from Actions, public log counts only); the commit/push side waits for `DATA_REPO_TOKEN` — first forced EOD on GitHub (19 Oct) committed to the data repo as trading-os-bot
 - [x] Project skeleton: `pyproject.toml`, `ruff`, `pytest`, package layout per CLAUDE.md
 - [x] `config/scans.yaml` with every threshold from SPEC.md §4 and §6 (Phase 1 scans)
 - [x] Market calendar + New York time guard (premarket / eod windows, holidays)
@@ -19,12 +19,12 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [x] Parquet writer (append-only, partitioned per SPEC §7) + xlsx export
 
 ### Scans — EOD
-- [ ] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run
-- [ ] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run
-- [ ] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run
+- [x] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
+- [x] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
+- [x] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
 - [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive backfill, or our own EOD snapshots; default 1 in Questions)
 - [ ] Breadth line + Market Light count — built: breadth row daily (`data/breadth/`), two push lines, light from the owner's table; Sunday scan count (`data/market_light_count/`). Light shows once QQQ's 5-session SMA20 slope and 10 days of counts exist; defaults 1, 4, 5 in Questions
-- [ ] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run
+- [x] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
 
 ### Scans — pre-market
 - [ ] EP-PM — built, `premarket.py` + `premarket.yml`; smoke-tested locally; ticks after the first Actions run
@@ -37,7 +37,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 ### Delivery
 - [x] ntfy notifications (one message per job + failure message) — test EOD message and failure message both sent from GitHub on 19 Oct and received
-- [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday)
+- [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday); `eod.yml` wrote to the data repo 19 Oct; pre-market's first scheduled run is 20 Oct, weekly's 25 Oct; `intraday.yml` added 19 Oct
 - [x] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2) — added 19 Oct; a test push from GitHub (`Pipeline check` with push) was accepted by ntfy
 
 ### Validation
@@ -46,7 +46,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 ## Phase 2 — Breakouts and history
 - [x] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items) — added 19 Oct; `Massive check` workflow OK: 12,630 tickers on the latest session, history back to 2024-10-28 (older days answer 403, so the window is capped at 720 days)
-- [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; waits for `MASSIVE_API_KEY`
+- [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; full run dispatched 19 Oct
 - [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
 - [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built and wired: `prefer_history` swaps in exact RVOL / ADR / returns / 20-day averages per row (whole groups, proxy kept as `*_proxy`, basis columns updated); end-to-end tested on 55 stored sessions; activates with the backfill
 - [ ] Base detection B2 (configurable heuristic, store intermediates) — built: `breakouts.py` (pivot = base's highest high, zigzag contractions, depths/lows/volume ratios stored); unspecified parameters marked (proposed) in `config/scans.yaml` `breakout:`; waits for history and the 20-hit hand audit
@@ -100,7 +100,7 @@ Still open (no default possible):
 - Your manual EP-Day screen: does it filter on TradingView's "Relative Volume" (10-day) and have "Primary listing" on? Both change which names appear; `docs/validation.md` shows both RVOL columns, and `scripts/compare_screen.py` explains each difference.
 
 ## Blocked
-- 18 Oct: secrets `NTFY_TOPIC` and `DATA_REPO_TOKEN` not set yet (`MASSIVE_API_KEY` is in). The first Actions runs and the backfill wait on them (Emil).
+- Nothing blocked. All secrets are set (19 Oct); the 2-year backfill is running.
 
 ## Session log
 - 2026-10-18: Repos created; skeleton, config, clock guard, TradingView client (fields verified, see `docs/fields.md`), universe tiers, Phase 1 metrics subset, EP-Day, store, ntfy, `eod.py`, `eod.yml`. Local forced run on 16 Oct data OK. Next: secrets, then the first Actions run of `eod.yml`.
