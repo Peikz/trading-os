@@ -1,17 +1,14 @@
-"""End-to-end test of scripts/eod.py with a synthetic TradingView frame (no network)."""
-
-import importlib.util
-from pathlib import Path
+"""End-to-end test of the job runner with a synthetic TradingView frame (no network)."""
 
 import pandas as pd
 import pytest
 
-from trading_os import tv
+from trading_os import job, tv
 
-SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "eod.py"
-spec = importlib.util.spec_from_file_location("eod_job", SCRIPT)
-eod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(eod)
+
+def run_eod(argv):
+    return job.main("eod", "EOD", "test", argv)
+
 
 GAPPER = "".join(["GP", "QX"])  # built at runtime, like real data
 QUIET = "".join(["QT", "ZZ"])
@@ -36,6 +33,7 @@ def synthetic_universe() -> pd.DataFrame:
         "avg_dollar_volume_30d_tv": 9_000_000.0,
         "earnings_date_last": pd.Timestamp("2026-07-01", tz="UTC"),
         "earnings_date_next": pd.Timestamp("2026-11-01", tz="UTC"),
+        "pm_price": 11.0,
     }
     gapper = base | {
         "ticker": GAPPER,
@@ -43,6 +41,8 @@ def synthetic_universe() -> pd.DataFrame:
         "chg_pct": 20.0,
         "volume": 3_000_000,
         "avg_volume_60d_tv": 62_000_000 / 60,  # RVOL 3.0 once today is removed
+        "pm_change_pct": 12.0,
+        "pm_volume": 400_000.0,
     }
     quiet = base | {
         "ticker": QUIET,
@@ -57,15 +57,15 @@ def synthetic_universe() -> pd.DataFrame:
 @pytest.fixture()
 def sent(monkeypatch):
     messages = []
-    monkeypatch.setattr(eod.tv, "fetch_universe", lambda universe: synthetic_universe())
-    monkeypatch.setattr(eod.notify, "send", lambda server, topic, msg: messages.append(msg))
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda universe: synthetic_universe())
+    monkeypatch.setattr(job.notify, "send", lambda server, topic, msg: messages.append(msg))
     monkeypatch.setenv("NTFY_TOPIC", "test-topic")
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     return messages
 
 
 def test_forced_run_writes_manual_files_and_pushes(tmp_path, capsys, sent):
-    assert eod.main(["--data-dir", str(tmp_path), "--force"]) == 0
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
     out, err = capsys.readouterr()
     # Public log: counts only.
     assert GAPPER not in out + err and QUIET not in out + err
@@ -86,8 +86,8 @@ def test_forced_run_writes_manual_files_and_pushes(tmp_path, capsys, sent):
 
 
 def test_outside_window_does_nothing(tmp_path, capsys, sent, monkeypatch):
-    monkeypatch.setattr(eod.clock, "in_window", lambda *a: False)
-    assert eod.main(["--data-dir", str(tmp_path)]) == 0
+    monkeypatch.setattr(job.clock, "in_window", lambda *a: False)
+    assert run_eod(["--data-dir", str(tmp_path)]) == 0
     assert "nothing to do" in capsys.readouterr().out
     assert not (tmp_path / "data").exists()
     assert sent == []
@@ -95,7 +95,19 @@ def test_outside_window_does_nothing(tmp_path, capsys, sent, monkeypatch):
 
 def test_missing_topic_fails_without_leaking(tmp_path, capsys, sent, monkeypatch):
     monkeypatch.delenv("NTFY_TOPIC")
-    assert eod.main(["--data-dir", str(tmp_path), "--force"]) == 1
+    assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 1
     out, _ = capsys.readouterr()
     assert "EOD: FAILED (RuntimeError)" in out
     assert list((tmp_path / "logs").glob("*_eod.log"))
+
+
+def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
+    assert job.main("pm", "Pre-market", "test", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert GAPPER not in out + err
+    assert "EP-PM: 1 hits (1 alert), saved" in out
+    [message] = sent
+    assert message.title.startswith("Trading OS · Pre-market ")
+    assert f"{GAPPER}  +12.0%  PM vol 0.4M  $4M" in message.body
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    assert run_dir.name.split("_")[1] == "pm"
