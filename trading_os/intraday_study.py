@@ -14,8 +14,13 @@ look-ahead: it skips every gap that faded. So the study runs in two steps.
 |          |                                                    | opening gap >= 10 %            |
 | ep9m     | day high >= +4 % and day volume >= 1.5M            | +4 % and on pace for 9M        |
 | pivot    | day high >= the pivot of the base the day before   | the minute it crosses          |
+| vcp      | day high >= the pivot of a VCP (Minervini) ended   | the minute it crosses          |
+|          | the day before, on a Trend Template stock          |                                |
+| luk      | a leader whose low reached yesterday's EMA 9/21 or | the touch, then the turn green |
+|          | AVWAP zone (Martin Luk, `luk.py`)                  |                                |
 | next_day | the session after an end-of-day hit (EP-Day, EP9M, | known at the prior close       |
-|          | MB up/down, parabolic long/short, BO trigger)      |                                |
+|          | MB up/down, parabolic long/short, BO trigger,     |                                |
+|          | Luk setups)                                        |                                |
 
 Every group starts from the alert tier's prior-day facts: prior close >= $1 and 20-day average
 volume >= 500K (both known before the open). 1-minute bars for the same-day groups, 5-minute
@@ -31,11 +36,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_os import breakouts
+from trading_os import breakouts, luk, minervini
 from trading_os import history_metrics as hm
 from trading_os.audit import ordinary_ticker
 from trading_os.metrics import NEW_YORK
 
+SAME_DAY = ("ep9m", "pivot", "vcp", "luk")  # 1-minute bars of the session
 NEXT_DAY_STRATEGIES = (
     "ep_day",
     "ep9m",
@@ -44,6 +50,8 @@ NEXT_DAY_STRATEGIES = (
     "parabolic_long",
     "parabolic_short",
     "breakout_trigger",
+    *luk.STRATEGIES,
+    "vcp_breakout",
 )
 
 
@@ -85,8 +93,12 @@ def candidates(
     bars: pd.DataFrame, sessions: list, cfg, next_day_hits: pd.DataFrame | None = None
 ) -> pd.DataFrame:
     """Every stock-day to fetch, with the facts known before it."""
-    conf = cfg.intraday_study
     g, tickers = daily(bars, sessions)
+    return from_grids(g, tickers, sessions, cfg, next_day_hits)
+
+
+def from_grids(g, tickers, sessions, cfg, next_day_hits=None) -> pd.DataFrame:
+    conf = cfg.intraday_study
     facts = prior_facts(g, cfg.universe["alert"])
     with np.errstate(divide="ignore", invalid="ignore"):
         gap = (g["open"] / facts["prev_close"] - 1) * 100
@@ -101,9 +113,11 @@ def candidates(
         _rows(*np.nonzero(gap_mask), sessions, tickers, facts, "gap").assign(gap_pct=gap[gap_mask]),
         _rows(*np.nonzero(ep9m_mask), sessions, tickers, facts, "ep9m"),
         pivot_candidates(g, tickers, sessions, cfg.breakout, facts),
+        luk_candidates(g, tickers, sessions, cfg.luk, facts),
+        vcp_candidates(g, tickers, sessions, cfg.minervini, facts),
     ]
     if next_day_hits is not None and len(next_day_hits):
-        frames.append(next_day_candidates(next_day_hits, sessions, tickers, facts))
+        frames.append(next_day_candidates(next_day_hits, sessions, tickers, facts, g))
     out = pd.concat([f for f in frames if len(f)], ignore_index=True)
     return out.sort_values(["group", "session_date", "ticker"]).reset_index(drop=True)
 
@@ -147,7 +161,49 @@ def pivot_candidates(g, tickers, sessions, params, facts) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def next_day_candidates(hits: pd.DataFrame, sessions, tickers, facts) -> pd.DataFrame:
+def luk_candidates(g, tickers, sessions, conf, facts) -> pd.DataFrame:
+    """Days a leader (EMA 9 > EMA 21, both yesterday) traded down to within `touch_adr` ADR of
+    the highest of yesterday's EMA 9, EMA 21 and AVWAP: every day a Luk pullback or AVWAP
+    flush could have been bought during the session."""
+    ind = luk.indicators(g, conf)
+    keys = ("leader", "lead", "mid_rising", "ema_fast", "ema_mid", "avwap", "base_days")
+    y = {k: hm.shift(ind[k].astype(float), 1) for k in keys}
+    zone = np.fmax(np.fmax(y["ema_fast"], y["ema_mid"]), y["avwap"])
+    with np.errstate(invalid="ignore"):
+        mask = (
+            facts["ok"]
+            & (y["leader"] == 1)
+            & (y["ema_fast"] > y["ema_mid"])
+            & (g["low"] <= zone + conf["touch_adr"] * facts["adr_usd"])
+        )
+    t, j = np.nonzero(mask)
+    out = _rows(t, j, sessions, tickers, facts, "luk")
+    for k in ("ema_fast", "ema_mid", "avwap", "base_days"):
+        out[k] = y[k][t, j]
+    out["lead"], out["mid_rising"] = y["lead"][t, j] == 1, y["mid_rising"][t, j] == 1
+    return out
+
+
+def vcp_candidates(g, tickers, sessions, conf, facts) -> pd.DataFrame:
+    """VCP trigger days (Minervini): the day's high reached the pivot of a VCP that ended
+    the session before, on a Trend Template stock."""
+    found = minervini.find(g, tickers, sessions, conf, minervini.rs_rating(g["close"]))
+    found = found[found["strategy"] == "vcp_breakout"]
+    if found.empty:
+        return pd.DataFrame()
+    index = {d: i for i, d in enumerate(sessions)}
+    col = {t: j for j, t in enumerate(tickers)}
+    t = found["session_date"].map(index).to_numpy()
+    j = found["ticker"].map(col).to_numpy()
+    keep = facts["ok"][t, j]
+    out = _rows(t[keep], j[keep], sessions, tickers, facts, "vcp")
+    for c in ("pivot", "last_low", "contractions", "last_depth_pct", "rs_rating"):
+        out[c] = found[c].to_numpy()[keep]
+    out["setup"] = "vcp_breakout"
+    return out
+
+
+def next_day_candidates(hits: pd.DataFrame, sessions, tickers, facts, g) -> pd.DataFrame:
     """The session after each end-of-day hit; the signal day's bar is known by then."""
     index = {d: i for i, d in enumerate(sessions)}
     col = {t: j for j, t in enumerate(tickers)}
@@ -166,8 +222,8 @@ def next_day_candidates(hits: pd.DataFrame, sessions, tickers, facts) -> pd.Data
                 "adr_usd": facts["adr_usd"][t + 1, j],
                 "strategy": rec["strategy"],
                 "signal_date": rec["session_date"],
-                "signal_high": rec.get("high"),
-                "signal_low": rec.get("low"),
+                "signal_high": g["high"][t, j],
+                "signal_low": g["low"][t, j],
             }
         )
     return pd.DataFrame(rows)
@@ -208,7 +264,7 @@ def fetch_windows(cands: pd.DataFrame, sessions: list) -> pd.DataFrame:
         i = index[day]
         groups = part.groupby("group")["ticker"].agg(set).to_dict()
         evening = groups.get("gap", set())
-        same_day = (groups.get("ep9m", set()) | groups.get("pivot", set())) - evening
+        same_day = set().union(*(groups.get(k, set()) for k in SAME_DAY)) - evening
         later = groups.get("next_day", set()) - evening - same_day
         prior = sessions[i - 1] if i else day
         for kind, symbols, start, timeframe in (
@@ -326,6 +382,211 @@ def load_minutes(out_dir, month: str | None = None) -> pd.DataFrame:
     return bars.drop_duplicates(["ticker", "ts", "kind"]).reset_index(drop=True)
 
 
+KIND_ORDER = {"evening": 0, "day": 1, "day5": 2}  # a wider fetch wins for the same stock-day
+
+
+def stock_days(month_bars: pd.DataFrame) -> dict[tuple, Any]:
+    """(session_date, ticker) -> `intraday_entries.Bars`, minutes relative to that session's
+    midnight in New York (the evening before is negative)."""
+    from trading_os.intraday_entries import Bars
+
+    if month_bars.empty:
+        return {}
+    df = month_bars.assign(prio=month_bars["kind"].map(KIND_ORDER))
+    df = df[df["prio"] == df.groupby(["session_date", "ticker"])["prio"].transform("min")]
+    ny = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(NEW_YORK)
+    before = (pd.to_datetime(df["session_date"]) - pd.to_datetime(ny.dt.date)).dt.days
+    minute = (ny.dt.hour * 60 + ny.dt.minute) - 1440 * before
+    df = df.assign(minute=minute.to_numpy()).sort_values(["session_date", "ticker", "minute"])
+    cols = {c: df[c].to_numpy(dtype=float) for c in ("open", "high", "low", "close", "volume")}
+    vwap = df["vwap"].to_numpy(dtype=float)
+    vwap = np.where(np.isnan(vwap), cols["close"], vwap)
+    m = df["minute"].to_numpy()
+    out = {}
+    for key, rows in df.groupby(["session_date", "ticker"], sort=False).indices.items():
+        sl = slice(int(rows[0]), int(rows[-1]) + 1)  # sorted, so each stock-day is contiguous
+        out[key] = Bars(
+            m[sl],
+            cols["open"][sl],
+            cols["high"][sl],
+            cols["low"][sl],
+            cols["close"][sl],
+            cols["volume"][sl],
+            vwap[sl],
+        )
+    return out
+
+
+def params(cfg) -> dict[str, Any]:
+    """Every threshold the entry rules read, from the live scans' own config."""
+    return {
+        "gap_min_pct": cfg.scans["ep_day"]["gap_min_pct"],
+        "ah_change_min_pct": cfg.scans["ep_ah"]["ah_change_min_pct"],
+        "ah_volume_min": cfg.scans["ep_ah"]["ah_volume_min"],
+        "pm_change_min_pct": cfg.scans["ep_pm"]["pm_change_min_pct"],
+        "pm_volume_min": cfg.scans["ep_pm"]["pm_volume_min"],
+        "ep9m_chg_min_pct": cfg.scans["ep9m_pace"]["chg_min_pct"],
+        "ep9m_volume_min": cfg.scans["ep9m_pace"]["volume_min"],
+        "pace_fraction": dict(cfg.intraday_study["pace_fraction"]),
+        "touch_adr": cfg.luk["touch_adr"],
+        "flush_adr": cfg.luk["flush_adr"],
+        "base_min_days": cfg.luk["base_min_days"],
+        "min_stop_adr": cfg.sizing["min_stop_adr"],
+        "wide_stop_adr": cfg.intraday_study["wide_stop_adr"],
+        "vcp_stop_max_pct": cfg.minervini["stop_max_pct"],
+    }
+
+
+def trail_lines(g: dict) -> dict[str, np.ndarray]:
+    close = g["close"]
+    return {
+        "ma10": hm.rolling_mean(close, 10),
+        "ma20": hm.rolling_mean(close, 20),
+        "ema9": hm.ema(close, 9),
+        "ema21": hm.ema(close, 21),
+    }
+
+
+KEEP = ("group", "session_date", "ticker", "prev_close", "adr_usd", "signal_date", "rs_rating")
+
+
+def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataFrame:
+    """Every entry x stop rule for one month's candidates, with every exit."""
+    from trading_os import intraday_entries as ie
+    from trading_os import intraday_exits
+
+    lookup = stock_days(month_bars)
+    p = params(cfg)
+    rows = []
+    for rec in cands.to_dict("records"):
+        b = lookup.get((rec["session_date"], rec["ticker"]))
+        if b is None or not rec.get("adr_usd", 0) > 0:
+            continue
+        b = ie.for_group(b, rec["group"])
+        for entry in ie.RULES[rec["group"]](b, rec, p):
+            stopped, price = ie.entry_day_exit(b, entry)
+            keep = {k: rec.get(k) for k in KEEP}
+            rows.append(keep | entry | {"stopped0": stopped, "exit0": price})
+    if not rows:
+        return pd.DataFrame()
+    trades = pd.DataFrame(rows)
+    index = {d: i for i, d in enumerate(sessions)}
+    col = {t: j for j, t in enumerate(tickers)}
+    t = trades["session_date"].map(index)
+    j = trades["ticker"].map(col)
+    trades = trades[t.notna() & j.notna()].reset_index(drop=True)
+    t, j = t.dropna().astype(int).to_numpy(), j.dropna().astype(int).to_numpy()
+    results = intraday_exits.run(
+        g,
+        lines,
+        t,
+        j,
+        trades["price"].to_numpy(dtype=float),
+        trades["stop"].to_numpy(dtype=float),
+        trades["side"].to_numpy(dtype=int),
+        (trades["stopped0"].to_numpy(dtype=bool), trades["exit0"].to_numpy(dtype=float)),
+        cfg.exits,
+    )
+    trades = trades.assign(**results)
+    trades["risk_adr"] = (trades["price"] - trades["stop"]).abs() / trades["adr_usd"]
+    return trades.drop(columns=["start", "exit0", "stopped0"])
+
+
+def exit_columns(df: pd.DataFrame) -> list[str]:
+    return [c for c in df.columns if c.startswith("r_")]
+
+
+def summary(df: pd.DataFrame, by: list[str] | None = None) -> pd.DataFrame:
+    """Per strategy, entry and stop rule (and `by`): trades, then for every exit the win rate
+    and mean R (capped at 20 so one runner can't carry a group)."""
+    keys = ["strategy", "entry", "stop_rule", *(by or [])]
+    rows = []
+    for key, part in df.groupby(keys, dropna=False, observed=True):
+        row = dict(zip(keys, key if isinstance(key, tuple) else (key,), strict=True))
+        row["trades"] = len(part)
+        row["stopped_same_day%"] = part["stopped_0d"].astype(float).mean() * 100
+        for column in exit_columns(part):
+            r = part[column].dropna()
+            name = column[2:]
+            row[f"win_{name}%"] = (r > 0).mean() * 100 if len(r) else np.nan
+            row[f"R_{name}"] = r.clip(upper=20).mean() if len(r) else np.nan
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def best(table: pd.DataFrame, min_trades: int = 50, top: int = 3) -> pd.DataFrame:
+    """Per strategy: the `top` entry x stop x exit combinations by mean R (at least
+    `min_trades` trades), with their win rate."""
+    rows = []
+    for _, part in table[table["trades"] >= min_trades].groupby("strategy"):
+        found = []
+        for rec in part.to_dict("records"):
+            for column in (c for c in rec if c.startswith("R_")):
+                if rec[column] == rec[column]:
+                    name = column[2:]
+                    found.append(
+                        {
+                            "strategy": rec["strategy"],
+                            "entry": rec["entry"],
+                            "stop_rule": rec["stop_rule"],
+                            "exit": name,
+                            "trades": rec["trades"],
+                            "mean_R": rec[column],
+                            "win%": rec.get(f"win_{name}%"),
+                        }
+                    )
+        rows += sorted(found, key=lambda r: -r["mean_R"])[:top]
+    return pd.DataFrame(rows)
+
+
+def write_results(df: pd.DataFrame, folder) -> None:
+    """One file per strategy (floats as float32)."""
+    from pathlib import Path
+
+    from trading_os.store import PARQUET_OPTIONS
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, part in df.groupby("strategy"):
+        slim = part.copy()
+        for column in slim.select_dtypes("float64").columns:
+            slim[column] = slim[column].astype("float32")
+        slim.to_parquet(folder / f"{name}.parquet", **PARQUET_OPTIONS)
+
+
+def load_results(data_dir) -> pd.DataFrame:
+    """The newest build, every strategy."""
+    from pathlib import Path
+
+    root = Path(data_dir) / "data" / "intraday_study"
+    builds = sorted(p for p in root.glob("*") if p.is_dir())
+    if not builds:
+        return pd.DataFrame()
+    out = pd.concat([pd.read_parquet(f) for f in sorted(builds[-1].glob("*.parquet"))])
+    out["session_date"] = pd.to_datetime(out["session_date"]).dt.date
+    return out.reset_index(drop=True)
+
+
+def run_study(g, tickers, sessions, cands, minutes_dir, cfg) -> pd.DataFrame:
+    """Month by month over the minute files in `minutes_dir`."""
+    from pathlib import Path
+
+    lines = trail_lines(g)
+    files = Path(minutes_dir).glob("*.parquet")
+    months = sorted({f.name[:7] for f in files if not f.name.endswith(ASKED)})
+    month_of = cands["session_date"].map(lambda d: f"{d:%Y-%m}")
+    frames = []
+    for month in months:
+        part = cands[month_of == month]
+        if part.empty:
+            continue
+        bars = load_minutes(minutes_dir, month)
+        found = study_month(bars, part, g, lines, sessions, tickers, cfg)
+        if len(found):
+            frames.append(found)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def main(argv: list[str] | None = None) -> int:
     from trading_os.logsafe import run_guarded
 
@@ -348,12 +609,13 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--fetch", type=Path, help="folder of the minute files to add to")
     parser.add_argument("--minutes", type=int, default=0, help="stop fetching after N minutes")
+    parser.add_argument("--run", type=Path, help="folder of downloaded minute files: run it")
     args = parser.parse_args(argv)
     cfg = load_config()
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
     sessions = sorted({dt.date.fromisoformat(f.stem[:10]) for f in files})
-    bars = history.load_bars(args.data_dir, sessions)
-    cands = candidates(bars, sessions, cfg, next_day_hits(args.data_dir))
+    g, tickers = daily(history.load_bars(args.data_dir, sessions), sessions)
+    cands = from_grids(g, tickers, sessions, cfg, next_day_hits(args.data_dir))
     status(f"Intraday study: {cands.groupby('group').size().to_dict()} candidate stock-days")
     if args.fetch:
         key = os.environ.get("ALPACA_API_KEY_ID", "")
@@ -363,4 +625,10 @@ def _main(argv: list[str] | None = None) -> int:
             return 1
         deadline = time.time() + args.minutes * 60 if args.minutes else None
         fetch(AlpacaClient(key, secret), fetch_windows(cands, sessions), args.fetch, deadline)
+    if args.run:
+        trades = run_study(g, tickers, sessions, cands, args.run, cfg)
+        folder = args.data_dir / "data" / "intraday_study" / sessions[-1].isoformat()
+        write_results(trades, folder)
+        counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
+        status(f"Intraday study: {len(trades)} trades {counts}, saved")
     return 0

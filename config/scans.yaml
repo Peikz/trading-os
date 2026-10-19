@@ -264,10 +264,40 @@ exits:                                      # how the history studies run the tr
 intraday_study:                             # minute-bar entries and exits (Emil, 19 Oct 2026)
   gap_superset_pct: 3                       # (proposed) fetch every opening gap >= 3 % ...
   ep9m_volume_superset: 1_500_000           # (proposed) ... and every +4 % day with >= 1.5M
+  wide_stop_adr: 1.0                        # (proposed) the same-distance stop for every entry
   pace_fraction: {"10:15": 0.22, "12:00": 0.42}  # (proposed) share of a normal day's volume
                                             # done by then; EP9M "on pace" = volume so far /
                                             # this >= 9M (the live scan uses TradingView's
                                             # relative volume at time, not in the bars)
+
+luk:                                        # Martin Luk's setups, history studies only, not
+                                            # live scans (Emil, 19 Oct 2026). He has published
+                                            # no rule sheet: values from write-ups of his
+                                            # interviews, all (proposed)
+  leader_return_min_pct: 30                 # leader: up >= 30 % over 1, 3 or 6 months ...
+  adr_min_pct: 5                            # ... with ADR >= 5 % ("not a hard rule", he says)
+  emas: [9, 21, 50]                         # lead = EMA 9 > 21 > 50; exit on a close < EMA 9
+  touch_adr: 0.25                           # a level counts as touched within 0.25 ADR
+  flush_adr: 0.5                            # AVWAP flush: low >= 0.5 ADR under the prior close
+  avwap_lookback: 250                       # AVWAP anchored at the highest high of 250 sessions
+  base_min_days: 40                         # AVWAP flush: a base of 8 weeks or more
+
+minervini:                                  # Mark Minervini's Trend Template and VCP, history
+                                            # studies only, not live scans (Emil, 19 Oct 2026).
+                                            # His numbers from his books; the mechanical
+                                            # reading of the VCP is (proposed)
+  ma200_rising_days: 22                     # TT 3: 200-day MA up for at least a month
+  above_52w_low_pct: 30                     # TT 6: >= 30 % above the 52-week low
+  within_52w_high_pct: 25                   # TT 7: within 25 % of the 52-week high
+  rs_min: 70                                # TT 8: RS >= 70 (our 1-99 RS, not IBD's)
+  base_min_days: 15                         # VCP base: 3 weeks ...
+  base_max_days: 130                        # ... to 26 weeks (he allows 65; 2 years of bars)
+  swing_bars: 5                             # (proposed) a swing high holds 5 sessions each side
+  swing_adr_mult: 0.5                       # (proposed) a contraction counts at 0.5 ADR deep
+  first_contraction_max_pct: 35             # (proposed) the first pullback at most 35 % deep
+  last_contraction_max_pct: 10              # (proposed) the last one at most 10 %
+  dryup_ratio_max: 0.8                      # (proposed) last 10 days' volume <= 0.8 x 50-day
+  stop_max_pct: 8                           # stop at most 8 % under the entry ("7-8 %")
 
 sec:                                        # SEC EDGAR (free): exact earnings dates, EPS/revenue as filed
   user_agent: ""                            # contact from the SEC_USER_AGENT secret (not public)

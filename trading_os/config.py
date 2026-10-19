@@ -45,6 +45,8 @@ TOP_LEVEL_KEYS = {
     "ep_history",
     "exits",
     "intraday_study",
+    "luk",
+    "minervini",
     "sec",
     "report",
     "stats",
@@ -108,7 +110,35 @@ EXIT_KEYS = {
     "target_days",
     "max_days",
 }
-INTRADAY_STUDY_KEYS = {"gap_superset_pct", "ep9m_volume_superset", "pace_fraction"}
+MINERVINI_KEYS = {
+    "ma200_rising_days",
+    "above_52w_low_pct",
+    "within_52w_high_pct",
+    "rs_min",
+    "base_min_days",
+    "base_max_days",
+    "swing_bars",
+    "swing_adr_mult",
+    "first_contraction_max_pct",
+    "last_contraction_max_pct",
+    "dryup_ratio_max",
+    "stop_max_pct",
+}
+LUK_KEYS = {
+    "leader_return_min_pct",
+    "adr_min_pct",
+    "emas",
+    "touch_adr",
+    "flush_adr",
+    "avwap_lookback",
+    "base_min_days",
+}
+INTRADAY_STUDY_KEYS = {
+    "gap_superset_pct",
+    "ep9m_volume_superset",
+    "wide_stop_adr",
+    "pace_fraction",
+}
 EP_HISTORY_KEYS = {
     "neglect_band_pct",
     "match_days",
@@ -298,6 +328,8 @@ class Config:
     sec: Mapping[str, Any]
     exits: Mapping[str, Any]
     intraday_study: Mapping[str, Any]
+    luk: Mapping[str, Any]
+    minervini: Mapping[str, Any]
     report: Mapping[str, Any]
     stats: Mapping[str, Any]
     notify: Mapping[str, Any]
@@ -353,6 +385,8 @@ def parse_config(raw: Any) -> Config:
     _check_keys("sec", raw["sec"], SEC_KEYS)
     _check_keys("exits", raw["exits"], EXIT_KEYS)
     _check_keys("intraday_study", raw["intraday_study"], INTRADAY_STUDY_KEYS)
+    _check_keys("luk", raw["luk"], LUK_KEYS)
+    _check_keys("minervini", raw["minervini"], MINERVINI_KEYS)
     _check_keys("report", raw["report"], REPORT_KEYS)
     _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
@@ -378,6 +412,8 @@ def parse_config(raw: Any) -> Config:
         sec=_freeze(raw["sec"]),
         exits=_freeze(raw["exits"]),
         intraday_study=_freeze(raw["intraday_study"]),
+        luk=_freeze(raw["luk"]),
+        minervini=_freeze(raw["minervini"]),
         report=_freeze(raw["report"]),
         stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),

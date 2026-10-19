@@ -15,11 +15,17 @@ Strategies, the side they're measured on, and their stop (facts, not trade advic
 | breakout_watch     | long  | pivot, when crossed within 10 sessions | order stop                 |
 | qm_gainers (Fri)   | long  | Friday close               | none: returns only                     |
 | tight_bases (Fri)  | long  | Friday close               | none: returns only                     |
+| luk_pullback       | long  | signal close               | day low (min distance 0.25 ADR)        |
+| luk_avwap_flush    | long  | signal close               | day low (min distance 0.25 ADR)        |
+| luk_inside_day     | long  | inside day's high, next session | inside day's low                  |
+| minervini_tt (Fri) | long  | Friday close               | none: returns only                     |
+| vcp_breakout       | long  | the pivot (buy stop)       | last contraction low, at most 8 % away |
 
 EP-Day has its own, richer study (`ep_history`). Alert tier only (§4), except the market cap
 floor, which has no history: parabolic short's large-cap rule uses today's market cap where
 known (else the small-cap rule). Outcomes after 1, 3, 5, 21, 63, 126 and 252 sessions, plus a
-trailing exit at the first close through the 10-day / 20-day MA.
+trailing exit at the first close through the 10-day / 20-day MA, and Martin Luk's exit at
+the first close through EMA 9 / EMA 21 (`luk.py` has his setups; study only).
 """
 
 from __future__ import annotations
@@ -30,12 +36,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_os import audit, enrich, ep_history, exits, sizing
+from trading_os import audit, enrich, ep_history, exits, luk, minervini, sizing
 from trading_os import history_metrics as hm
 from trading_os.scans import REGISTRY
 
 HORIZONS = (1, 3, 5, 21, 63, 126, 252)
 TRAILS = (10, 20)
+EMA_TRAILS = (9, 21)  # Martin Luk: out on a close under EMA 9 (EMA 21 for more room)
 CHUNK = 1000  # tickers per metrics pass (memory)
 WATCH_TRIGGER_DAYS = 10
 SIDES = {
@@ -48,7 +55,13 @@ SIDES = {
     "breakout_watch": 1,
     "qm_gainers": 1,
     "tight_bases": 1,
+    "luk_pullback": 1,
+    "luk_avwap_flush": 1,
+    "luk_inside_day": 1,
+    "minervini_tt": 1,
+    "vcp_breakout": 1,
 }
+TRIGGER_DAYS = {"breakout_watch": WATCH_TRIGGER_DAYS, "luk_inside_day": 1}  # buy stop at pivot
 DAILY = ("ep9m", "mb_up", "mb_down", "parabolic_short", "parabolic_long")
 WEEKLY = ("qm_gainers", "tight_bases")
 
@@ -59,7 +72,16 @@ def _first(mask: np.ndarray) -> int | None:
 
 
 def outcomes(
-    o, h, lo, c, mas: Mapping[int, np.ndarray], t: int, entry: float, stop: float | None, side: int
+    o,
+    h,
+    lo,
+    c,
+    mas: Mapping[int, np.ndarray],
+    t: int,
+    entry: float,
+    stop: float | None,
+    side: int,
+    emas: Mapping[int, np.ndarray] | None = None,
 ) -> dict[str, Any]:
     """Horizons and trailing exits for one hit, long (side 1) or short (side -1).
 
@@ -103,9 +125,11 @@ def outcomes(
         )
     last = min(n - 1, t + max(HORIZONS))
     seg = slice(t + 1, last + 1)
-    for window in TRAILS:
-        empty = {f"r_trail_ma{window}": np.nan, f"pnl_trail_ma{window}": np.nan}
-        empty[f"days_trail_ma{window}"] = np.nan
+    trails = [(f"ma{w}", mas[w]) for w in TRAILS]
+    trails += [(f"ema{w}", emas[w]) for w in EMA_TRAILS] if emas is not None else []
+    for name, line in trails:
+        empty = {f"r_trail_{name}": np.nan, f"pnl_trail_{name}": np.nan}
+        empty[f"days_trail_{name}"] = np.nan
         if last == t:
             row |= empty
             continue
@@ -114,7 +138,7 @@ def outcomes(
         if has_stop:
             stopped = lo[seg] <= stop if side > 0 else h[seg] >= stop
         with np.errstate(invalid="ignore"):
-            through = c[seg] < mas[window][seg] if side > 0 else c[seg] > mas[window][seg]
+            through = c[seg] < line[seg] if side > 0 else c[seg] > line[seg]
         first = _first(missing | stopped | through)
         if first is not None and missing[first]:
             row |= empty
@@ -126,9 +150,9 @@ def outcomes(
         else:
             exit_price = c[d]
         row |= {
-            f"pnl_trail_ma{window}": (exit_price / entry - 1) * 100 * side,
-            f"r_trail_ma{window}": (exit_price - entry) * side / risk if has_stop else np.nan,
-            f"days_trail_ma{window}": float(d - t),
+            f"pnl_trail_{name}": (exit_price / entry - 1) * 100 * side,
+            f"r_trail_{name}": (exit_price - entry) * side / risk if has_stop else np.nan,
+            f"days_trail_{name}": float(d - t),
         }
     return row
 
@@ -138,11 +162,15 @@ def _stop(row: Mapping[str, Any], strategy: str, rules) -> float | None:
     floor = rules["min_stop_adr"] * adr if adr == adr else 0.0
     if strategy == "ep9m":
         return sizing.plan(row, "ep_day", rules)[1]
-    if strategy in ("mb_up", "parabolic_long"):
+    if strategy in ("mb_up", "parabolic_long", "luk_pullback", "luk_avwap_flush"):
         return min(row["low"], row["close"] - floor)
     if strategy in ("mb_down", "parabolic_short"):
         return max(row["high"], row["close"] + floor)
     if strategy in ("breakout_trigger", "breakout_watch"):
+        return row.get("order_stop")
+    if strategy == "luk_inside_day":
+        return row["low"]
+    if strategy == "vcp_breakout":
         return row.get("order_stop")
     return None
 
@@ -227,6 +255,7 @@ def find(bars: pd.DataFrame, sessions: list, cfg, caps: Mapping[str, float]) -> 
     col = {t: j for j, t in enumerate(tickers)}
     pos = {s: i for i, s in enumerate(sessions)}
     fridays = _fridays(sessions)
+    rs = minervini.rs_rating(g["close"])  # cross-sectional: the whole grid, before chunking
     hits, weekly_rows = [], []
     for start in range(0, len(tickers), CHUNK):
         part = tickers[start : start + CHUNK]
@@ -236,6 +265,12 @@ def find(bars: pd.DataFrame, sessions: list, cfg, caps: Mapping[str, float]) -> 
         for name in DAILY:
             found = REGISTRY[name](alert, cfg.scans[name])
             hits.append(found.assign(strategy=name))
+        for setups in (
+            luk.find(sub, part, sessions, cfg.luk),
+            minervini.find(sub, part, sessions, cfg.minervini, rs[:, start : start + CHUNK]),
+        ):
+            if len(setups):
+                hits.append(setups.merge(alert, on=["session_date", "ticker"], how="inner"))
         weekly_rows.append(frame[frame["session_date"].isin(fridays)])
     weekly = pd.concat(weekly_rows, ignore_index=True)
     floors = cfg.universe["logged"]
@@ -270,6 +305,7 @@ def measure(found: pd.DataFrame, g, col, pos, market, cfg) -> pd.DataFrame:
             continue
         oc, hc, lc, cc = o[:, j], h[:, j], lo[:, j], c[:, j]
         mas = {w: hm.rolling_mean(cc[:, None], w)[:, 0] for w in TRAILS}
+        emas = {w: hm.ema(cc[:, None], w)[:, 0] for w in EMA_TRAILS}
         with np.errstate(divide="ignore", invalid="ignore"):
             adr_pct = hm.rolling_mean(((hc / lc - 1) * 100)[:, None], hm.ADR_DAYS)[:, 0]
         for rec in group.to_dict("records"):
@@ -284,8 +320,8 @@ def measure(found: pd.DataFrame, g, col, pos, market, cfg) -> pd.DataFrame:
                 "adr20_usd": adr_pct[t] * cc[t] / 100,
             }
             entry_t, entry = t, cc[t]
-            if strategy == "breakout_watch":
-                later = hc[t + 1 : t + 1 + WATCH_TRIGGER_DAYS] >= rec["pivot"]
+            if strategy in TRIGGER_DAYS:
+                later = hc[t + 1 : t + 1 + TRIGGER_DAYS[strategy]] >= rec["pivot"]
                 first = _first(later)
                 rec["triggered_within_days"] = None if first is None else first + 1
                 if first is None:
@@ -295,8 +331,12 @@ def measure(found: pd.DataFrame, g, col, pos, market, cfg) -> pd.DataFrame:
                 entry = (
                     max(oc[entry_t], rec["pivot"]) if oc[entry_t] == oc[entry_t] else rec["pivot"]
                 )
+            if strategy == "vcp_breakout":  # a buy stop at the pivot on the trigger day
+                entry = max(oc[t], rec["pivot"]) if oc[t] == oc[t] else rec["pivot"]
+                cap = entry * (1 - cfg.minervini["stop_max_pct"] / 100)
+                rec["order_stop"] = max(rec["last_low"], cap)
             stop = _stop({**rec, **day}, strategy, cfg.sizing)
-            result = outcomes(oc, hc, lc, cc, mas, entry_t, entry, stop, side)
+            result = outcomes(oc, hc, lc, cc, mas, entry_t, entry, stop, side, emas)
             result |= exits.managed(oc, hc, lc, cc, mas, entry_t, entry, stop, side, cfg.exits)
             rows.append(_row(rec, day, entry, stop, market[t]) | result)
     return (
@@ -323,6 +363,16 @@ def _row(rec, day, entry, stop, market) -> dict[str, Any]:
             "qm_lists",
             "tightness_adr",
             "triggered_within_days",
+            "level",
+            "avwap",
+            "base_days",
+            "rs_rating",
+            "vol_ratio",
+            "last_low",
+            "contractions",
+            "depths",
+            "last_depth_pct",
+            "dryup_ratio",
         )
         if k in rec
     }
@@ -363,8 +413,9 @@ def summary(df: pd.DataFrame, by: list[str] | None = None) -> pd.DataFrame:
             row[f"R_{horizon}d"] = r.clip(upper=20).mean() if len(r) else np.nan
         hit = part["stop_hit_5d"].dropna()
         row["stopped_5d%"] = hit.astype(float).mean() * 100 if len(hit) else np.nan
-        trail = part["r_trail_ma20"].dropna()
-        row["R_trail_ma20"] = trail.clip(upper=20).mean() if len(trail) else np.nan
+        for name in ("ma20", "ema9", "ema21"):
+            trail = part.get(f"r_trail_{name}", pd.Series(dtype=float)).dropna()
+            row[f"R_trail_{name}"] = trail.clip(upper=20).mean() if len(trail) else np.nan
         rows.append(row)
     return pd.DataFrame(rows)
 

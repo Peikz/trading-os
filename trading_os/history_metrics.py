@@ -170,3 +170,10 @@ def compute_from_grids(
 def latest(metrics: pd.DataFrame, session: dt.date) -> pd.DataFrame:
     """One row per ticker for `session`."""
     return metrics[metrics["session_date"] == session].reset_index(drop=True)
+
+
+def ema(a: np.ndarray, span: int) -> np.ndarray:
+    """Exponential moving average down each column (alpha 2 / (span + 1)), NaN until `span`
+    values have been seen."""
+    frame = pd.DataFrame(a)
+    return frame.ewm(span=span, adjust=False, min_periods=span).mean().to_numpy()

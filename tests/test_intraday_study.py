@@ -101,7 +101,7 @@ def test_next_day_rows_are_the_session_after_the_signal():
     cands = s.candidates(flat_bars(days, A), days, CFG, hits)
     nxt = cands[cands["group"] == "next_day"].iloc[0]
     assert nxt["session_date"] == days[-1] and nxt["signal_date"] == days[-2]
-    assert nxt["strategy"] == "mb_up" and nxt["signal_high"] == 11.0
+    assert nxt["strategy"] == "mb_up" and nxt["signal_high"] == 10.2  # from the daily bars
 
 
 def test_fetch_windows_ask_each_stock_day_once_with_the_right_bars():
