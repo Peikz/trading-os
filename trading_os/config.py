@@ -20,6 +20,8 @@ DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "scans.yaml"
 SLOTS = frozenset({"pm", "eod", "weekly"})
 ACTIONS = frozenset({"push", "log", "watchlist"})
 TIERS = frozenset({"alert", "log"})
+# Pre-market "gap": TradingView field -> canonical column (docs/fields.md).
+PM_GAP_COLUMNS = {"premarket_change": "pm_change_pct", "premarket_gap": "pm_gap_pct"}
 
 TOP_LEVEL_KEYS = {
     "version",
@@ -95,8 +97,8 @@ SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
 SCAN_PARAM_KEYS: dict[str, set[str]] = {
     "ep_pm": {"push_tier", "pm_change_min_pct", "price_min", "pm_volume_min", "market_cap_min"},
-    "ep9m_early": {"push_tier", "pm_volume_min", "pm_gap_min_pct"},
-    "watchlist_gappers": {"lists", "pm_gap_min_pct"},
+    "ep9m_early": {"push_tier", "pm_volume_min", "pm_gap_min_pct", "pm_gap_basis"},
+    "watchlist_gappers": {"lists", "pm_gap_min_pct", "pm_gap_basis"},
     "ep_day": {
         "push_tier",
         "gap_min_pct",
@@ -291,6 +293,11 @@ def _parse_scans(raw: Any) -> dict[str, ScanConfig]:
             raise ConfigError(f"scans.{name}.slot: {body['slot']!r} not in {sorted(SLOTS)}")
         if body["action"] not in ACTIONS:
             raise ConfigError(f"scans.{name}.action: {body['action']!r} not in {sorted(ACTIONS)}")
+        if "pm_gap_basis" in body and body["pm_gap_basis"] not in PM_GAP_COLUMNS:
+            allowed = sorted(PM_GAP_COLUMNS)
+            raise ConfigError(
+                f"scans.{name}.pm_gap_basis: {body['pm_gap_basis']!r} not in {allowed}"
+            )
         if "push_tier" in body and body["push_tier"] not in TIERS:
             raise ConfigError(f"scans.{name}.push_tier: {body['push_tier']!r} not in {TIERS}")
         params = {k: v for k, v in body.items() if k not in SCAN_COMMON_KEYS}

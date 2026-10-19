@@ -53,6 +53,7 @@ AUDIT_COLUMNS = [
     "close_loc",
     "pm_change_pct",
     "pm_gap_pct",
+    "pm_gap_used",
     "pm_volume",
     "pm_price",
     "pm_dollar_volume",

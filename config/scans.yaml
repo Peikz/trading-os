@@ -49,12 +49,14 @@ scans:
   ep_pm:
     {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
      pm_change_min_pct: 10, price_min: 1.00, pm_volume_min: 50_000, market_cap_min: 50_000_000}
+  # pm_gap_basis (proposed, pending Emil): premarket_change = current pre-market price vs
+  # prior close; premarket_gap = first pre-market print vs prior close.
   ep9m_early:
     {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
-     pm_volume_min: 500_000, pm_gap_min_pct: 4}
+     pm_volume_min: 500_000, pm_gap_min_pct: 4, pm_gap_basis: premarket_change}
   watchlist_gappers:
     {enabled: true, phase: 1, slot: pm, action: push,
-     lists: [bo_watch, ep_watch], pm_gap_min_pct: 2}
+     lists: [bo_watch, ep_watch], pm_gap_min_pct: 2, pm_gap_basis: premarket_change}
 
   # --- End of day (SPEC §6.2) ---
   ep_day:

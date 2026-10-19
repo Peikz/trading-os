@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from trading_os.config import load_config
-from trading_os.scans.ep import ep9m, ep_ah, ep_pm
+from trading_os.scans.ep import ep9m, ep9m_early, ep_ah, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
 
 
@@ -91,3 +91,13 @@ def test_ep_pm(scans):
     assert run(ep_pm, s, pm_row("SUB1", close=0.99)) == []
     assert run(ep_pm, s, pm_row("TINY", market_cap=49_999_999)) == []
     assert run(ep_pm, s, pm_row("NOPM", pm_change_pct=float("nan"))) == []
+
+
+def test_ep9m_early_uses_the_configured_gap(scans):
+    s = scans["ep9m_early"]
+    assert s["pm_gap_basis"] == "premarket_change"
+    row = {"ticker": "EDGE", "pm_volume": 500_000, "pm_change_pct": 4.0, "pm_gap_pct": 1.0}
+    hits = ep9m_early(pd.DataFrame([row]), s)
+    assert hits["ticker"].tolist() == ["EDGE"] and hits["pm_gap_used"].tolist() == [4.0]
+    assert run(ep9m_early, s, row | {"pm_volume": 499_999}) == []
+    assert run(ep9m_early, s, row | {"pm_change_pct": 3.99}) == []

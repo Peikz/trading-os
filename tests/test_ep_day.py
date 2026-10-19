@@ -66,6 +66,7 @@ def test_run_scans_picks_enabled_scans_per_slot():
         ah_volume=0,
         pm_change_pct=0.0,
         pm_volume=0,
+        pm_gap_pct=0.0,
         hist_gain_max_pct=0.0,
         hist_consec_up=0,
         hist_drop_max_pct=0.0,
@@ -84,4 +85,4 @@ def test_run_scans_picks_enabled_scans_per_slot():
         "breakout_watch",
         "breakout_trigger",
     ]
-    assert list(run_scans(pd.DataFrame([full]), cfg, "pm")) == ["ep_pm"]
+    assert list(run_scans(pd.DataFrame([full]), cfg, "pm")) == ["ep_pm", "ep9m_early"]

@@ -37,7 +37,7 @@ SCAN_LABELS = {
 # The percent shown on each line: the move that triggered the scan.
 PCT_COLUMNS = {
     "ep_pm": "pm_change_pct",
-    "ep9m_early": "pm_gap_pct",
+    "ep9m_early": "pm_gap_used",
     "ep_day": "gap_pct",
     "ep_ah": "ah_change_pct",
     "ep9m": "chg_pct",

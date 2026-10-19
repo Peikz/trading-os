@@ -73,3 +73,10 @@ def test_config_is_read_only():
     cfg = load_config()
     with pytest.raises(TypeError):
         cfg.scans["ep_day"].params["gap_min_pct"] = 5
+
+
+def test_pm_gap_basis_must_be_known(raw):
+    bad = copy.deepcopy(raw)
+    bad["scans"]["ep9m_early"]["pm_gap_basis"] = "premarket_open"
+    with pytest.raises(ConfigError, match="pm_gap_basis"):
+        parse_config(bad)

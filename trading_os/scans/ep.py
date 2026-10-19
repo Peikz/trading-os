@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from trading_os.config import ScanConfig
+from trading_os.config import PM_GAP_COLUMNS, ScanConfig
 
 
 def ranked(df: pd.DataFrame, hit: pd.Series, by: str, ascending: bool = False) -> pd.DataFrame:
@@ -25,6 +25,19 @@ def ep_pm(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
         & (df["market_cap"] >= scan["market_cap_min"])
     )
     return ranked(df, hit, "pm_change_pct")
+
+
+def ep9m_early(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """EP9M early warning: heavy pre-market volume and a pre-market gap.
+
+    Which gap (current pre-market price, or the first pre-market print) is `pm_gap_basis`
+    in config; the value used is stored as `pm_gap_used`. Ranked by pre-market volume.
+    """
+    out = df.assign(pm_gap_used=df[PM_GAP_COLUMNS[scan["pm_gap_basis"]]])
+    hit = (out["pm_volume"] >= scan["pm_volume_min"]) & (
+        out["pm_gap_used"] >= scan["pm_gap_min_pct"]
+    )
+    return ranked(out, hit, "pm_volume")
 
 
 def ep_day(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
