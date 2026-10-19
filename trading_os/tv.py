@@ -30,6 +30,8 @@ FIELDS: dict[str, str] = {
     "low": "low",
     "close": "close",
     "volume": "volume",
+    "prev_close": "close[1]",
+    "prev_volume": "volume[1]",
     "chg_pct": "change",
     "chg_abs": "change_abs",
     "gap_pct": "gap",

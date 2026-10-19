@@ -50,6 +50,10 @@ def test_add_phase1_metrics_uses_config_proxies():
             "avg_volume_60d_tv": [62_000_000 / 60],
             "avg_volume_30d_tv": [800_000.0],
             "avg_dollar_volume_30d_tv": [8_000_000.0],
+            "ma10": [9.0],
+            "ma20": [10.0],
+            "ma50": [float("nan")],
+            "ma200": [12.0],
         }
     )
     out = metrics.add_phase1_metrics(df, load_config().proxies)
@@ -60,6 +64,8 @@ def test_add_phase1_metrics_uses_config_proxies():
     assert row["rvol_basis"] == "tv_avg60d_excl_today"
     assert row["avg_volume_20d"] == 800_000
     assert row["avg_dollar_volume_20d"] == 8_000_000
+    # MA position: above ma10, not above an equal ma20, missing ma50 is False, below ma200.
+    assert [row[f"above_ma{w}"] for w in (10, 20, 50, 200)] == [True, False, False, False]
     assert "close_loc" not in df.columns  # input untouched
 
 

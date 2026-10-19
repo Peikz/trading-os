@@ -1,6 +1,6 @@
 # TradingView fields
 
-Verified against live data on 2026-10-18 with `scripts/verify_fields.py`.
+Verified against live data on 2026-10-19 with `scripts/verify_fields.py`.
 Source: `tradingview-screener` (no login, 15-min delayed), market `america`.
 This file holds field names and aggregate checks only, never tickers or prices.
 
@@ -12,7 +12,7 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 - Exclusions use `type` (stock, dr) and `typespecs` (preferred, unit, warrant, right, etf, etn). ADRs have empty `typespecs`.
 - `gap` and `change` are percent and match open and close against close - change_abs.
 - `average_volume_Nd_calc` includes today. RVOL removes it: (N x avg - volume) / (N - 1).
-- Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]` (for Momentum Burst).
+- Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]`. `close[1]` matches close - change_abs, so `[1]` is the previous daily bar.
 - `revenues_fq_h` and `earnings_per_share_diluted_fq_h` hold ~32 quarters of history, so previous-quarter YoY growth is computable (SPEC §11.2). `total_revenue_yoy_growth_fq_h` does not exist.
 
 ## Fields used by the jobs
@@ -31,11 +31,13 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 | `low` | `low` | float64 | 100.0 |  |
 | `close` | `close` | float64 | 100.0 |  |
 | `volume` | `volume` | int64 | 100.0 |  |
+| `prev_close` | `close[1]` | float64 | 100.0 | previous daily bar's close |
+| `prev_volume` | `volume[1]` | float64 | 100.0 | previous daily bar's volume (Momentum Burst: volume > prior day) |
 | `chg_pct` | `change` | float64 | 100.0 | percent (12.3 = 12.3 %), close vs prior close |
 | `chg_abs` | `change_abs` | float64 | 100.0 | price units, close - prior close |
 | `gap_pct` | `gap` | float64 | 100.0 | percent, open vs prior close |
 | `market_cap` | `market_cap_basic` | float64 | 100.0 | USD |
-| `float_shares` | `float_shares_outstanding` | float64 | 97.7 |  |
+| `float_shares` | `float_shares_outstanding` | float64 | 97.8 |  |
 | `rvol10_tv` | `relative_volume_10d_calc` | float64 | 99.8 | TradingView relative volume, 10-day base |
 | `avg_volume_10d_tv` | `average_volume_10d_calc` | float64 | 99.8 |  |
 | `avg_volume_30d_tv` | `average_volume_30d_calc` | float64 | 99.2 |  |
@@ -66,6 +68,7 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 - tickers unique: True (0 dups)
 - chg_pct vs close/(close-chg_abs): 100.0% of 4521 rows within 0.05pp
 - gap_pct vs open/(close-chg_abs): 100.0% of 4521 rows within 0.05pp
+- prev_close vs close-chg_abs: 100.0% of 4521 rows within 0.01pp
 - rvol10_tv / (volume / avg_volume_10d_tv as given) on 62 rows with rvol10_tv > 5: median 1.786, p10 1.451, p90 3.197
 - rvol10_tv / (volume / avg_volume_10d_tv today removed) on 62 rows with rvol10_tv > 5: median 1.047, p10 0.932, p90 1.108
 - max volume / avg_volume_10d_tv: 9.1 (<= 10 means today is included). Conclusion: average_volume_Nd_calc includes today; metrics.py removes it for RVOL.
@@ -77,8 +80,6 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 
 | Field | non-null % (200 largest) | Python type |
 |---|---|---|
-| `close[1]` | 100.0 | float64 |
-| `volume[1]` | 100.0 | int64 |
 | `high[1]` | 100.0 | float64 |
 | `low[1]` | 100.0 | float64 |
 | `revenues_fq_h` | 100.0 | list[33] |

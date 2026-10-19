@@ -23,6 +23,8 @@ from trading_os.config import load_config
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "fields.md"
 
 NOTES = {
+    "prev_close": "previous daily bar's close",
+    "prev_volume": "previous daily bar's volume (Momentum Burst: volume > prior day)",
     "chg_pct": "percent (12.3 = 12.3 %), close vs prior close",
     "chg_abs": "price units, close - prior close",
     "gap_pct": "percent, open vs prior close",
@@ -50,15 +52,14 @@ FINDINGS = [
     "(preferred, unit, warrant, right, etf, etn). ADRs have empty `typespecs`.",
     "`gap` and `change` are percent and match open and close against close - change_abs.",
     "`average_volume_Nd_calc` includes today. RVOL removes it: (N x avg - volume) / (N - 1).",
-    "Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]` (for Momentum Burst).",
+    "Prior-bar values exist as `close[1]`, `volume[1]`, `high[1]`, `low[1]`. `close[1]` matches "
+    "close - change_abs, so `[1]` is the previous daily bar.",
     "`revenues_fq_h` and `earnings_per_share_diluted_fq_h` hold ~32 quarters of history, so "
     "previous-quarter YoY growth is computable (SPEC §11.2). `total_revenue_yoy_growth_fq_h` "
     "does not exist.",
 ]
 
 PROBE_FIELDS = [
-    "close[1]",
-    "volume[1]",
     "high[1]",
     "low[1]",
     "revenues_fq_h",
@@ -130,6 +131,7 @@ def run_checks(df: pd.DataFrame) -> list[str]:
     gap_calc = (df["open"] / prev_close - 1) * 100
     out.append(_agreement("chg_pct vs close/(close-chg_abs)", df["chg_pct"], chg_calc, 0.05))
     out.append(_agreement("gap_pct vs open/(close-chg_abs)", df["gap_pct"], gap_calc, 0.05))
+    out.append(_agreement("prev_close vs close-chg_abs", df["prev_close"], prev_close, 0.01))
 
     # Do TradingView's N-day averages include today? TradingView's own relative volume excludes
     # today, so compare it with volume / average, with and without today removed.

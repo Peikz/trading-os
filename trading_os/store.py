@@ -49,6 +49,14 @@ AUDIT_COLUMNS = [
     "close",
     "market_cap",
     "avg_volume_20d",
+    "prev_volume",
+    "close_loc",
+    "ah_change_pct",
+    "ah_volume",
+    "above_ma10",
+    "above_ma20",
+    "above_ma50",
+    "above_ma200",
     "earnings_flag",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]

@@ -16,6 +16,7 @@ import pandas as pd
 from trading_os.tv import canonical
 
 NEW_YORK = ZoneInfo("America/New_York")
+MA_WINDOWS = (10, 20, 50, 200)  # SPEC §7 universe columns ma10..ma200
 
 
 def dollar_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
@@ -43,6 +44,11 @@ def relative_volume(volume: pd.Series, avg_excluding_today: pd.Series) -> pd.Ser
     return volume / avg_excluding_today
 
 
+def above(close: pd.Series, average: pd.Series) -> pd.Series:
+    """close > moving average; False when the average is missing."""
+    return (close > average).fillna(False).astype(bool)
+
+
 def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.DataFrame:
     """Add the metrics the Phase 1 EOD scans need. Returns a new frame."""
     out = df.copy()
@@ -57,6 +63,8 @@ def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.Da
     out["avg_volume_20d"] = out[canonical(str(proxies["avg_volume_20d"]))]
     out["avg_dollar_volume_20d"] = out[canonical(str(proxies["avg_dollar_volume_20d"]))]
     out["avg20_basis"] = f"tv:{proxies['avg_volume_20d']}"
+    for window in MA_WINDOWS:
+        out[f"above_ma{window}"] = above(out["close"], out[f"ma{window}"])
     return out
 
 
