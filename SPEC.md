@@ -316,10 +316,30 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    with its natural stop. Facts for grading and for tuning the proposed defaults; never a filter by itself.
    The EP entry-timing study runs on Massive minute bars; Alpaca (free, back to 2016) for longer history
    once its delisted coverage is checked. SEC EDGAR gives exact earnings release times (8-K item 2.02).
+15. ~~Entries and exits on minute bars~~ — decided 19 Oct 2026 by Emil ("minute bars for all strategies ... best
+   entry and exit"): `intraday_study.py`. Each strategy's rule is applied at the entry minute with only the
+   bars known by then (an entry picked with the day's close would skip every gap that faded). Stock-days are
+   fetched from a daily superset (gaps >= 3 %, +4 % days with 1.5M+ shares, days reaching a prior-day pivot,
+   Luk touches, VCP triggers, the session after every end-of-day hit), from Alpaca, each once, into the data
+   repo's `intraday-minutes` release. Entries per strategy in `intraday_entries.py`; stops: low so far,
+   1 ADR, the setup's own; exits in `intraday_exits.py` (holds of 1/5/21 sessions, MA 10/20 and EMA 9/21
+   trails, the managed exits). Study only: it changes no live rule.
+16. ~~Martin Luk and Minervini~~ — decided 19 Oct 2026 by Emil ("test the scanning Martin Luk does",
+   "add Minervini and VCP"): study-only strategies in the histories, not live scans. Luk (`luk.py`,
+   config `luk:`): pullback to EMA 9/21 in a leader, AVWAP flush, inside day; rules from public write-ups of
+   his interviews (no rule sheet of his exists), all (proposed). Minervini (`minervini.py`, config
+   `minervini:`): the Trend Template from his books and a mechanical VCP (swing highs, shrinking
+   contractions, volume dry-up, pivot = the last contraction's high, stop <= 8 %); the VCP reading is
+   (proposed). Luk's EMA 9/21 exit is measured for every strategy. A live scan for any of them needs Emil's
+   OK on the rules and a SPEC entry first.
 
 ## 12. References
 
 - Qullamaggie: https://qullamaggie.com — 1/3/6M gainer scans, Breakout, EP, Parabolic
 - Stockbee: https://stockbee.blogspot.com — Momentum Burst, EP9M, Market Monitor
+- Mark Minervini: Trade Like a Stock Market Wizard (2013), Think & Trade Like a Champion (2017) — Trend
+  Template, VCP
+- Martin Luk: interview write-ups (no rule sheet of his own), e.g. tradingresourcehub.substack.com,
+  financialwisdomtv.com, ideas.finetiqsystems.com — EMA 9/21 pullbacks, AVWAP, inside days
 - `shner-elmo/TradingView-Screener`, `dcimring/stockbee-dashboard`, `phuazz/vcp-screener`,
   `js8m226wkn-dotcom/qullamaggie-scanner`, `VladPetrariu/Qullamaggie-breakout-scanner`

@@ -94,6 +94,18 @@ The dashboard's EP history page filters and groups it and charts any event with 
 tight bases) over the Massive bars with the live scan code and measures each hit on its side with its
 stop; the dashboard's Strategy history page compares them and splits by year, market and price.
 `scripts/entry_study.py` tests EP entry times on the minute bars (`ep-enrich.yml` fetches them).
+Martin Luk's setups (`luk.py`) and Minervini's Trend Template and VCP (`minervini.py`) run in the same
+replay, study only.
+
+## Entries and exits (minute bars)
+
+`intraday-study.yml` fetches minute bars from Alpaca for every stock-day a strategy could have traded
+(each once, into the data repo's `intraday-minutes` release). Then, with the release downloaded:
+
+    uv run python -m trading_os.intraday_cli --data-dir ../trading-os-data --run <minutes folder>
+
+Every entry is chosen only with the bars known at that minute (no look-ahead), and every trade runs
+with every exit. The dashboard's "Entries & exits" page shows the best entry, stop and exit per strategy.
 
 ## Dashboard
 

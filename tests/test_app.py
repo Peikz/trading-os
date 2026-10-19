@@ -20,6 +20,7 @@ PAGES = [
     "Graded signals",
     "Market",
     "Stats",
+    "Entries & exits",
     "Validation",
 ]
 

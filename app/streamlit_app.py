@@ -26,6 +26,7 @@ from trading_os import (
     clock,
     dashboard,
     ep_history,
+    intraday_study,
     journal,
     outcomes,
     report,
@@ -54,6 +55,7 @@ PAGES = [
     "Stats",
     "EP history",
     "Strategy history",
+    "Entries & exits",
     "Validation",
 ]
 
@@ -98,6 +100,11 @@ CHART_CACHE = Path(os.environ.get("TEMP", "/tmp")) / "trading-os-charts"
 @st.cache_data(ttl=600)
 def strategy_cached(folder: str) -> pd.DataFrame:
     return strategy_history.load(folder)
+
+
+@st.cache_data(ttl=600)
+def intraday_cached(folder: str) -> pd.DataFrame:
+    return intraday_study.load_results(folder)
 
 
 @st.cache_data(ttl=600)
@@ -570,6 +577,57 @@ elif page == "Strategy history":
         )
         if drawn:
             st.image(str(drawn))
+
+elif page == "Entries & exits":
+    st.header("Entries & exits")
+    trades = intraday_cached(str(data_dir))
+    if trades.empty:
+        st.info(
+            "No minute-bar study yet. It needs the minute files from the data repo's "
+            "`intraday-minutes` release: `python -m trading_os.intraday_cli --data-dir ... "
+            "--run <folder>`."
+        )
+        st.stop()
+    st.caption(
+        "Every strategy bought (or shorted) at different times on minute bars, each entry "
+        "picked only with what was known at that minute, then run with every exit. R is per "
+        "unit of the starting risk (capped at 20 per trade in the means). Stops: lod = the low "
+        "so far (high for shorts), adr = 1 ADR, order = the setup's own stop, signal = the "
+        "signal day's low/high. Facts, not advice."
+    )
+    names = sorted(trades["strategy"].unique())
+    picked = st.multiselect("Strategies", names, default=names, key="ie_strategies")
+    view = trades[trades["strategy"].isin(picked)].copy()
+    view["year"] = view["session_date"].map(lambda d: d.year)
+    view["price_bucket"] = pd.cut(
+        view["prev_close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
+    )
+    splits = ["none", "year", "price_bucket"]
+    splits += [c for c in ("above_vwap", "b_count", "touched", "contractions") if c in view]
+    group = st.selectbox("Split by", splits, key="ie_split")
+    min_trades = st.slider("Minimum trades", 10, 500, 50, step=10)
+    table = intraday_study.summary(view, None if group == "none" else [group])
+    st.subheader("Best entry, stop and exit per strategy")
+    st.dataframe(intraday_study.best(table, min_trades).round(2), hide_index=True, width="stretch")
+    exits_all = [c[2:] for c in intraday_study.exit_columns(view)]
+    default = [
+        e for e in ("hold_1d", "hold_5d", "hold_21d", "trail_ema9", "q3_ma20") if e in exits_all
+    ]
+    shown = st.multiselect("Exits in the table", exits_all, default=default, key="ie_exits")
+    columns = ["strategy", "entry", "stop_rule", *([] if group == "none" else [group])]
+    columns += ["trades", "stopped_same_day%"]
+    for e in shown:
+        columns += [f"win_{e}%", f"R_{e}"]
+    table = table[table["trades"] >= min_trades]
+    st.subheader("Every entry and stop")
+    st.dataframe(
+        table[[c for c in columns if c in table]].round(2), hide_index=True, width="stretch"
+    )
+    one = st.selectbox("Trades of", picked or names, key="ie_one")
+    rows = view[view["strategy"] == one].sort_values("session_date", ascending=False)
+    keep = ["session_date", "ticker", "entry", "stop_rule", "side", "price", "stop", "risk_adr"]
+    keep += ["r_0d", "r_hold_5d", "r_hold_21d", "r_trail_ema9", "pnl_hold_5d", "pnl_hold_21d"]
+    st.dataframe(rows[[c for c in keep if c in rows]].head(2000), hide_index=True, width="stretch")
 
 elif page == "Validation":
     st.header("Validation against TradingView")
