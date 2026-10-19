@@ -149,11 +149,16 @@ def run_outputs(data_dir: Path, ctx: RunContext) -> dict[str, Path]:
     stem = f"{ctx.session.isoformat()}_{ctx.slot}"
     if ctx.forced:
         base = Path(data_dir) / "data" / "manual" / f"{stem}_{ctx.run_ts:%H%M%S}"
-        return {"charts": base / "charts", "report": base / "report.md"}
+        return {
+            "charts": base / "charts",
+            "report": base / "report.md",
+            "stats": base / "stats.md",
+        }
     year = str(ctx.session.year)
     return {
         "charts": Path(data_dir) / "data" / "charts" / year / stem,
         "report": Path(data_dir) / "reports" / year / f"{stem}.md",
+        "stats": Path(data_dir) / "reports" / "stats" / year / f"{ctx.session.isoformat()}.md",
     }
 
 

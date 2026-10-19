@@ -26,6 +26,7 @@ from trading_os import (
     notify,
     outcomes,
     report,
+    stats,
     store,
     tv,
     universe,
@@ -155,6 +156,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if slot in ("eod", "pm") and any(len(h) for h in selected.values()):
         drawn = _charts(outputs["charts"], args.data_dir, cfg, session, slot, selected, df)
     _report(ctx, cfg, results, selected, header, drawn, outputs["report"])
+    if slot == "weekly":
+        _stats(args.data_dir, cfg, session, outputs["stats"])
     if push_error is not None:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
@@ -198,6 +201,17 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
     return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)
+
+
+def _stats(data_dir: Path, cfg, session, path: Path) -> None:
+    """Weekly outcome statistics. Auxiliary: a problem never fails the run."""
+    try:
+        found = stats.load_outcomes(data_dir)
+        table = stats.summarize(outcomes.load_candidates(data_dir), found, cfg.stats["min_signals"])
+        text = stats.to_markdown(table, session, len(found), cfg.stats["min_signals"])
+        status("Stats: saved" if report.write(path, text) else "Stats: already exists")
+    except Exception as exc:  # noqa: BLE001 - auxiliary; the data is already saved
+        status(f"Stats: FAILED ({type(exc).__name__}), run data unaffected")
 
 
 def _report(ctx, cfg, results, selected, header, drawn, path: Path) -> None:

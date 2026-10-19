@@ -187,6 +187,9 @@ charts:                                     # Phase 3: before-shot PNG per alert
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25
 
+stats:                                      # weekly outcome statistics (reports/stats/)
+  min_signals: 5                            # smaller groups are left out
+
 notify:                                     # SPEC §8
   server: https://ntfy.sh
   max_tickers_per_scan: 10

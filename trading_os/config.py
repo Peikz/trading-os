@@ -37,6 +37,7 @@ TOP_LEVEL_KEYS = {
     "outcomes",
     "charts",
     "report",
+    "stats",
     "notify",
 }
 WATCHLIST_KEYS = {"ep_watch_sources", "ep_watch_max_sessions", "bo_watch_stale_sessions"}
@@ -76,6 +77,7 @@ HISTORY_KEYS = {
 OUTCOME_KEYS = {"horizons"}
 CHART_KEYS = {"sessions"}
 REPORT_KEYS = {"max_rows_per_scan"}
+STATS_KEYS = {"min_signals"}
 UNIVERSE_KEYS = {
     "market",
     "include_types",
@@ -229,6 +231,7 @@ class Config:
     outcomes: Mapping[str, Any]
     charts: Mapping[str, Any]
     report: Mapping[str, Any]
+    stats: Mapping[str, Any]
     notify: Mapping[str, Any]
 
 
@@ -272,6 +275,7 @@ def parse_config(raw: Any) -> Config:
     _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
     _check_keys("charts", raw["charts"], CHART_KEYS)
     _check_keys("report", raw["report"], REPORT_KEYS)
+    _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
 
     return Config(
@@ -288,6 +292,7 @@ def parse_config(raw: Any) -> Config:
         outcomes=_freeze(raw["outcomes"]),
         charts=_freeze(raw["charts"]),
         report=_freeze(raw["report"]),
+        stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),
     )
 
