@@ -179,6 +179,20 @@ epstudy:                                    # Phase 3: Breakout Log rows in the 
   columns: [session_date, scan, ticker, tier, pivot, order_stop, risk_adr, base_len,
             contraction_depths, b1, b2, b3, b4, b5, signal_id]  # (proposed) match the sheet
 
+journal:                                    # Phase 4: broker fills -> trades with R (local import)
+  csv_columns:                              # standard name: header in your export. Fill in
+    trade_date: trade_date                  # from the first Saxo export (or export these names)
+    ticker: ticker
+    side: side
+    quantity: quantity
+    price: price
+    fees: fees
+  date_format: "%Y-%m-%d"
+  buy_values: [buy, b, bought]
+  sell_values: [sell, s, sold]
+  signal_lookback_sessions: 5               # link a trade to a signal from the last N sessions
+  signal_scans: [breakout_trigger, breakout_watch, ep_day, ep_pm, ep9m]
+
 history:                                    # Phase 2: Massive (formerly Polygon.io) grouped daily bars
   massive_base_url: https://api.massive.com
   calls_per_minute: 5                       # free-tier limit (CLAUDE.md)

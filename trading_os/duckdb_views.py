@@ -60,6 +60,13 @@ def build(data_dir: Path, out: Path) -> list[str]:
                 f"select * from read_parquet('{glob}', union_by_name = true)"
             )
             created.append(name)
+        snapshots = sorted((data_dir / "data" / "journal").glob("journal_*.parquet"))
+        if snapshots:  # the newest snapshot is the journal
+            con.execute(
+                "create or replace view journal as select * from "
+                f"read_parquet('{snapshots[-1].as_posix()}')"
+            )
+            created.append("journal")
         if {"candidates", "outcomes"} <= set(created):
             con.execute(signals_with_outcomes_sql())
             created.append("signals_with_outcomes")

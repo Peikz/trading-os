@@ -34,6 +34,7 @@ TOP_LEVEL_KEYS = {
     "cats",
     "breakout",
     "epstudy",
+    "journal",
     "history",
     "outcomes",
     "charts",
@@ -69,6 +70,14 @@ BREAKOUT_KEYS = {
     "stop_adr_mult",
 }
 EPSTUDY_KEYS = {"enabled", "sheet_id", "worksheet", "scans", "columns"}
+JOURNAL_KEYS = {
+    "csv_columns",
+    "date_format",
+    "buy_values",
+    "sell_values",
+    "signal_lookback_sessions",
+    "signal_scans",
+}
 HISTORY_KEYS = {
     "massive_base_url",
     "calls_per_minute",
@@ -230,6 +239,7 @@ class Config:
     cats: Mapping[str, Any]
     breakout: Mapping[str, Any]
     epstudy: Mapping[str, Any]
+    journal: Mapping[str, Any]
     history: Mapping[str, Any]
     outcomes: Mapping[str, Any]
     charts: Mapping[str, Any]
@@ -277,6 +287,7 @@ def parse_config(raw: Any) -> Config:
     _check_keys("epstudy", raw["epstudy"], EPSTUDY_KEYS)
     if "signal_id" not in raw["epstudy"]["columns"]:
         raise ConfigError("epstudy.columns: must include signal_id (used to skip duplicates)")
+    _check_keys("journal", raw["journal"], JOURNAL_KEYS)
     _check_keys("history", raw["history"], HISTORY_KEYS)
     _check_keys("outcomes", raw["outcomes"], OUTCOME_KEYS)
     _check_keys("charts", raw["charts"], CHART_KEYS)
@@ -295,6 +306,7 @@ def parse_config(raw: Any) -> Config:
         cats=_freeze(raw["cats"]),
         breakout=_freeze(raw["breakout"]),
         epstudy=_freeze(raw["epstudy"]),
+        journal=_freeze(raw["journal"]),
         history=_freeze(raw["history"]),
         outcomes=_freeze(raw["outcomes"]),
         charts=_freeze(raw["charts"]),
