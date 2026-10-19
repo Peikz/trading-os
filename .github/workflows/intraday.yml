@@ -1,0 +1,93 @@
+# Intraday EP9M pace checks (SPEC §6.1b): 10:15 and 12:00 New York.
+# Two crons per check, one per US DST state; scripts/intraday.py picks the check whose New
+# York window contains the run (10:10-11:30, 11:55-13:30) on a trading day, and skips a
+# check that is already saved. A cron that lands in the other window finds it done.
+# This repo is public and so are these logs: the job prints counts and status only.
+
+name: Intraday
+
+on:
+  schedule:
+    - cron: "17 14 * * 1-5"   # 10:17 EDT
+    - cron: "17 15 * * 1-5"   # 10:17 EST
+    - cron: "3 16 * * 1-5"    # 12:03 EDT
+    - cron: "3 17 * * 1-5"    # 12:03 EST
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Which check (am = 10:15, mid = 12:00)"
+        type: choice
+        options: [am, mid]
+        default: am
+      force:
+        description: "Skip the time guard (output goes to data/manual/, never counts as the session run)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: data-repo            # every job that writes trading-os-data shares this group
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  intraday:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Run intraday check
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          SLOT: ${{ github.event_name == 'workflow_dispatch' && format('--slot {0}', inputs.slot) || '' }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: uv run --frozen --no-dev python scripts/intraday.py --data-dir data-repo $SLOT $FORCE
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "intraday $(TZ=America/New_York date +%F): data (run ${{ github.run_id }})"
+          # Jobs write different files, so a rebase never conflicts; retry a push race.
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Intraday failed", message: "Intraday check failed. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/

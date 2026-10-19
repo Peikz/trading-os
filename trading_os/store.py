@@ -44,6 +44,9 @@ AUDIT_COLUMNS = [
     "rvol50",
     "rvol_basis",
     "rvol10_tv",
+    "rvol_at_time_tv",
+    "rvol_base_volume",
+    "proj_volume",
     "volume",
     "dollar_volume",
     "close",
@@ -185,6 +188,17 @@ def run_outputs(data_dir: Path, ctx: RunContext) -> dict[str, Path]:
     }
 
 
+def pushed_in(data_dir: Path, session: dt.date, slot: str) -> dict[str, set[str]]:
+    """Tickers pushed per scan by the scheduled run of (session, slot); empty if none."""
+    ctx = RunContext(session=session, slot=slot, run_ts=dt.datetime.now(dt.UTC), run_kind="")
+    path = run_paths(data_dir, ctx)["candidates"]
+    if not path.exists():
+        return {}
+    cands = pd.read_parquet(path, columns=["scan", "ticker", "pushed"])
+    sent = cands[cands["pushed"].fillna(False).astype(bool)]
+    return {scan: set(group["ticker"]) for scan, group in sent.groupby("scan")}
+
+
 def already_done(data_dir: Path, session: dt.date, slot: str) -> bool:
     ctx = RunContext(session=session, slot=slot, run_ts=dt.datetime.now(dt.UTC), run_kind="")
     return any(path.exists() for path in run_paths(data_dir, ctx).values())
@@ -258,23 +272,27 @@ def build_candidates(
 def write_run(
     data_dir: Path,
     ctx: RunContext,
-    universe: pd.DataFrame,
+    universe: pd.DataFrame | None,
     candidates: pd.DataFrame,
     extras: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Path]:
-    """Write universe, candidates and the xlsx export; never overwrite.
+    """Write universe, candidates and the xlsx export; never overwrite. Intraday runs pass
+    no universe: two more full snapshots a day would double the data repo's growth.
 
     Files are staged next to their targets and renamed at the end, candidates last, so a
     crash never leaves a half-written run that looks complete.
     """
     extras = extras or {}
     paths = run_paths(data_dir, ctx, tuple(extras))
+    if universe is None:
+        paths.pop("universe")
     for path in paths.values():
         if path.exists():
             raise AlreadyWritten(path.name)
     staged: list[tuple[Path, Path]] = []
+    writers = [] if universe is None else [("universe", _parquet_writer(stamp(universe, ctx)))]
     for key, writer in (
-        ("universe", lambda p: stamp(universe, ctx).to_parquet(p, **PARQUET_OPTIONS)),
+        *writers,
         ("export", lambda p: _write_export(candidates, p)),
         *[(name, _parquet_writer(stamp(frame, ctx))) for name, frame in extras.items()],
         ("candidates", lambda p: candidates.to_parquet(p, **PARQUET_OPTIONS)),

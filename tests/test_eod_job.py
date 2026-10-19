@@ -5,7 +5,7 @@ import datetime as dt
 import pandas as pd
 import pytest
 
-from trading_os import clock, history, job, tv
+from trading_os import clock, history, job, notify, store, tv
 from trading_os.config import load_config
 
 
@@ -288,3 +288,63 @@ def test_headline_window_reaches_back_to_the_previous_session(monkeypatch):
     assert monday("ABC")["title"] == "Beats"
     tuesday = job._news_lookup(cfg, dt.date(2026, 10, 21))  # Wednesday: previous session is Tuesday
     assert tuesday("ABC") is None
+
+
+def run_intraday(slot, argv):
+    return job.main(slot, notify.SLOT_LABELS[slot], "test", argv)
+
+
+def intraday_universe():
+    universe = synthetic_universe()
+    # GAPPER normally trades 1M a day (RVOL base); 12x the usual volume by now -> 12M pace.
+    universe.loc[universe["ticker"] == GAPPER, "rvol_at_time_tv"] = 12.0
+    return universe
+
+
+def test_intraday_check_pushes_pace_without_a_universe_snapshot(
+    tmp_path, capsys, sent, monkeypatch
+):
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
+    assert run_intraday("am", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert "EP9M pace: 1 hits (1 alert), saved" in out and GAPPER not in out + err
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    assert "_am_" in run_dir.name
+    assert not (run_dir / "universe.parquet").exists()  # intraday keeps candidates only
+    cands = pd.read_parquet(run_dir / "candidates.parquet")
+    assert cands["scan"].tolist() == ["ep9m_pace"]  # nothing else runs during the session
+    assert cands["proj_volume"].iloc[0] == pytest.approx(12e6) and bool(cands["pushed"].iloc[0])
+    [message] = sent
+    assert message.title.startswith("Trading OS · Intraday 10:15")
+    assert f"{GAPPER}  +20.0%  vol 3.0M, pace 12M" in message.body
+
+
+def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypatch):
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
+    now = dt.datetime.now(dt.UTC)
+    session = clock.session_date(load_config().schedule, "mid", now)
+    morning = store.RunContext(session=session, slot="am", run_ts=now, run_kind="scheduled")
+    path = store.run_paths(tmp_path, morning)["candidates"]
+    path.parent.mkdir(parents=True)
+    pd.DataFrame({"scan": ["ep9m_pace"], "ticker": [GAPPER], "pushed": [True]}).to_parquet(path)
+    assert run_intraday("mid", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, _ = capsys.readouterr()
+    assert "Push: 1 already sent at 10:15, skipped" in out
+    [message] = sent
+    assert "EP9M pace: no new alerts (1 already sent today)" in message.body
+    assert GAPPER not in message.body
+
+
+def test_intraday_script_picks_the_check_by_time(monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "intraday.py"
+    spec = importlib.util.spec_from_file_location("intraday_script", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.pick_slot(["--slot", "mid", "--force"]) == ("mid", ["--force"])
+    monkeypatch.setattr(module.clock, "in_window", lambda schedule, slot, now: slot == "mid")
+    assert module.pick_slot(["--data-dir", "x"]) == ("mid", ["--data-dir", "x"])
+    monkeypatch.setattr(module.clock, "in_window", lambda schedule, slot, now: False)
+    assert module.pick_slot([])[0] == "am"  # the time guard then turns it away

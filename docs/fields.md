@@ -41,6 +41,7 @@ Universe query matched 4523 rows and returned 4523 (no truncation).
 | `market_cap` | `market_cap_basic` | float64 | 100.0 | USD |
 | `float_shares` | `float_shares_outstanding` | float64 | 97.8 |  |
 | `rvol10_tv` | `relative_volume_10d_calc` | float64 | 99.8 | TradingView relative volume, 10-day base |
+| `rvol_at_time_tv` | `relative_volume_intraday\|5` | float64 | — | Relative volume at this time of day (5-minute bars); the EP9M pace input. Present 19 Oct; values to check on the first live intraday run |
 | `avg_volume_10d_tv` | `average_volume_10d_calc` | float64 | 99.8 |  |
 | `avg_volume_30d_tv` | `average_volume_30d_calc` | float64 | 99.2 |  |
 | `avg_volume_60d_tv` | `average_volume_60d_calc` | float64 | 97.5 |  |

@@ -74,6 +74,19 @@ def ep9m(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     return ranked(df, hit, "volume")
 
 
+def ep9m_pace(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """EP9M during the session: up 4 %+ and 9M+ shares traded or on pace (Emil, 19 Oct 2026).
+
+    Pace = TradingView's relative volume at this time of day (5-minute bars) x the stock's
+    normal daily volume (the RVOL base, today excluded), and never below what has already
+    traded. Stored as `proj_volume`. Ranked by it, largest first.
+    """
+    pace = df["rvol_at_time_tv"] * df["rvol_base_volume"]
+    out = df.assign(proj_volume=pace.where(pace > df["volume"], df["volume"]))
+    hit = (out["proj_volume"] >= scan["volume_min"]) & (out["chg_pct"] >= scan["chg_min_pct"])
+    return ranked(out, hit, "proj_volume")
+
+
 def ep_ah(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """EP-AH: post-market move at the EOD run (toggle, default off).
 

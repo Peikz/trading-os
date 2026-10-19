@@ -142,3 +142,9 @@ def test_fit_drops_headlines_then_facts_then_cuts():
     assert bare == "\n".join([alert, plan] * 3)
     cut = notify.fit(body, limit=60)
     assert len(cut.encode("utf-8")) <= 60 and cut.endswith("(full list in the report)")
+
+
+def test_format_pace():
+    row = {"ticker": "ABCD", "chg_pct": 6.2, "volume": 4.1e6, "proj_volume": 11.4e6}
+    row |= {"dollar_volume": 82e6, "earnings_flag": True}
+    assert notify.format_pace(row) == "ABCD  +6.2%  vol 4.1M, pace 11M  $82M  [earnings]"

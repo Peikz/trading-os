@@ -54,6 +54,7 @@ non-trading days, because EU and US daylight-saving changes happen on different 
 | Job | Target time | New York time | Contents |
 |---|---|---|---|
 | `premarket` | 13:30 CET | 07:30 ET | EP-PM, EP9M early warning, watchlist gappers |
+| `intraday` (Emil, 19 Oct 2026) | 16:15 and 18:00 CET | 10:15 and 12:00 ET | EP9M pace (§6.1b); candidates only, no universe snapshot |
 | `eod` | 22:20 CET | 16:20 ET | All end-of-day scans, universe snapshot, breadth |
 | `weekly` | Sunday 18:00 CET | — | Qullamaggie 1/3/6M gainers, growth buckets, tight bases, official Market Light count |
 | `outcomes` | daily after `eod` | — | Fill outcome horizons for past signals (Phase 3) |
@@ -110,6 +111,12 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | EP9M early warning (proposed) | Pre-market volume ≥ 500K, gap ≥ 4% | 1 | Push |
 | Watchlist gappers (proposed) | BO-Watch / EP-Watch names with pre-market gap ≥ 2% | 1 | Push |
 | Breadth + Market Light (Emil, 19 Oct 2026) | Market Light set at the last close (it governs today's orders), that close's breadth line, pre-market movers (pre-market change ≥ +4% / ≤ −4% in the breadth universe) and QQQ's pre-market change | 1 | Push (top of message) |
+
+### 6.1b During the session (16:15 and 18:00 CET)
+
+| Scan | Filters | Phase | Action |
+|---|---|---|---|
+| EP9M pace (Emil, 19 Oct 2026; rule proposed) | EP9M's rule (§6.2) on the day's projected volume: change ≥ +4% and volume so far or pace ≥ 9M shares. Pace = TradingView's relative volume at this time of day (5-minute bars) × normal daily volume (today excluded), never below the volume so far. A name pushes once per session: the 12:00 check skips names sent at 10:15 | 1 | Push |
 
 ### 6.2 End of day (22:20 CET)
 
@@ -276,6 +283,10 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 8. ~~ADRs~~ — resolved 18 Oct 2026 by Emil: ADRs stay in the universe, with the symbol type stored as a column.
 9. ~~Breadth pre-market~~ — decided 19 Oct 2026 by Emil: breadth also runs pre-market (see §6.1). The
    light itself is still set at the close (§6.5); pre-market adds the movers count and QQQ's pre-market change.
+10. ~~Early EP9M~~ — decided 19 Oct 2026 by Emil: EP9M names also during the session, at 10:15 and 12:00 New
+   York (§6.1b), so they can be acted on before the close. TradingView's data is 15 minutes delayed, so a
+   check sees the market about 15 minutes earlier. Intraday runs store candidates (with the pace inputs),
+   not a universe snapshot, to keep the data repo's growth flat. Outcomes enter at the price the run saw.
 
 ## 12. References
 

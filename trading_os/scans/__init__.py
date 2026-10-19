@@ -7,7 +7,15 @@ from collections.abc import Callable
 import pandas as pd
 
 from trading_os.config import Config, ScanConfig
-from trading_os.scans.ep import ep9m, ep9m_early, ep_ah, ep_day, ep_pm, watchlist_gappers
+from trading_os.scans.ep import (
+    ep9m,
+    ep9m_early,
+    ep9m_pace,
+    ep_ah,
+    ep_day,
+    ep_pm,
+    watchlist_gappers,
+)
 from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
@@ -27,6 +35,7 @@ REGISTRY: dict[str, ScanFn] = {
     "ep_day": ep_day,
     "ep_ah": ep_ah,
     "ep9m": ep9m,
+    "ep9m_pace": ep9m_pace,
     "mb_up": mb_up,
     "mb_down": mb_down,
     "parabolic_short": parabolic_short,
@@ -45,5 +54,5 @@ def run_scans(universe: pd.DataFrame, cfg: Config, slot: str) -> dict[str, pd.Da
     return {
         name: REGISTRY[name](universe, scan)
         for name, scan in cfg.scans.items()
-        if scan.slot == slot and scan.enabled and name in REGISTRY
+        if scan.runs_in(slot) and scan.enabled and name in REGISTRY
     }

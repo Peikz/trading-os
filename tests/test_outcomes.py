@@ -82,6 +82,13 @@ def test_premarket_signal_enters_at_the_open_and_counts_the_session():
     assert row["close_ret_pct"] == pytest.approx((12 / 10.2 - 1) * 100)
 
 
+def test_intraday_signal_enters_at_the_price_the_run_saw():
+    [row] = run([candidate(slot="am") | {"close": 10.4}]).to_dict("records")
+    # Entry 10.40 during D0. Window D1..D5 like EOD: max high 13, last close 12.
+    assert row["entry_basis"] == "signal" and row["entry_price"] == 10.4
+    assert row["max_gain_pct"] == pytest.approx((13 / 10.4 - 1) * 100)
+
+
 def test_unmatured_done_and_incomplete_are_skipped():
     assert run([candidate()], horizons=(10,)).empty  # only 6 sessions after D0
     assert run([candidate()], done={("s1", 5)}).empty

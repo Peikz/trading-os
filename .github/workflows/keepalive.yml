@@ -22,6 +22,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for wf in eod.yml premarket.yml weekly.yml outcomes.yml backfill.yml keepalive.yml; do
+          for wf in eod.yml premarket.yml intraday.yml weekly.yml outcomes.yml backfill.yml keepalive.yml; do
             gh workflow enable "$wf" -R "$REPO" && echo "enabled $wf"
           done

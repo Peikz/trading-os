@@ -92,6 +92,7 @@ def add_phase1_metrics(df: pd.DataFrame, proxies: Mapping[str, object]) -> pd.Da
     out["close_loc"] = close_location(out["close"], out["high"], out["low"])
     out["rvol50"] = relative_volume(out["volume"], rvol_base).replace([np.inf, -np.inf], np.nan)
     out["rvol_basis"] = f"tv_avg{days}d_excl_today"
+    out["rvol_base_volume"] = rvol_base  # normal daily volume, today excluded
     out["avg_volume_20d"] = out[canonical(str(proxies["avg_volume_20d"]))]
     out["avg_dollar_volume_20d"] = out[canonical(str(proxies["avg_dollar_volume_20d"]))]
     out["avg20_basis"] = f"tv:{proxies['avg_volume_20d']}"

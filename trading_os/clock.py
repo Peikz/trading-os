@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import exchange_calendars as xcals
 import pandas as pd
 
-from trading_os.config import Schedule
+from trading_os.config import INTRADAY_SLOTS, Schedule
 
 _LOOKAROUND = dt.timedelta(days=14)
 
@@ -76,6 +76,7 @@ def session_date(schedule: Schedule, slot: str, now: dt.datetime) -> dt.date:
 
     eod, weekly: the latest session whose close is at or before `now` (Sunday reports Friday).
     pm: the next session whose open is after `now` (a pre-market run reports today's session).
+    am, mid: the latest session whose open is at or before `now` (today, during the session).
     """
     cal = _calendar(schedule.calendar)
     now_utc = pd.Timestamp(now).tz_convert("UTC")
@@ -89,6 +90,11 @@ def session_date(schedule: Schedule, slot: str, now: dt.datetime) -> dt.date:
         sessions = cal.sessions_in_range(day, day + _LOOKAROUND)
         for session in sessions:
             if cal.session_open(session) > now_utc:
+                return session.date()
+    elif slot in INTRADAY_SLOTS:
+        sessions = cal.sessions_in_range(day - _LOOKAROUND, day)
+        for session in reversed(sessions):
+            if cal.session_open(session) <= now_utc:
                 return session.date()
     else:
         raise ValueError(f"no session rule for slot {slot!r}")

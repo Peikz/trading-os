@@ -101,3 +101,32 @@ def test_sessions_after(schedule):
     assert sessions_after(schedule, dt.date(2026, 11, 24), 3, until=dt.date(2026, 11, 25)) == [
         dt.date(2026, 11, 25)
     ]
+
+
+# The intraday workflow fires at 14:17 / 15:17 UTC (10:15 check) and 16:03 / 17:03 UTC (12:00
+# check). Each cron lands in at most one window; summer's second crons find the check done.
+@pytest.mark.parametrize(
+    ("now", "am", "mid"),
+    [
+        (utc(2026, 10, 19, 14, 17), True, False),  # Mon, EDT: 10:17 ET
+        (utc(2026, 10, 19, 15, 17), True, False),  # 11:17 ET, retry of the 10:15 check
+        (utc(2026, 10, 19, 16, 3), False, True),  # 12:03 ET
+        (utc(2026, 10, 19, 17, 3), False, True),  # 13:03 ET, retry of the 12:00 check
+        (utc(2026, 11, 2, 14, 17), False, False),  # after US DST change: 09:17 EST
+        (utc(2026, 11, 2, 15, 17), True, False),  # 10:17 EST
+        (utc(2026, 11, 2, 16, 3), True, False),  # 11:03 EST: the 10:15 check, done by then
+        (utc(2026, 11, 2, 17, 3), False, True),  # 12:03 EST
+        (utc(2026, 11, 26, 15, 17), False, False),  # Thanksgiving
+        (utc(2026, 10, 18, 14, 17), False, False),  # Sunday
+    ],
+)
+def test_intraday_windows(schedule, now, am, mid):
+    assert in_window(schedule, "am", now) is am
+    assert in_window(schedule, "mid", now) is mid
+
+
+def test_intraday_session_is_today_once_open(schedule):
+    assert session_date(schedule, "am", utc(2026, 10, 19, 14, 17)) == dt.date(2026, 10, 19)
+    assert session_date(schedule, "mid", utc(2026, 10, 19, 16, 3)) == dt.date(2026, 10, 19)
+    # Before the open (a forced run) it is the previous session.
+    assert session_date(schedule, "am", utc(2026, 10, 19, 11, 0)) == dt.date(2026, 10, 16)

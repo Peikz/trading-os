@@ -170,7 +170,10 @@ if page == "Today":
             st.markdown(f"- {line}")
     else:
         market_lines(latest_eod)
-    for run in [r for r in (latest_pm, latest_eod) if r is not None]:
+    latest_am = next((r for r in runs if r.slot == "am"), None)
+    latest_mid = next((r for r in runs if r.slot == "mid"), None)
+    latest = [r for r in (latest_pm, latest_am, latest_mid, latest_eod) if r is not None]
+    for run in sorted(latest, key=runs.index):  # newest first
         st.subheader(run.label)
         cands = candidates_of(run)
         for scan, hits in cands.groupby("scan", sort=False):
@@ -355,7 +358,8 @@ elif page == "Validation":
     if not runs:
         st.info("No runs yet.")
         st.stop()
-    run = st.selectbox("Run", runs, format_func=lambda r: r.label)
+    with_universe = [r for r in runs if r.universe.exists()]  # intraday runs keep no snapshot
+    run = st.selectbox("Run", with_universe, format_func=lambda r: r.label)
     scan = st.selectbox("Scan", ["ep_day", "qm_gainers"], format_func=report.SCAN_LABELS.get)
     upload = st.file_uploader("TradingView screener export (CSV)", type=["csv"])
     if upload is not None:

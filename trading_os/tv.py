@@ -39,6 +39,7 @@ FIELDS: dict[str, str] = {
     "market_cap": "market_cap_basic",
     "float_shares": "float_shares_outstanding",
     "rvol10_tv": "relative_volume_10d_calc",
+    "rvol_at_time_tv": "relative_volume_intraday|5",  # vs the usual volume by this time
     "avg_volume_10d_tv": "average_volume_10d_calc",
     "avg_volume_30d_tv": "average_volume_30d_calc",
     "avg_volume_60d_tv": "average_volume_60d_calc",

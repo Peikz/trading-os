@@ -20,11 +20,11 @@ import pandas as pd
 from trading_os import watchlists
 from trading_os.store import PARQUET_OPTIONS
 
-SLOT_ORDER = {"weekly": 0, "eod": 1, "pm": 2}
+SLOT_ORDER = {"weekly": 0, "eod": 1, "mid": 2, "am": 3, "pm": 4}
 GRADES = ("", "A", "B", "C")
 NOTE_COLUMNS = ["kind", "ref_id", "grade", "notes", "tags", "attachments", "saved_ts"]
-_CANONICAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|eod|weekly)$")
-_MANUAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|eod|weekly)_(\d{6})$")
+_CANONICAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|am|mid|eod|weekly)$")
+_MANUAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|am|mid|eod|weekly)_(\d{6})$")
 
 
 @dataclass(frozen=True)

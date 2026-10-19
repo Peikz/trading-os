@@ -44,6 +44,8 @@ jobs:
           fi
       - name: Pre-market (forced, no push)
         run: uv run --frozen --no-dev python scripts/premarket.py --data-dir "$RUNNER_TEMP/data" --force --no-push
+      - name: Intraday 10:15 (forced, no push)
+        run: uv run --frozen --no-dev python scripts/intraday.py --data-dir "$RUNNER_TEMP/data" --slot am --force --no-push
       - name: Weekly (forced, no push)
         run: uv run --frozen --no-dev python scripts/weekly.py --data-dir "$RUNNER_TEMP/data" --force --no-push
       - name: Files written (counts only)

@@ -14,6 +14,7 @@ the jobs print counts and status only, because Actions logs here are public.
 | Job | Workflow | When | What |
 |---|---|---|---|
 | Pre-market | `premarket.yml` | 07:17 New York, trading days | EP-PM |
+| Intraday | `intraday.yml` | 10:17 and 12:03 New York, trading days | EP9M pace: up 4 %+ and on pace for 9M shares; each name once a day |
 | End of day | `eod.yml` | 16:17 New York, trading days | EP-Day, EP9M, Momentum Burst up/down, EP-AH (off by default), Parabolic Short/Long, Breakout watch (B1-B4) and trigger (B5) |
 | Weekly | `weekly.yml` | Sunday | Qullamaggie 1/3/6M gainers, Growth Bucket 1 and 2, tight bases |
 | Outcomes | `outcomes.yml` | after the EOD job | 5/10/20/60-session outcomes of past signals |

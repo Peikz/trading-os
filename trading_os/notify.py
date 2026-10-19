@@ -16,7 +16,13 @@ from trading_os import context, sizing
 from trading_os.config import Config
 from trading_os.store import RunContext
 
-SLOT_LABELS = {"pm": "Pre-market", "eod": "EOD", "weekly": "Weekly"}
+SLOT_LABELS = {
+    "pm": "Pre-market",
+    "am": "Intraday 10:15",
+    "mid": "Intraday 12:00",
+    "eod": "EOD",
+    "weekly": "Weekly",
+}
 SCAN_LABELS = {
     "ep_pm": "EP-PM",
     "ep9m_early": "EP9M early",
@@ -24,6 +30,7 @@ SCAN_LABELS = {
     "ep_day": "EP-Day",
     "ep_ah": "EP-AH",
     "ep9m": "EP9M",
+    "ep9m_pace": "EP9M pace",
     "mb_up": "MB up",
     "mb_down": "MB down",
     "parabolic_short": "Parabolic short",
@@ -89,6 +96,17 @@ def format_hit(row: Mapping[str, Any], pct_column: str = "gap_pct", slot: str = 
     return line
 
 
+def format_pace(row: Mapping[str, Any]) -> str:
+    """`TICKER  +6.2%  vol 4.1M, pace 11M  $82M  [earnings]` (volume so far, projected day)."""
+    line = (
+        f"{row['ticker']}  {row['chg_pct']:+.1f}%  vol {row['volume'] / 1e6:.1f}M, "
+        f"pace {row['proj_volume'] / 1e6:.0f}M  {_money(row['dollar_volume'])}"
+    )
+    if bool(row.get("earnings_flag", False)):
+        line += "  [earnings]"
+    return line
+
+
 def format_weekly(row: Mapping[str, Any], scan: str) -> str:
     """Weekly list lines: the numbers each list is about."""
     t = row["ticker"]
@@ -137,8 +155,11 @@ def build_message(
         total = len(results[name])
         tiered = "push_tier" in cfg.scans[name].params
         if chosen.empty:
+            alerts = int((results[name]["tier"] == "alert").sum()) if tiered and total else 0
             if not tiered:
                 blocks.append(f"{label}: no hits")
+            elif alerts:  # the 12:00 check, when every alert went out at 10:15
+                blocks.append(f"{label}: no new alerts ({alerts} already sent today)")
             else:
                 suffix = f" ({total} below alert tier)" if total else ""
                 blocks.append(f"{label}: no alerts{suffix}")
@@ -150,6 +171,8 @@ def build_message(
             lines = [format_weekly(row, name) for row in records]
         elif name.startswith("breakout_"):
             lines = [_with_extras(format_breakout(row, name), row, name) for row in records]
+        elif name == "ep9m_pace":
+            lines = [_with_extras(format_pace(row), row, name) for row in records]
         else:
             pct_column = PCT_COLUMNS.get(name, "chg_pct")
             lines = [

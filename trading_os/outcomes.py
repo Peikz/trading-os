@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from trading_os import clock, history
-from trading_os.config import load_config
+from trading_os.config import INTRADAY_SLOTS, load_config
 from trading_os.logsafe import run_guarded, status
 from trading_os.store import PARQUET_OPTIONS, AlreadyWritten
 
@@ -113,8 +113,11 @@ def _one(cand, horizon, by_key, window_sessions, computed_ts):
         span = by_key.loc[[(ticker, s) for s in window]]
     except KeyError:
         return None  # a bar is missing; maybe later
-    entry_basis = "open" if slot == "pm" else "close"
-    entry = float(entry_bar[entry_basis])
+    if slot in INTRADAY_SLOTS:  # bought during the session: entry at the price the run saw
+        entry_basis, entry = "signal", float(cand.get("close", np.nan))
+    else:
+        entry_basis = "open" if slot == "pm" else "close"
+        entry = float(entry_bar[entry_basis])
     if not entry > 0 or span[["high", "low", "close"]].isna().any().any():
         return None
     stop = cand.get("order_stop")

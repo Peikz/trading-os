@@ -17,7 +17,9 @@ import yaml
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "scans.yaml"
 
-SLOTS = frozenset({"pm", "eod", "weekly"})
+SLOTS = frozenset({"pm", "am", "mid", "eod", "weekly"})
+# During the session: 10:15 and 12:00 New York (Emil, 19 Oct 2026).
+INTRADAY_SLOTS = ("am", "mid")
 ACTIONS = frozenset({"push", "log", "watchlist"})
 TIERS = frozenset({"alert", "log"})
 # Pre-market "gap": TradingView field -> canonical column (docs/fields.md).
@@ -150,6 +152,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     },
     "ep_ah": {"push_tier", "ah_change_min_pct", "price_min", "market_cap_min", "ah_volume_min"},
     "ep9m": {"push_tier", "volume_min", "chg_min_pct"},
+    "ep9m_pace": {"push_tier", "volume_min", "chg_min_pct"},
     "mb_up": {"chg_min_pct", "volume_min", "volume_gt_prior", "close_loc_min"},
     "mb_down": {"chg_max_pct", "volume_min", "volume_gt_prior"},
     "parabolic_short": {
@@ -219,6 +222,10 @@ class ScanConfig:
     slot: str
     action: str
     params: Mapping[str, Any]
+    slots: tuple[str, ...] = ()  # every slot it runs in (`slot` is the first)
+
+    def runs_in(self, slot: str) -> bool:
+        return slot in (self.slots or (self.slot,))
 
     def __getitem__(self, key: str) -> Any:
         return self.params[key]
@@ -361,8 +368,10 @@ def _parse_scans(raw: Any) -> dict[str, ScanConfig]:
         _check_keys(f"scans.{name}", body, SCAN_COMMON_KEYS | SCAN_PARAM_KEYS[name])
         if not isinstance(body["enabled"], bool):
             raise ConfigError(f"scans.{name}.enabled: expected true/false")
-        if body["slot"] not in SLOTS:
-            raise ConfigError(f"scans.{name}.slot: {body['slot']!r} not in {sorted(SLOTS)}")
+        slots = tuple(body["slot"]) if isinstance(body["slot"], list) else (body["slot"],)
+        for slot in slots:
+            if slot not in SLOTS:
+                raise ConfigError(f"scans.{name}.slot: {slot!r} not in {sorted(SLOTS)}")
         if body["action"] not in ACTIONS:
             raise ConfigError(f"scans.{name}.action: {body['action']!r} not in {sorted(ACTIONS)}")
         if "pm_gap_basis" in body and body["pm_gap_basis"] not in PM_GAP_COLUMNS:
@@ -380,9 +389,10 @@ def _parse_scans(raw: Any) -> dict[str, ScanConfig]:
             name=name,
             enabled=body["enabled"],
             phase=body["phase"],
-            slot=body["slot"],
+            slot=slots[0],
             action=body["action"],
             params=_freeze(params),
+            slots=slots,
         )
     return scans
 

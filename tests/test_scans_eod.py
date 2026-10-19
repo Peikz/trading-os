@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from trading_os.config import load_config
-from trading_os.scans.ep import ep9m, ep9m_early, ep_ah, ep_pm
+from trading_os.scans.ep import ep9m, ep9m_early, ep9m_pace, ep_ah, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
 
 
@@ -29,6 +29,30 @@ def test_ep9m(scans):
     # Ranked by volume, largest first; MA position plays no part.
     ranked = run(ep9m, s, ep9m_row("A", volume=10_000_000), ep9m_row("B", volume=30_000_000))
     assert ranked == ["B", "A"]
+
+
+def pace_row(ticker, **kw):
+    # 2M traded so far; normally 1M a day; 4.5x the usual volume by this time -> 4.5M pace.
+    base = {"ticker": ticker, "chg_pct": 4.0, "volume": 2_000_000, "rvol_base_volume": 1e6}
+    return base | {"rvol_at_time_tv": 4.5} | kw
+
+
+def test_ep9m_pace(scans):
+    s = scans["ep9m_pace"]
+    assert s.slots == ("am", "mid") and s.runs_in("mid") and not s.runs_in("eod")
+    assert run(ep9m_pace, s, pace_row("SLOW")) == []  # on pace for 4.5M
+    assert run(ep9m_pace, s, pace_row("EDGE", rvol_at_time_tv=9.0)) == ["EDGE"]  # exactly 9M
+    assert run(ep9m_pace, s, pace_row("JUST", rvol_at_time_tv=8.99)) == []
+    assert run(ep9m_pace, s, pace_row("FLAT", rvol_at_time_tv=12.0, chg_pct=3.99)) == []
+    # Already 9M traded counts even when the pace field is missing.
+    done = pace_row("DONE", volume=9_000_000, rvol_at_time_tv=float("nan"))
+    assert run(ep9m_pace, s, done) == ["DONE"]
+    hits = ep9m_pace(
+        pd.DataFrame([pace_row("A", rvol_at_time_tv=10.0), pace_row("B", rvol_at_time_tv=30.0)]),
+        s,
+    )
+    assert hits["ticker"].tolist() == ["B", "A"]
+    assert hits["proj_volume"].tolist() == [30e6, 10e6]
 
 
 def mb_row(ticker, **kw):

@@ -5,8 +5,9 @@ settings/account.yaml, never in this public repo, and is never printed to logs. 
 trade is converted to USD at the live rate from TradingView.
 
 Entry and stop per scan (config `sizing:`):
-- EP-Day, EP9M: entry at the close, stop at the day's low but no more than
-  `ep_stop_max_adr` × ADR $ and no less than `min_stop_adr` × ADR $ below entry (proposed).
+- EP-Day, EP9M, EP9M pace: entry at the close (intraday: the last price), stop at the day's
+  low but no more than `ep_stop_max_adr` × ADR $ and no less than `min_stop_adr` × ADR $
+  below entry (proposed).
 - EP-PM, EP9M early warning, watchlist gappers: entry at the pre-market price, stop
   `pm_stop_adr` × ADR $ below until the open sets a day low (proposed).
 - Breakout trigger: entry at the close (B5 is checked at the close), stop = order stop (§6.4).
@@ -33,7 +34,7 @@ PLAN_COLUMNS = [
     "plan_risk_usd",
     "plan_capped",
 ]
-EP_CLOSE = ("ep_day", "ep9m")
+EP_CLOSE = ("ep_day", "ep9m", "ep9m_pace")  # intraday: the last price
 EP_PREMARKET = ("ep_pm", "ep9m_early", "watchlist_gappers")
 
 

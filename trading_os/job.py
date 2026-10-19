@@ -35,7 +35,7 @@ from trading_os import (
     universe,
     watchlists,
 )
-from trading_os.config import load_config
+from trading_os.config import INTRADAY_SLOTS, load_config
 from trading_os.history_metrics import LOOKBACK_SESSIONS
 from trading_os.logsafe import run_guarded, status
 from trading_os.retry import once_more
@@ -134,6 +134,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
     selected = notify.select_for_push(results, cfg)
+    if slot == "mid":
+        selected = _not_pushed_earlier(selected, args.data_dir, session, "am")
     results, selected = _with_context(results, selected, cfg, session)
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
@@ -154,13 +156,14 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
             status(f"Push: FAILED ({type(exc).__name__}), saving data anyway")
 
     candidates = store.build_candidates(results, ctx, pushed)
-    store.write_run(args.data_dir, ctx, uni, candidates, extras)
+    snapshot = None if slot in INTRADAY_SLOTS else uni
+    store.write_run(args.data_dir, ctx, snapshot, candidates, extras)
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
     outputs = store.run_outputs(args.data_dir, ctx)
     drawn = {}
-    if slot in ("eod", "pm") and any(len(h) for h in selected.values()):
+    if slot in ("eod", "pm", *INTRADAY_SLOTS) and any(len(h) for h in selected.values()):
         drawn = _charts(outputs["charts"], args.data_dir, cfg, session, slot, selected, df)
     _report(ctx, cfg, results, selected, header, drawn, outputs["report"])
     if slot == "weekly":
@@ -171,6 +174,15 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         raise PushFailed("ntfy unreachable after one retry; data saved") from push_error
     status(f"{label}: done")
     return 0
+
+
+def _not_pushed_earlier(selected: dict, data_dir: Path, session, slot: str) -> dict:
+    """A name goes out once per session: drop what the earlier intraday run already pushed."""
+    earlier = store.pushed_in(data_dir, session, slot)
+    out = {n: hits[~hits["ticker"].isin(earlier.get(n, set()))] for n, hits in selected.items()}
+    repeats = sum(len(selected[n]) - len(out[n]) for n in selected)
+    status(f"Push: {repeats} already sent at 10:15, skipped")
+    return out
 
 
 def _with_cats(results: dict, data_dir: Path, cfg, session) -> dict:
@@ -370,7 +382,7 @@ def _charts(charts_dir: Path, data_dir: Path, cfg, session, slot: str, selected,
         sessions = cfg.charts["sessions"] + max(charts.MA_COLORS)
         past = clock.sessions_back(cfg.schedule, session, sessions)
         bars = history.load_bars(data_dir, [s for s in past if s != session])
-        if slot == "eod":  # today's bar is the run itself (not written to history yet)
+        if slot in ("eod", *INTRADAY_SLOTS):  # today's bar comes from this run
             bars = pd.concat([bars, enrich.todays_bars(df, session)], ignore_index=True)
         drawn = charts.draw_for_run(
             charts_dir, session, slot, selected, bars, cfg.charts["sessions"]
