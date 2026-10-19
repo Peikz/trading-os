@@ -17,6 +17,7 @@ import datetime as dt
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from trading_os import breakouts, charts, clock, history
@@ -35,26 +36,28 @@ def ordinary_ticker(ticker: str) -> bool:
 def replay(
     bars: pd.DataFrame, sessions: list[dt.date], replay_days: int, cfg: Config
 ) -> pd.DataFrame:
-    """Watch and trigger hits for each of the last `replay_days` sessions."""
+    """Watch and trigger hits for each of the last `replay_days` sessions.
+
+    The price grid is built once and sliced per session (the stocks liquid that day, the
+    lookback window before it), so ten years replay as fast as two used to."""
     lookback = cfg.breakout["base_max_days"] + cfg.breakout["prior_move_max_days"] + 60
     universe = bars[bars["ticker"].map(ordinary_ticker)]
     floors = cfg.universe["alert"]
+    grid, tickers = hm.grids(universe, sessions)
     rows = []
     for end in range(len(sessions) - replay_days, len(sessions)):
-        window = sessions[max(0, end - lookback) : end + 1]
-        day = sessions[end]
-        today = universe[universe["session_date"] == day]
-        liquid = today[
-            (today["close"] >= floors["price_min"])
-            & (today["close"] * today["volume"] >= floors["signal_dollar_volume_min"])
-        ]["ticker"]
-        part = universe[
-            universe["ticker"].isin(set(liquid)) & universe["session_date"].isin(window)
-        ]
-        if part.empty:
+        start = max(0, end - lookback)
+        window = sessions[start : end + 1]
+        close, volume = grid["close"][end], grid["volume"][end]
+        with np.errstate(invalid="ignore"):
+            liquid = np.flatnonzero(
+                (close >= floors["price_min"])
+                & (close * volume >= floors["signal_dollar_volume_min"])
+            )
+        if not len(liquid):
             continue
-        grid, tickers = hm.grids(part, window)
-        found = breakouts.detect(grid, tickers, window, cfg.breakout)
+        sub = {k: v[start : end + 1][:, liquid] for k, v in grid.items()}
+        found = breakouts.detect(sub, tickers[liquid], window, cfg.breakout)
         if found.empty:
             continue
         criteria = ["bo_b1", "bo_b2", "bo_b3", "bo_b4"]

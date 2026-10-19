@@ -660,5 +660,9 @@ def _main(argv: list[str] | None = None) -> int:
         folder = args.data_dir / "data" / "intraday_study" / sessions[-1].isoformat()
         write_results(trades, folder)
         counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
-        status(f"Intraday study: {len(trades)} trades {counts}, saved")
+        unnamed = int(trades["strategy"].isna().sum()) if len(trades) else 0
+        status(
+            f"Intraday study: {len(trades)} trades {counts}, saved"
+            + (f"; {unnamed} WITHOUT a strategy name were not saved" if unnamed else "")
+        )
     return 0

@@ -238,7 +238,8 @@ def pivot(b: Bars, row: Mapping[str, Any], p: Mapping[str, Any]) -> list[dict]:
     s0, s1 = b.session()
     if s0 >= s1:
         return book.rows
-    name = row.get("setup") or "breakout"
+    setup = row.get("setup")
+    name = setup if isinstance(setup, str) and setup else "breakout"  # NaN for non-VCP rows
     flags = {f"b{k}": bool(row.get(f"b{k}")) for k in range(1, 5)}
     common = flags | {
         "b_count": sum(flags.values()),

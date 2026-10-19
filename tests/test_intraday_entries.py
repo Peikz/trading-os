@@ -140,3 +140,11 @@ def test_exits_mirror_a_short_and_the_entry_day_stop_wins():
     )
     assert out["r_hold_1d"][0] == pytest.approx(1.0) and out["pnl_hold_1d"][0] == pytest.approx(5)
     assert out["r_hold_21d"][1] == pytest.approx(-1.0) and out["r_trail_ma20"][1] == -1.0
+
+
+def test_breakout_rows_without_a_setup_are_named_breakout():
+    pts = [(570 + k, 9.6 + 0.01 * k, 10_000) for k in range(60)]
+    base = {"prev_close": 9.6, "adr_usd": 0.5, "pivot": 10.0, "order_stop": 9.4}
+    for setup in (float("nan"), None):
+        rows = ie.pivot(bars(pts), base | {"setup": setup}, P)
+        assert rows and {r["strategy"] for r in rows} == {"breakout"}
