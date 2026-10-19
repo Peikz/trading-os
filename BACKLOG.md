@@ -46,9 +46,9 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 
 ## Phase 2 — Breakouts and history
 - [ ] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items)
-- [ ] Massive 2-year grouped-daily backfill (rate limited, resumable)
-- [ ] Daily Massive update in `eod` job
-- [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days)
+- [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; waits for `MASSIVE_API_KEY`
+- [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
+- [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built: `history_metrics.py` (all SPEC §5, hand-computed tests, 10k tickers × 260 sessions in ~4 s) on `history.py` bars (Massive, else our EOD snapshots). Not wired into the jobs yet: switch from TradingView proxies once history covers 205 sessions
 - [ ] Base detection B2 (configurable heuristic, store intermediates)
 - [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger
 - [ ] Watchlists: EP-Watch → BO-Watch flow
@@ -56,7 +56,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Hand audit of 20 random breakout hits
 
 ## Phase 3 — Outcomes and journal
-- [ ] Outcomes job (5/10/20/60 days)
+- [ ] Outcomes job (5/10/20/60 days) — built: `outcomes.py`, `outcomes.yml` (22:00 UTC weekdays); hand-computed tests; runs on EOD snapshots until Massive history exists
 - [ ] Before-shot chart PNGs per alert candidate
 - [ ] Write Breakout Log rows to EPStudyDatabase (Google service account)
 
@@ -85,3 +85,4 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - 2026-10-19: EP9M, Momentum Burst up/down, EP-AH (off), EP-PM + `premarket.yml`; shared job runner. Local runs on 16 Oct data written to `docs/validation.md` in the data repo. Probed TradingView history depth (2 bars only). Next: secrets → first Actions runs; then answers on the Questions above.
 - 2026-10-19 (later): QM gainers, Growth Bucket 1 and 2, weekly job + `weekly.yml`; ADR %, returns and previous-quarter growth metrics; reported revenue history verified (100 % match). Local weekly run written to `docs/validation.md`. Next: secrets → first Actions runs; answers on the Questions.
 - 2026-10-19 (later): Hardening for the 10-day goal: one retry on TradingView/ntfy errors, data saved even if the push fails. READMEs for both repos (data repo: layout + DuckDB query). All unblocked Phase 1 items done; the rest waits on the secrets and the Questions above.
+- 2026-10-19 (later): Phase 2/3 groundwork on Emil's go-ahead: bars store + loader, Massive client and resumable backfill (+ daily catch-up), SPEC §5 metrics on full history, outcomes job. All tested offline; none needs a decision. Waiting on: secrets, Massive key, Questions.

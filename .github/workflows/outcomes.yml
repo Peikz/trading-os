@@ -1,0 +1,74 @@
+# Outcomes job (SPEC §3, Phase 3): daily after the EOD job.
+# One cron after the EOD job in both DST states; exits unless today's session has closed,
+# and writes each matured (signal, horizon) once.
+# This repo is public and so are these logs: the job prints counts and status only.
+
+name: Outcomes
+
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"    # after EOD (20:17 UTC in EDT, 21:17 UTC in EST)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Skip the trading-day guard"
+        type: boolean
+        default: false
+
+concurrency:
+  group: data-repo            # every job that writes trading-os-data shares this group
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  outcomes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Compute outcomes
+        env:
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: uv run --frozen --no-dev python scripts/outcomes.py --data-dir data-repo $FORCE
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "outcomes $(TZ=America/New_York date +%F): data (run ${{ github.run_id }})"
+          git pull -q --rebase
+          git push -q
+          echo "Data: committed and pushed"
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Outcomes failed", message: "Outcomes job failed. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/
