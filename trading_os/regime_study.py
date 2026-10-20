@@ -142,20 +142,21 @@ def known_before(trades: pd.DataFrame, regime: pd.DataFrame, same_day: bool) -> 
 
 
 def score(trades: pd.DataFrame, keys: list[str], exits: list[str]) -> pd.DataFrame:
-    """Per filter and group: trades kept and, per exit, wins and the capped R sum (so years
-    can be pooled exactly)."""
+    """Per filter and group: trades kept and, per exit, wins, known results and the capped R
+    sum (so years can be pooled exactly). Three group-bys per filter, all exits at once."""
+    r = trades[exits]
+    wins = (r > 0).astype("int32").add_prefix("wins_")
+    known = r.notna().astype("int32").add_prefix("n_")
+    capped = r.clip(upper=CAP).fillna(0.0).add_prefix("sum_")
+    parts = pd.concat([trades[keys], wins, known, capped], axis=1)
     rows = []
     for name, rule in FILTERS.items():
-        kept = trades[rule(trades).fillna(False).to_numpy(dtype=bool)]
+        kept = parts[rule(trades).fillna(False).to_numpy(dtype=bool)]
         if kept.empty:
             continue
         grouped = kept.groupby(keys, observed=True)
-        part = grouped.size().rename("trades").to_frame()
-        for exit_name in exits:
-            r = kept[exit_name]
-            part[f"wins_{exit_name}"] = (r > 0).groupby([kept[k] for k in keys]).sum()
-            part[f"n_{exit_name}"] = r.notna().groupby([kept[k] for k in keys]).sum()
-            part[f"sum_{exit_name}"] = r.clip(upper=CAP).groupby([kept[k] for k in keys]).sum()
+        part = grouped.sum(numeric_only=True)
+        part.insert(0, "trades", grouped.size())
         rows.append(part.reset_index().assign(filter=name))
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
