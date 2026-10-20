@@ -312,6 +312,47 @@ minervini:                                  # Mark Minervini's Trend Template an
   dryup_ratio_max: 0.8                      # (proposed) last 10 days' volume <= 0.8 x 50-day
   stop_max_pct: 8                           # stop at most 8 % under the entry ("7-8 %")
 
+qm_surf:                                    # Qullamaggie's breakout from a base surfing the
+                                            # rising 10/20-day MA, history studies only, not a
+                                            # live scan (Emil, 20 Oct 2026). Rules from his
+                                            # streams; every value (proposed)
+  adr_min_pct: 4                            # ADR "four or five percent plus"
+  prior_move_min_pct: 30                    # the big move up into the base ...
+  prior_move_max_days: 63                   # ... within the 3 months before its high
+  base_min_days: 5                          # base from that high: 1 ...
+  base_max_days: 40                         # ... to 8 weeks
+  surf_mas: [10, 20]                        # surfs the 10-day MA, else the 20-day (slower names)
+  surf_min_days: 10                         # every close of the base, and >= 10 in a row, on it
+  surf_tol_adr: 0.25                        # a close up to 0.25 ADR under the MA still surfs
+  near_ma_adr_max: 1.5                      # close within 1.5 ADR of that MA: it caught up
+  right_side_days: 3                        # the base's last 3 sessions: a higher low ...
+  right_range_adr_max: 1.5                  # ... a range <= 1.5 ADR (tight) ...
+  right_volume_ratio_max: 1.0               # ... and volume under the 50-day average
+  trigger_within_adr: 1.0                   # pivot <= close + 1 ADR ("not up more than its ADR")
+  stop_adr_max: 1.0                         # order stop: right-side low, <= 1 ADR under the pivot
+  trail_fast_adr_min_pct: 5                 # trail the 10-day MA at ADR >= 5 %, else the 20-day
+
+htf:                                        # High tight flag (O'Neil) / power play (Minervini),
+                                            # history studies only, not a live scan (Emil,
+                                            # 20 Oct 2026). Their numbers; the reading (proposed)
+  pole_min_pct: 100                         # pole: up >= 100 % (low to high) ...
+  pole_max_days: 40                         # ... within 8 weeks, to a new high
+  flag_min_days: 15                         # flag: 3 to 6 weeks after the pole's high
+  flag_max_days: 30                         # (Minervini: some after only 10-12 sessions)
+  flag_depth_max_pct: 25                    # corrects <= 25 % (O'Neil 10-25, Minervini 20/25)
+  flag_volume_ratio_max: 0.7                # (proposed) flag volume <= 0.7 x the pole's average
+  right_side_days: 5                        # (proposed) order stop: last 5 sessions' low ...
+  stop_max_pct: 8                           # ... at most 8 % under the pivot ("7-8 %")
+
+pocket_pivot:                               # Morales & Kacher's pocket pivot, history studies
+                                            # only, not a live scan (Emil, 20 Oct 2026). The
+                                            # MA distances are (proposed): they give no number
+  down_volume_days: 10                      # volume > every down day's volume of the prior 10
+  mas: [10, 50]                             # pivots off the 10-day (continuation) or 50-day (base)
+  touch_adr: 0.5                            # (proposed) the day's low within 0.5 ADR of the MA ...
+  close_ext_adr_max: 1.5                    # (proposed) ... close above it, <= 1.5 ADR (not extended)
+  ma50_slope_days: 5                        # not under a declining 50-day: MA50 >= 5 sessions ago
+
 sec:                                        # SEC EDGAR (free): exact earnings dates, EPS/revenue as filed
   user_agent: ""                            # contact from the SEC_USER_AGENT secret (not public)
   requests_per_second: 5                    # SEC allows 10
