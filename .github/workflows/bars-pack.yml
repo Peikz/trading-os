@@ -1,0 +1,52 @@
+# The dashboard's 2-year daily bars as one compact file (Emil, 20 Oct 2026): packed from the
+# data repo's per-session bar files after the morning catch-up and published to its
+# "bars-2y" release (the previous file removed). The dashboard reads it from its cache.
+# This repo is public: counts only.
+
+name: Bars pack
+
+on:
+  schedule:
+    - cron: "15 10 * * 2-6"   # after the Backfill job (09:30 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo (bars only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/bars
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Pack
+        run: uv run --frozen --no-dev python -m trading_os.bars_pack --data-dir data-repo --out out
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view bars-2y -R "$REPO" >/dev/null 2>&1 || gh release create bars-2y -R "$REPO" --title "Daily bars, 2 years (compact)" --notes "The dashboard's 2-year daily bars in one file, refreshed each morning." >/dev/null
+          NEW=$(ls out)
+          gh release upload bars-2y out/$NEW -R "$REPO" --clobber
+          for old in $(gh release view bars-2y -R "$REPO" --json assets -q '.assets[].name'); do
+            [ "$old" != "$NEW" ] && gh release delete-asset bars-2y "$old" -R "$REPO" -y
+          done
+          echo "published $NEW"
