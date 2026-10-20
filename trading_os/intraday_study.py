@@ -790,6 +790,7 @@ def _main(argv: list[str] | None = None) -> int:
         trades = run_study(g, tickers, sessions, cands, args.run, cfg)
         folder = args.data_dir / "data" / "intraday_study" / sessions[-1].isoformat()
         write_results(trades, folder)
+        write_summaries(folder)  # the dashboard reads these, not the 2-3 million trades
         counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
         unnamed = int(trades["strategy"].isna().sum()) if len(trades) else 0
         status(
@@ -797,3 +798,43 @@ def _main(argv: list[str] | None = None) -> int:
             + (f"; {unnamed} WITHOUT a strategy name were not saved" if unnamed else "")
         )
     return 0
+
+
+SPLITS = ("none", "year", "price_bucket", "above_vwap", "b_count", "touched", "contractions")
+
+
+def add_splits(trades: pd.DataFrame) -> pd.DataFrame:
+    out = trades.copy()
+    out["year"] = pd.to_datetime(out["session_date"]).dt.year
+    if "prev_close" in out:
+        out["price_bucket"] = pd.cut(
+            out["prev_close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
+        ).astype(str)
+    return out
+
+
+def summaries(files) -> dict[str, pd.DataFrame]:
+    """The dashboard's tables, one per split, built one strategy file at a time (memory)."""
+    parts: dict[str, list[pd.DataFrame]] = {s: [] for s in SPLITS}
+    for path in files:
+        trades = add_splits(pd.read_parquet(path))
+        for split in SPLITS:
+            if split == "none":
+                parts[split].append(summary(trades))
+            elif split in trades and trades[split].notna().any():
+                parts[split].append(summary(trades, [split]))
+    return {s: pd.concat(p, ignore_index=True) for s, p in parts.items() if p}
+
+
+def write_summaries(folder) -> list:
+    """`summary_<split>.parquet` next to the per-strategy results in `folder`."""
+    from pathlib import Path
+
+    folder = Path(folder)
+    files = [f for f in sorted(folder.glob("*.parquet")) if not f.name.startswith("summary_")]
+    written = []
+    for split, table in summaries(files).items():
+        path = folder / f"summary_{split}.parquet"
+        table.to_parquet(path, index=False)
+        written.append(path)
+    return written

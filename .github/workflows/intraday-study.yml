@@ -82,6 +82,9 @@ jobs:
           [ -z "$new" ] && { echo "nothing new"; exit 0; }
           gh release upload intraday-minutes $new -R "$REPO" --clobber
           echo "uploaded: $(echo "$new" | wc -l) files"
+          # One small index of every stock-day with minute bars, for the dashboard's charts.
+          uv run --frozen --no-dev python -c "import glob, pandas as pd; fs = glob.glob('minutes/*.asked.parquet'); idx = pd.concat([pd.read_parquet(f, columns=['session_date', 'ticker']) for f in fs]).drop_duplicates(); idx.to_parquet('minutes/minute_index.parquet', index=False)"
+          gh release upload intraday-minutes minutes/minute_index.parquet -R "$REPO" --clobber
           if [ -f cands/candidates_10y.parquet ]; then
             gh release upload intraday-minutes cands/candidates_10y.parquet -R "$REPO" --clobber
           fi

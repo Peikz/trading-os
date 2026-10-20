@@ -38,6 +38,7 @@ from trading_os import (
     my_watchlists,
     outcomes,
     plans,
+    remote_data,
     report,
     review,
     sizing,
@@ -113,14 +114,30 @@ def read_parquet(path: str) -> pd.DataFrame:
 CHART_CACHE = Path(os.environ.get("TEMP", "/tmp")) / "trading-os-charts"
 
 
-@st.cache_data(ttl=600)
+# Big read-only tables are cached as resources: shared, never copied on each rerun (the
+# copies made Entries & exits and History slow). Pages filter them into new frames.
+@st.cache_resource(ttl=600)
 def strategy_cached(folder: str) -> pd.DataFrame:
     return strategy_history.load(folder)
 
 
-@st.cache_data(ttl=600)
-def intraday_cached(folder: str) -> pd.DataFrame:
-    return intraday_study.load_results(folder)
+@st.cache_resource(ttl=3600)
+def data_repo(folder: str) -> str:
+    return remote_data.repo_of(Path(folder))
+
+
+def from_github(tag: str, pattern: str = "*") -> Path:
+    """The cache folder of a data-repo release, with the files matching `pattern` fetched
+    (the large study data lives only on GitHub; see remote_data)."""
+    with st.spinner(f"Fetching {tag} from GitHub…"):
+        remote_data.fetch(data_repo(str(data_dir)), tag, pattern)
+    return remote_data.CACHE / tag
+
+
+@st.cache_resource(ttl=600)
+def read_big(path: str, columns: tuple | None = None) -> pd.DataFrame:
+    """A large parquet file, shared between reruns (no copy); treat as read-only."""
+    return pd.read_parquet(path, columns=list(columns) if columns else None)
 
 
 @st.cache_data(ttl=600)
@@ -289,9 +306,7 @@ def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
 EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
 
-LONG_HISTORY = ("data", "history_10y")  # the history-10y release, downloaded
-MINUTE_10Y = ("data", "intraday_10y")  # the intraday-10y release's summaries, downloaded
-REGIME_10Y = ("data", "regime_10y")  # the regime-10y release, downloaded
+# Release-backed data: fetched into remote_data.CACHE / <tag> when a page needs it.
 HISTORY_COLUMNS = [
     "strategy",
     "side",
@@ -343,14 +358,14 @@ EP_COLUMNS = [
 ]
 
 
-@st.cache_data(ttl=600)
+@st.cache_resource(ttl=600)
 def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     """The strategy history plus the EP study's alert-tier EP-Days as strategy `ep_day`, in
     one shape: the EP study's returns become `pnl_*`, its planned entry and stop `entry` and
     `stop`; its criteria and fundamentals columns come along for the EP filters. `10y`:
     the yearly files of the history-10y release (only the columns the page uses)."""
     if period == "10y":
-        long_dir = Path(folder).joinpath(*LONG_HISTORY)
+        long_dir = remote_data.CACHE / "history-10y"
         hist = long_history.load(long_dir, "strategy", HISTORY_COLUMNS)
         ep = long_history.load(long_dir, "ep", [*HISTORY_COLUMNS, *EP_COLUMNS, *EP_FLAGS])
     else:
@@ -358,7 +373,7 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
         built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
         ep = read_parquet(str(built[-1])) if built else pd.DataFrame()
     if ep.empty:
-        return hist
+        return hist.assign(year=pd.to_datetime(hist["session_date"]).dt.year)
     ep = ep[ep["is_ep_day"] & (ep["tier"] == "alert")].copy()
     ep["session_date"] = pd.to_datetime(ep["session_date"]).dt.date
     outcome = re.compile(r"^ret_\d+d$")  # outcomes only; ret_22 etc. are features
@@ -367,14 +382,11 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     ep["criteria_met"] = ep[EP_FLAGS].fillna(False).astype(bool).sum(axis=1)
     extra = ("gap_pct", "rvol50", "months_sideways", "earnings_inferred", "criteria_met")
     extra += ("eps_growth_yoy", "sales_growth_yoy", *EP_FLAGS)
-    for column in extra:
-        if column not in hist:
-            hist = hist.assign(**{column: None})
-    return pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
+    hist = hist.assign(**{c: None for c in extra if c not in hist})  # one step: no fragments
+    out = pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
+    return out.assign(year=pd.to_datetime(out["session_date"]).dt.year)
 
 
-ALPACA_BARS = ("data", "bars_alpaca")  # the bars-alpaca release, downloaded
-MINUTES = ("data", "intraday_minutes")  # the intraday-minutes release, downloaded
 OVERLAYS = ["MA10", "MA20", "MA50", "MA200", "EMA9", "EMA21"]
 
 
@@ -385,8 +397,7 @@ def bars_for(folder: str, ticker: str, period: str) -> pd.DataFrame:
         return ticker_bars(folder, ticker)
     import pyarrow.dataset as ds
 
-    root = Path(folder).joinpath(*ALPACA_BARS)
-    files = sorted(root.glob("*.parquet"))
+    files = sorted(from_github("bars-alpaca", "*.parquet").glob("*.parquet"))
     if not files:
         return pd.DataFrame()
     table = ds.dataset(files, format="parquet").to_table(filter=ds.field("ticker") == ticker)
@@ -395,12 +406,12 @@ def bars_for(folder: str, ticker: str, period: str) -> pd.DataFrame:
     return bars.drop_duplicates("session_date").sort_values("session_date")
 
 
-@st.cache_data(ttl=600)
+@st.cache_resource(ttl=600)
 def all_hits(folder: str, period: str) -> pd.DataFrame:
     """Every scan hit (strategy, session_date, ticker, side), EP-Days included."""
     cols = ["strategy", "session_date", "ticker", "side"]
     if period == "10y":
-        long_dir = Path(folder).joinpath(*LONG_HISTORY)
+        long_dir = from_github("history-10y", "*.parquet")
         hits = long_history.load(long_dir, "strategy", cols)
         eps = long_history.load(long_dir, "ep", ["session_date", "ticker", "is_ep_day", "tier"])
     else:
@@ -426,34 +437,33 @@ def hits_for(folder: str, ticker: str, period: str) -> pd.DataFrame:
     return mine
 
 
-@st.cache_data(ttl=600)
+@st.cache_resource(ttl=3600)
+def minute_index(folder: str) -> pd.DataFrame:
+    """Every stock-day with minute bars (session_date, ticker): the release's one small
+    `minute_index.parquet` (refreshed by each fetch run) instead of 7 GB of bars."""
+    path = from_github("intraday-minutes", "minute_index.parquet") / "minute_index.parquet"
+    if not path.exists():
+        return pd.DataFrame(columns=["session_date", "ticker"])
+    index = pd.read_parquet(path)
+    index["session_date"] = pd.to_datetime(index["session_date"]).dt.date
+    return index
+
+
 def minute_days(folder: str, ticker: str) -> list:
     """Sessions that have minute bars for `ticker` (newest first)."""
-    import pyarrow.dataset as ds
-
-    files = [
-        f
-        for f in sorted(Path(folder).joinpath(*MINUTES).glob("*.parquet"))
-        if not f.name.endswith(".asked.parquet")
-    ]
-    if not files:
-        return []
-    table = ds.dataset(files, format="parquet").to_table(
-        columns=["session_date"], filter=ds.field("ticker") == ticker
-    )
-    days = pd.to_datetime(pd.Series(table.column("session_date").to_pylist())).dt.date
-    return sorted(set(days), reverse=True)
+    index = minute_index(folder)
+    return sorted(set(index.loc[index["ticker"] == ticker, "session_date"]), reverse=True)
 
 
 def minute_bars(folder: str, ticker: str, day) -> pd.DataFrame:
-    """One stock-day's minute bars, New York time, with `minute` after midnight."""
+    """One stock-day's minute bars, New York time, with `minute` after midnight (the month's
+    files fetched from GitHub when first needed)."""
     import pyarrow.dataset as ds
 
     month = f"{day:%Y-%m}"
+    root = from_github("intraday-minutes", f"{month}_*.parquet")
     files = [
-        f
-        for f in sorted(Path(folder).joinpath(*MINUTES).glob(f"{month}_*.parquet"))
-        if not f.name.endswith(".asked.parquet")
+        f for f in sorted(root.glob(f"{month}_*.parquet")) if not f.name.endswith(".asked.parquet")
     ]
     if not files:
         return pd.DataFrame()
@@ -558,6 +568,52 @@ def stock_chart(
     if lines and timeframe == "Daily":
         ichart.add_trend_lines(fig, shown, lines)
     st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
+
+
+@st.cache_resource(ttl=600, show_spinner=False)
+def history_filtered(folder, period, picked, years, states, ep_args) -> pd.DataFrame:
+    """The History page's rows for one set of filters (shared, computed once per set)."""
+    hist = history_cached(folder, period)
+    keep = hist["strategy"].isin(picked) & hist["year"].isin(years)
+    if states:
+        keep &= hist["mkt_breadth_state"].isin(states)
+    if ep_args is not None:
+        gap_min, rvol_min, months_min, earnings, must = ep_args
+        ep = hist["strategy"] == "ep_day"
+        ok = (hist["gap_pct"] >= gap_min) & (hist["rvol50"] >= rvol_min)
+        ok &= hist["months_sideways"].fillna(0) >= months_min
+        known = hist["earnings_inferred"]
+        if earnings == "yes":
+            ok &= known.eq(True)
+        elif earnings == "no":
+            ok &= known.eq(False)
+        elif earnings == "unknown":
+            ok &= known.isna()
+        for flag in must:
+            ok &= hist[flag].fillna(False).astype(bool)
+        keep &= ~ep | ok
+    view = hist[keep].copy()
+    view["price_bucket"] = pd.cut(
+        view["close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
+    )
+    if ep_args is not None:
+        view["gap_bucket"] = pd.cut(
+            view["gap_pct"], [0, 15, 25, 50, 1e9], labels=["<15", "15-25", "25-50", "50+"]
+        )
+        view["rvol_bucket"] = pd.cut(
+            view["rvol50"], [0, 5, 10, 20, 1e9], labels=["<5", "5-10", "10-20", "20+"]
+        )
+    return view
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def history_tables(folder: str, filters: tuple, group: str):
+    """(summary, exits compared) for one set of filters and split (computed once per set)."""
+    view = history_filtered(folder, *filters)
+    by = None if group == "none" else [group]
+    table = strategy_history.summary(view, by)
+    compared = exits.compare(view[view["entry"].notna()], CFG.exits, ["strategy", *(by or [])])
+    return table, compared
 
 
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
@@ -699,19 +755,6 @@ elif page == "Chart":
     timeframe = b.radio("Bars", ["Daily", "Weekly"], horizontal=True, key="ch_tf")
     span = c.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
     sessions = {"3M": 63, "6M": 126, "1Y": 252, "2Y": 504, "All": None}[span]
-    if period == "10y" and not list(data_dir.joinpath(*ALPACA_BARS).glob("*.parquet")):
-        st.info("10 years needs Alpaca's daily bars on this PC (about 350 MB).")
-        if st.button("Download them"):
-            ok, out = dashboard.download_release(
-                data_dir, "bars-alpaca", data_dir.joinpath(*ALPACA_BARS)
-            )
-            if ok:
-                st.success("Downloaded.")
-            else:
-                st.error(out)
-            st.cache_data.clear()
-            st.rerun()
-        st.stop()
     overlays = st.multiselect("Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines")
     a, b, c = st.columns(3)
     show_hits = a.toggle("Scan hits", value=True, key="ch_hits")
@@ -795,7 +838,9 @@ elif page == "Chart":
                     chart_marks.remove(data_dir, m["mark_id"])
                     st.rerun()
 
-    with st.expander("Intraday (minute bars)"):
+    # A toggle, not an expander: Streamlit runs a collapsed expander's code too, and that
+    # fetched a month of minute bars from GitHub for every stock you looked at.
+    if st.toggle("Intraday (minute bars)", key="ch_intraday_on"):
         days = minute_days(str(data_dir), ticker)
         if not days:
             st.caption(
@@ -1109,8 +1154,8 @@ elif page == "Journal":
             st.info("Your real R per setup shows here once trades are closed.")
         else:
             daily = study_by_strategy(str(data_dir))
-            minute = intraday_cached(str(data_dir))
-            best = intraday_study.best(intraday_study.summary(minute), 50) if len(minute) else None
+            files = list(from_github("intraday-2y", "summary_none.parquet").glob("summary_none*"))
+            best = intraday_study.best(read_big(str(files[0])), 50) if files else None
             table = review.real_vs_study(trades, daily, best)
             st.dataframe(table.round(2), hide_index=True, width="stretch")
             st.caption(
@@ -1122,18 +1167,11 @@ elif page == "Journal":
 
 elif page == "Market regime":
     st.header("Market regime")
-    folder = data_dir.joinpath(*REGIME_10Y)
+    folder = from_github("regime-10y", "*.parquet")
     needed = ["regime_daily", "regime_minute", "regime_minute_by_year"]
     needed += ["regime_daily_study", "regime_daily_study_by_year"]
     if not all((folder / f"{n}.parquet").exists() for n in needed):
-        st.info("The regime study isn't on this PC yet (the data repo's regime-10y release).")
-        if st.button("Download it"):
-            ok, out = dashboard.download_release(data_dir, "regime-10y", folder)
-            if ok:
-                st.success("Downloaded.")
-            else:
-                st.error(out)
-            st.rerun()
+        st.info("The regime study hasn't been published yet (the data repo's regime-10y release).")
         st.stop()
     st.caption(
         "Would skipping trades in a bad market have helped? Each trade gets the regime known "
@@ -1213,6 +1251,17 @@ elif page == "System health":
         st.success("No failure logs.")
     else:
         st.dataframe(failures, hide_index=True, width="stretch")
+    st.subheader("Data cache")
+    used = remote_data.size() / 1024**3
+    limit = remote_data.LIMIT_BYTES / 1024**3
+    st.caption(
+        f"The study data lives on GitHub; this PC keeps only what you opened, in "
+        f"{remote_data.CACHE} ({used:.2f} of {limit:.0f} GB; least used files go first)."
+    )
+    if st.button("Empty the cache"):
+        remote_data.clear()
+        st.cache_resource.clear()
+        st.success("Emptied. Pages fetch what they need again.")
     st.subheader("GitHub runs")
     if st.button("Load the latest runs from GitHub"):
         st.session_state["gh_runs"] = health.github_runs()
@@ -1295,18 +1344,8 @@ elif page == "History":
         format_func=lambda p: "2 years (Massive)" if p == "2y" else "10 years (Alpaca, since 2016)",
         key="hist_period",
     )
-    long_dir = data_dir.joinpath(*LONG_HISTORY)
-    if period == "10y" and not list(long_dir.glob("strategy_*.parquet")):
-        st.info("The 10-year history isn't on this PC yet (the data repo's history-10y release).")
-        if st.button("Download it"):
-            ok, out = dashboard.download_release(data_dir, "history-10y", long_dir)
-            if ok:
-                st.success("Downloaded.")
-            else:
-                st.error(out)
-            st.cache_data.clear()
-            st.rerun()
-        st.stop()
+    if period == "10y":
+        from_github("history-10y", "*.parquet")
     hist = history_cached(str(data_dir), period)
     if hist.empty:
         st.info(
@@ -1324,15 +1363,11 @@ elif page == "History":
     names = sorted(hist["strategy"].unique())
     a, b, c = st.columns(3)
     picked = a.multiselect("Strategies", names, default=names, key="hist_strategies")
-    years = sorted({d.year for d in hist["session_date"]})
+    years = sorted(hist["year"].dropna().unique().tolist())
     chosen_years = b.multiselect("Year", years, default=years, key="hist_years")
     states = c.multiselect("Breadth state that day", ["strong", "neutral", "weak"], key="hist_mkt")
-    keep = hist["strategy"].isin(picked) & hist["session_date"].map(lambda d: d.year).isin(
-        chosen_years
-    )
-    if states:
-        keep &= hist["mkt_breadth_state"].isin(states)
     ep_on = "ep_day" in picked
+    ep_args = None
     if ep_on:
         with st.expander("EP-Day filters", expanded=False):
             a, b, c = st.columns(3)
@@ -1342,44 +1377,26 @@ elif page == "History":
             a, b = st.columns(2)
             earnings = a.selectbox("Earnings (inferred)", ["any", "yes", "no", "unknown"])
             must = b.multiselect("Criteria that must pass", EP_FLAGS)
-        ep = hist["strategy"] == "ep_day"
-        ok = (hist["gap_pct"] >= gap_min) & (hist["rvol50"] >= rvol_min)
-        ok &= hist["months_sideways"].fillna(0) >= months_min
-        known = hist["earnings_inferred"]
-        if earnings == "yes":
-            ok &= known.eq(True)
-        elif earnings == "no":
-            ok &= known.eq(False)
-        elif earnings == "unknown":
-            ok &= known.isna()
-        for flag in must:
-            ok &= hist[flag].fillna(False).astype(bool)
-        keep &= ~ep | ok
-    view = hist[keep].copy()
-    view["year"] = view["session_date"].map(lambda d: d.year)
-    view["price_bucket"] = pd.cut(
-        view["close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
-    )
+        ep_args = (gap_min, rvol_min, months_min, earnings, tuple(must))
+    filters = (period, tuple(picked), tuple(chosen_years), tuple(states), ep_args)
+    view = history_filtered(str(data_dir), *filters)
     splits = ["none", "year", "mkt_breadth_state", "mkt_qqq_trend", "price_bucket", "above_ma200"]
     if ep_on:
-        view["gap_bucket"] = pd.cut(
-            view["gap_pct"], [0, 15, 25, 50, 1e9], labels=["<15", "15-25", "25-50", "50+"]
-        )
-        view["rvol_bucket"] = pd.cut(
-            view["rvol50"], [0, 5, 10, 20, 1e9], labels=["<5", "5-10", "10-20", "20+"]
-        )
         splits += ["earnings_inferred", "criteria_met", "gap_bucket", "rvol_bucket", "c4_neglect"]
     group = st.selectbox("Split by", splits, key="hist_split")
-    by = None if group == "none" else [group]
     st.subheader(f"{len(view):,} events")
-    table = strategy_history.summary(view, by)
+    table, compared = history_tables(str(data_dir), filters, group)
     st.dataframe(table.round(2), hide_index=True, width="stretch")
     st.caption(
         "win/med = share up and median % move after 1, 5, 21 and 63 sessions; R = mean R with the "
         "stop (capped at 20); trails = out at the first close under the 10/20-day MA or EMA 9/21."
     )
     st.markdown("**Exits compared** (mean R with the stop; Qullamaggie and Stockbee management)")
-    compared = exits.compare(view[view["entry"].notna()], CFG.exits, ["strategy", *(by or [])])
+    compared = compared.assign(
+        group=compared["group"].map(
+            lambda g: " · ".join(map(str, g)) if isinstance(g, tuple) else str(g)
+        )
+    )
     st.dataframe(compared.round(2), hide_index=True, width="stretch")
     one = st.selectbox("Events of", picked or names, key="hist_one")
     events = view[view["strategy"] == one].sort_values("session_date", ascending=False)
@@ -1429,19 +1446,10 @@ elif page == "Entries & exits":
         key="ie_period",
     )
     if ie_period == "10y":
-        ten = data_dir.joinpath(*MINUTE_10Y)
+        ten = from_github("intraday-10y", "intraday_summary_10y*.parquet")
         files = [ten / "intraday_summary_10y.parquet", ten / "intraday_summary_10y_by_year.parquet"]
         if not all(f.exists() for f in files):
-            st.info("The 10-year minute study isn't on this PC yet (release intraday-10y).")
-            if st.button("Download the summaries"):
-                ok, out = dashboard.download_release(
-                    data_dir, "intraday-10y", ten, ["intraday_summary_10y*.parquet"]
-                )
-                if ok:
-                    st.success("Downloaded.")
-                else:
-                    st.error(out)
-                st.rerun()
+            st.info("The 10-year minute study hasn't been published yet (release intraday-10y).")
             st.stop()
         overall, by_year = (read_parquet(str(f)) for f in files)
         min_trades = st.slider("Minimum trades", 50, 2000, 200, step=50, key="ie10_min")
@@ -1468,13 +1476,9 @@ elif page == "Entries & exits":
             "works in some years shows it here. Facts, not advice."
         )
         st.stop()
-    trades = intraday_cached(str(data_dir))
-    if trades.empty:
-        st.info(
-            "No minute-bar study yet. It needs the minute files from the data repo's "
-            "`intraday-minutes` release: `python -m trading_os.intraday_cli --data-dir ... "
-            "--run <folder>`."
-        )
+    two = from_github("intraday-2y", "summary_*.parquet")
+    if not (two / "summary_none.parquet").exists():
+        st.info("No minute study published yet (the data repo's intraday-2y release).")
         st.stop()
     st.caption(
         "Every strategy bought (or shorted) at different times on minute bars, each entry "
@@ -1483,21 +1487,24 @@ elif page == "Entries & exits":
         "so far (high for shorts), adr = 1 ADR, order = the setup's own stop, signal = the "
         "signal day's low/high. Facts, not advice."
     )
-    names = sorted(trades["strategy"].unique())
-    picked = st.multiselect("Strategies", names, default=names, key="ie_strategies")
-    view = trades[trades["strategy"].isin(picked)].copy()
-    view["year"] = view["session_date"].map(lambda d: d.year)
-    view["price_bucket"] = pd.cut(
-        view["prev_close"], [0, 5, 10, 50, 1e9], labels=["<5", "5-10", "10-50", "50+"]
-    )
-    splits = ["none", "year", "price_bucket"]
-    splits += [c for c in ("above_vwap", "b_count", "touched", "contractions") if c in view]
+    splits = [
+        name.removeprefix("summary_").removesuffix(".parquet")
+        for name in sorted(p.name for p in two.glob("summary_*.parquet"))
+    ]
+    splits = ["none", *[s for s in splits if s != "none"]]
     group = st.selectbox("Split by", splits, key="ie_split")
+    table = read_big(str(two / f"summary_{group}.parquet"))
+    names = sorted(table["strategy"].unique())
+    picked = st.multiselect("Strategies", names, default=names, key="ie_strategies")
+    table = table[table["strategy"].isin(picked)]
     min_trades = st.slider("Minimum trades", 10, 500, 50, step=10)
-    table = intraday_study.summary(view, None if group == "none" else [group])
     st.subheader("Best entry, stop and exit per strategy")
-    st.dataframe(intraday_study.best(table, min_trades).round(2), hide_index=True, width="stretch")
-    exits_all = [c[2:] for c in intraday_study.exit_columns(view)]
+    best_table = intraday_study.best(table, min_trades) if group == "none" else None
+    if best_table is not None:
+        st.dataframe(best_table.round(2), hide_index=True, width="stretch")
+    else:
+        st.caption("Shown for “none” (no split); the table below has every split.")
+    exits_all = [c[2:] for c in table.columns if c.startswith("R_")]
     default = [
         e for e in ("hold_1d", "hold_5d", "hold_21d", "trail_ema9", "q3_ma20") if e in exits_all
     ]
@@ -1511,11 +1518,16 @@ elif page == "Entries & exits":
     st.dataframe(
         table[[c for c in columns if c in table]].round(2), hide_index=True, width="stretch"
     )
-    one = st.selectbox("Trades of", picked or names, key="ie_one")
-    rows = view[view["strategy"] == one].sort_values("session_date", ascending=False)
-    keep = ["session_date", "ticker", "entry", "stop_rule", "side", "price", "stop", "risk_adr"]
-    keep += ["r_0d", "r_hold_5d", "r_hold_21d", "r_trail_ema9", "pnl_hold_5d", "pnl_hold_21d"]
-    st.dataframe(rows[[c for c in keep if c in rows]].head(2000), hide_index=True, width="stretch")
+    one = st.selectbox("Trades of", ["—", *(picked or names)], key="ie_one")
+    if one != "—":
+        path = from_github("intraday-2y", f"{one}.parquet") / f"{one}.parquet"
+        keep = ["session_date", "ticker", "entry", "stop_rule", "side", "price", "stop"]
+        keep += ["risk_adr", "r_0d", "r_hold_5d", "r_hold_21d", "r_trail_ema9"]
+        keep += ["pnl_hold_5d", "pnl_hold_21d"]
+        rows = read_big(str(path), tuple(keep)) if path.exists() else pd.DataFrame()
+        if len(rows):
+            rows = rows.sort_values("session_date", ascending=False).head(2000)
+        st.dataframe(rows, hide_index=True, width="stretch")
 
 elif page == "Validation":
     st.header("Validation against TradingView")

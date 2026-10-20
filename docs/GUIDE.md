@@ -71,8 +71,11 @@ start time in UTC.
 
 The private data repo (`trading-os-data`) holds the runs (`data/universe`, `data/candidates`,
 `data/manual`), breadth, charts, reports, watchlists, the journal and your settings. Large
-study data lives in its releases, not in git: `bars-alpaca` (daily bars per year),
-`intraday-minutes` (minute bars), `history-10y`, `intraday-10y`, `regime-10y`.
+study data lives only in its releases on GitHub, not in git and not on your PC:
+`bars-alpaca` (daily bars per year), `intraday-minutes` (minute bars and their index),
+`intraday-2y`, `intraday-10y`, `history-10y`, `regime-10y`. The dashboard fetches just what a
+page needs into a cache (`%LOCALAPPDATA%	rading-os-cache`, at most 1.5 GB, least used files
+dropped first); **System health → Empty the cache** clears it.
 
 ## 4. Universe and tiers
 
