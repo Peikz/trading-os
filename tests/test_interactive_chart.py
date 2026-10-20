@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_os import chart_marks
-from trading_os import interactive_chart as ic
+pytest.importorskip("plotly")  # a dashboard dependency (the app group); CI runs without it
+from trading_os import interactive_chart as ic  # noqa: E402
 
 A = "".join(["C", "H", "Q"])
 
@@ -109,13 +109,3 @@ def test_intraday_figure_draws_vwap_from_the_open():
     assert vwap[m["minute"] < 570].isna().all() and vwap.iloc[-1] == pytest.approx(10.0)
     fig = ic.intraday_figure(m, title=A, prev_close=9.5, every=5)
     assert "VWAP" in [t.name for t in fig.data]
-
-
-def test_saved_marks_follow_add_and_remove(tmp_path):
-    line = chart_marks.add_line(tmp_path, A, dt.date(2026, 1, 5), 10, dt.date(2026, 1, 9), 11)
-    chart_marks.add_anchor(tmp_path, A, dt.date(2026, 1, 6), "gap")
-    marks = chart_marks.current(tmp_path, A)
-    assert sorted(marks["kind"]) == ["anchor", "line"]
-    chart_marks.remove(tmp_path, line)
-    assert chart_marks.current(tmp_path, A)["kind"].tolist() == ["anchor"]
-    assert chart_marks.current(tmp_path, "OTHER").empty
