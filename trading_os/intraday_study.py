@@ -42,7 +42,7 @@ from trading_os import history_metrics as hm
 from trading_os.audit import ordinary_ticker
 from trading_os.metrics import NEW_YORK
 
-SAME_DAY = ("ep9m", "pivot", "vcp", "luk")  # 1-minute bars of the session
+SAME_DAY = ("ep9m", "pivot", "vcp", "luk", "qm_surf", "htf")  # 1-minute bars of the session
 NEXT_DAY_STRATEGIES = (
     "ep_day",
     "ep9m",
@@ -53,7 +53,28 @@ NEXT_DAY_STRATEGIES = (
     "breakout_trigger",
     *luk.STRATEGIES,
     "vcp_breakout",
+    "pocket_pivot",
 )
+SETUP_KEEP = {  # audit columns of the newer study-only setups that each trade carries
+    "qm_surf": (
+        "max_entry",
+        "surf_ma",
+        "base_len",
+        "prior_move_pct",
+        "trail_ma",
+        "day_in_setup",
+        "pivot_dist_adr",
+        "ma_stacked",
+    ),
+    "htf": (
+        "pole_pct",
+        "pole_days",
+        "flag_depth_pct",
+        "flag_days",
+        "flag_volume_ratio",
+        "day_in_setup",
+    ),
+}
 
 
 def daily(bars: pd.DataFrame, sessions: list) -> tuple[dict, pd.Index]:
@@ -117,8 +138,13 @@ def from_grids(g, tickers, sessions, cfg, next_day_hits=None) -> pd.DataFrame:
         luk_candidates(g, tickers, sessions, cfg.luk, facts),
         vcp_candidates(g, tickers, sessions, cfg.minervini, facts),
     ]
-    if next_day_hits is not None and len(next_day_hits):
-        frames.append(next_day_candidates(next_day_hits, sessions, tickers, facts, g))
+    setups, pockets = setup_candidates(g, tickers, sessions, cfg, facts)
+    frames.append(setups)
+    hits = [h for h in (next_day_hits, pockets) if h is not None and len(h)]
+    if hits:
+        frames.append(
+            next_day_candidates(pd.concat(hits, ignore_index=True), sessions, tickers, facts, g)
+        )
     out = pd.concat([f for f in frames if len(f)], ignore_index=True)
     return out.sort_values(["group", "session_date", "ticker"]).reset_index(drop=True)
 
@@ -202,6 +228,56 @@ def vcp_candidates(g, tickers, sessions, conf, facts) -> pd.DataFrame:
         out[c] = found[c].to_numpy()[keep]
     out["setup"] = "vcp_breakout"
     return out
+
+
+SETUP_CHUNK = 1000  # tickers per detector pass (memory)
+
+
+def setup_candidates(g, tickers, sessions, cfg, facts) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The newer study-only setups (Emil, 20 Oct 2026): (trigger-day rows of Qullamaggie's
+    MA-surf breakout and the high tight flag, pocket-pivot hits for the next-day entries).
+
+    A qm_surf / htf setup is known at a session's close and triggers on the next session's
+    cross of its pivot, so the trigger day is fetched when its high reached the pivot (a buy
+    stop fills only then). Pocket pivots go to the next-day group like the end-of-day hits."""
+    from trading_os import patterns, qm_setups
+
+    frames, pockets = [], []
+    for start in range(0, len(tickers), SETUP_CHUNK):
+        part = tickers[start : start + SETUP_CHUNK]
+        sub = {k: v[:, start : start + SETUP_CHUNK] for k, v in g.items()}
+        found = [qm_setups.find(sub, part, sessions, cfg.qm_surf)]
+        pat = patterns.find(sub, part, sessions, cfg)
+        if len(pat):
+            found.append(pat[pat["strategy"] == "htf"])
+            pockets.append(
+                pat.loc[pat["strategy"] == "pocket_pivot", ["strategy", "session_date", "ticker"]]
+            )
+        frames += [f for f in found if len(f)]
+    if not frames:
+        return pd.DataFrame(), pd.concat(pockets, ignore_index=True) if pockets else pd.DataFrame()
+    found = pd.concat(frames, ignore_index=True)
+    index = {d: i for i, d in enumerate(sessions)}
+    col = {t: j for j, t in enumerate(tickers)}
+    t = found["session_date"].map(index).to_numpy() + 1
+    j = found["ticker"].map(col).to_numpy()
+    inside = t < len(sessions)
+    found, t, j = found[inside].reset_index(drop=True), t[inside], j[inside]
+    with np.errstate(invalid="ignore"):
+        reach = facts["ok"][t, j] & (g["high"][t, j] >= found["pivot"].to_numpy(dtype=float))
+    found, t, j = found[reach].reset_index(drop=True), t[reach], j[reach]
+    out = _rows(t, j, sessions, tickers, facts, "")
+    out["group"] = found["strategy"].to_numpy()
+    out["setup"] = found["strategy"].to_numpy()
+    out["signal_date"] = found["session_date"].to_numpy()
+    for c in ("pivot", "order_stop"):
+        out[c] = found[c].to_numpy(dtype=float)
+    for c in sorted({c for cols in SETUP_KEEP.values() for c in cols}):
+        if c in found:
+            out[c] = found[c].to_numpy()
+    out = out.drop_duplicates(["group", "session_date", "ticker"])
+    pockets = pd.concat(pockets, ignore_index=True) if pockets else pd.DataFrame()
+    return out, pockets
 
 
 def next_day_candidates(hits: pd.DataFrame, sessions, tickers, facts, g) -> pd.DataFrame:

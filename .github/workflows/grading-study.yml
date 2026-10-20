@@ -56,13 +56,13 @@ jobs:
           for y in $((Y-1)) $Y; do
             gh release download history-10y -R "$REPO" -D hist -p "strategy_$y.parquet" -p "ep_$y.parquet" 2>/dev/null || true
           done
-          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y.parquet' 2>/dev/null || true
+          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y_v2.parquet' 2>/dev/null || true
           gh release download intraday-minutes -R "$REPO" -D minutes -p "$Y-*" 2>/dev/null || true
           gh release download regime-10y -R "$REPO" -D regime -p 'regime_daily.parquet'
           echo "bars $(ls bars | wc -l), histories $(ls hist | wc -l), minute files $(ls minutes | wc -l), cached candidates $(ls cands | wc -l)"
 
       - name: Run the year
-        run: uv run --frozen --no-dev python -m trading_os.grading_study --year ${{ matrix.year }} --data-dir data-repo --bars bars --hits hist --minutes minutes --cands cands/candidates_10y.parquet --regime regime/regime_daily.parquet --out out
+        run: uv run --frozen --no-dev python -m trading_os.grading_study --year ${{ matrix.year }} --data-dir data-repo --bars bars --hits hist --minutes minutes --cands cands/candidates_10y_v2.parquet --regime regime/regime_daily.parquet --out out
 
       - name: Upload
         env:

@@ -54,6 +54,7 @@ KEEP = (
     "signal_high",
     "signal_low",
     "setup",
+    *sorted({c for cols in study.SETUP_KEEP.values() for c in cols}),
 )
 # Signal-day columns of the 10-year strategy histories, for next-day entries (prefix sig_).
 SIGNAL_COLUMNS = (

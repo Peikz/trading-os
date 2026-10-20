@@ -238,3 +238,43 @@ def test_a_year_keeps_stock_trades_with_features_and_drops_funds(tmp_path):
     assert {"days_hold_5d", "r_part3", "r_mrev_ma10", "r_tgt2R_10d"} <= set(trades.columns)
     stops = trades["price"] - trades["stop"]
     assert (stops >= trades["price"] * CFG.intraday_study["min_stop_pct"] / 100 - 1e-6).all()
+
+
+def test_setup_candidates_fetch_the_trigger_day_when_it_reaches_the_pivot(monkeypatch):
+    from trading_os import intraday_study, patterns, qm_setups
+
+    days = clock.sessions_after(CFG.schedule, dt.date(2024, 1, 2), 60, dt.date(2024, 12, 31))
+    bars = pd.DataFrame(
+        {
+            "session_date": days,
+            "ticker": A,
+            "open": 10.0,
+            "high": 10.2,
+            "low": 9.8,
+            "close": 10.0,
+            "volume": 2_000_000.0,
+        }
+    )
+    g, tickers = intraday_study.daily(bars, days)
+    hit = days[40]
+
+    def qm(sub, part, sessions, conf):
+        return pd.DataFrame(
+            {
+                "strategy": ["qm_surf", "qm_surf"],
+                "session_date": [hit, days[45]],
+                "ticker": [A, A],
+                "pivot": [10.1, 11.0],  # the next day's high (10.2) reaches only the first
+                "order_stop": [9.5, 10.0],
+                "surf_ma": [10, 10],
+            }
+        )
+
+    pp = pd.DataFrame({"strategy": ["pocket_pivot"], "session_date": [days[50]], "ticker": [A]})
+    monkeypatch.setattr(qm_setups, "find", qm)
+    monkeypatch.setattr(patterns, "find", lambda *a: pp)
+    facts = intraday_study.prior_facts(g, CFG.universe["alert"])
+    rows, pockets = intraday_study.setup_candidates(g, tickers, days, CFG, facts)
+    assert rows["session_date"].tolist() == [days[41]] and rows["group"].tolist() == ["qm_surf"]
+    assert rows["signal_date"].tolist() == [hit] and rows["surf_ma"].tolist() == [10]
+    assert pockets["strategy"].tolist() == ["pocket_pivot"]

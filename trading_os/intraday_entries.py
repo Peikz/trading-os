@@ -365,7 +365,16 @@ def next_day(b: Bars, row: Mapping[str, Any], p: Mapping[str, Any]) -> list[dict
     return book.rows
 
 
-RULES = {"gap": gap, "ep9m": ep9m, "pivot": pivot, "vcp": pivot, "luk": luk, "next_day": next_day}
+RULES = {
+    "gap": gap,
+    "ep9m": ep9m,
+    "pivot": pivot,
+    "vcp": pivot,
+    "qm_surf": pivot,  # buy stop at the base high, the session after the setup
+    "htf": pivot,
+    "luk": luk,
+    "next_day": next_day,
+}
 
 
 def for_group(b: Bars, group: str) -> Bars:

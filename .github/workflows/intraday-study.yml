@@ -62,14 +62,14 @@ jobs:
           mkdir -p bars hist cands
           gh release download bars-alpaca -R "$REPO" -D bars
           gh release download history-10y -R "$REPO" -D hist
-          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y.parquet' 2>/dev/null || true
+          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y_v2.parquet' 2>/dev/null || true
           echo "bars: $(ls bars | wc -l), histories: $(ls hist | wc -l), cached candidates: $(ls cands | wc -l)"
 
       - name: Fetch
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
-          LONG: ${{ inputs.long_years != '' && format('--long-bars bars --long-hits hist --years {0} --cands cands/candidates_10y.parquet', inputs.long_years) || '' }}
+          LONG: ${{ inputs.long_years != '' && format('--long-bars bars --long-hits hist --years {0} --cands cands/candidates_10y_v2.parquet', inputs.long_years) || '' }}
         run: uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir data-repo --fetch minutes --minutes "${{ inputs.minutes }}" $LONG
 
       - name: Upload new files
@@ -85,6 +85,6 @@ jobs:
           # One small index of every stock-day with minute bars, for the dashboard's charts.
           uv run --frozen --no-dev python -c "import glob, pandas as pd; fs = glob.glob('minutes/*.asked.parquet'); idx = pd.concat([pd.read_parquet(f, columns=['session_date', 'ticker']) for f in fs]).drop_duplicates(); idx.to_parquet('minutes/minute_index.parquet', index=False)"
           gh release upload intraday-minutes minutes/minute_index.parquet -R "$REPO" --clobber
-          if [ -f cands/candidates_10y.parquet ]; then
-            gh release upload intraday-minutes cands/candidates_10y.parquet -R "$REPO" --clobber
+          if [ -f cands/candidates_10y_v2.parquet ]; then
+            gh release upload intraday-minutes cands/candidates_10y_v2.parquet -R "$REPO" --clobber
           fi
