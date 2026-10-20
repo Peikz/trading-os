@@ -165,3 +165,28 @@ def test_symbol_list_keeps_real_tickers_only():
             ]
 
     assert alpaca.stock_symbols(Fake()) == ["BRK.B"]
+
+
+def test_adjustment_reaches_the_request_and_the_bad_symbol_split():
+    c, http = client([Response(200, {"bars": {}}), Response(200, {"bars": {}})])
+    c.bars(["A"], "1Day", DAY, DAY)
+    c.bars(["A"], "1Day", DAY, DAY, adjustment="raw")
+    assert [call["adjustment"] for call in http.calls] == ["all", "raw"]
+
+    class Http:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, params, headers, timeout):
+            self.calls.append(dict(params))
+            symbols = params["symbols"].split(",")
+            if "BAD1" in symbols:
+                return Response(400)
+            return Response(200, {"bars": {s: [bar("2016-01-04T05:00:00Z", 1.0)] for s in symbols}})
+
+    http = Http()
+    c = AlpacaClient("id", "secret", 1e9, session=http, sleep=lambda s: None)
+    frame = c.bars(["AAA", "BAD1", "CCC", "DDD"], "1Day", DAY, DAY, adjustment="raw")
+    assert sorted(frame["ticker"]) == ["AAA", "CCC", "DDD"]
+    # the batch was split to find the bad symbol, and every half kept asking for raw bars
+    assert len(http.calls) > 1 and {call["adjustment"] for call in http.calls} == {"raw"}

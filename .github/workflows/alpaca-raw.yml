@@ -1,0 +1,84 @@
+# Real (unadjusted) daily prices for every stock-day in the Alpaca history (Emil, 20 Oct 2026).
+# The bars-alpaca files are split- and dividend-adjusted, so a price floor or a per-share cost
+# read from them is wrong for any stock that later split. One raw_<year>.parquet per year (raw
+# open/high/low/close/volume, and factor = raw close / adjusted close) goes to the private data
+# repo as an asset of the "bars-alpaca-raw" release, not into git. Years run one after another
+# on the request spacing of the shared Alpaca key; years already uploaded are skipped (tick
+# "redo" to rebuild them, e.g. 2026 once its adjusted bars have grown). The last step checks the
+# released files and logs counts. Manual runs only. This repo is public: counts only.
+
+name: Alpaca raw daily bars
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "FIRST-LAST"
+        default: "2016-2026"
+      redo:
+        description: "Rebuild years already in the release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alpaca-raw   # a second run waits: two at once would double the request rate
+  cancel-in-progress: false
+
+jobs:
+  raw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --no-dev
+
+      - name: Adjusted bars and the years already uploaded
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          REDO: ${{ inputs.redo }}
+        run: |
+          mkdir -p bars raw
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view bars-alpaca-raw -R "$REPO" >/dev/null 2>&1 || gh release create bars-alpaca-raw -R "$REPO" --title "Raw daily bars (Alpaca)" --notes "Unadjusted daily bars for every stock-day in bars-alpaca, one file per year: raw open/high/low/close/volume and factor = raw close / adjusted close." >/dev/null
+          gh release download bars-alpaca -R "$REPO" -D bars -p '*.parquet'
+          echo "adjusted years: $(ls bars | wc -l)"
+          if [ "$REDO" != "true" ]; then
+            for name in $(gh release view bars-alpaca-raw -R "$REPO" --json assets -q '.assets[].name'); do
+              touch "raw/$name"
+            done
+          fi
+          echo "raw years to skip: $(ls raw | wc -l)"
+
+      - name: Fetch
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          YEARS: ${{ inputs.years }}
+        run: uv run --frozen --no-dev python -m trading_os.alpaca_cli --raw-years "$YEARS" --bars bars --raw-dir raw
+
+      - name: Upload new years
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          new=$(find raw -name '*.parquet' -size +0 | sort)
+          [ -z "$new" ] && { echo "nothing new"; exit 0; }
+          gh release upload bars-alpaca-raw $new -R "$REPO" --clobber
+          echo "uploaded: $(echo "$new" | wc -l) years"
+
+      - name: Check the released files
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          mkdir -p released
+          gh release download bars-alpaca-raw -R "$REPO" -D released -p 'raw_*.parquet' || echo "no raw files in the release"
+          uv run --frozen --no-dev python -m trading_os.alpaca_cli --raw-check --bars bars --raw-dir released

@@ -73,8 +73,11 @@ The private data repo (`trading-os-data`) holds the runs (`data/universe`, `data
 `data/manual`), breadth, charts, reports, watchlists, the journal and your settings. Large
 study data lives only in its releases on GitHub, not in git and not on your PC:
 `bars-2y` (the last two years of daily bars as small per-letter files, refreshed each morning
-at 10:15 UTC), `bars-alpaca` (daily bars per year since 2016), `intraday-minutes` (minute bars
-and their index), `intraday-2y`, `intraday-10y`, `history-10y`, `regime-10y`.
+at 10:15 UTC), `bars-alpaca` (daily bars per year since 2016, adjusted for splits and
+dividends), `bars-alpaca-raw` (the same stock-days at the prices they really traded at, with
+the factor between the two: a price floor or a per-share cost needs these, not the adjusted
+bars), `intraday-minutes` (minute bars and their index), `intraday-2y`, `intraday-10y`,
+`history-10y`, `regime-10y`.
 
 Your PC keeps a slim copy of the data repo: only the latest version of each file (no
 history) and without the per-session bar files, which only the GitHub jobs read. Recreate it
