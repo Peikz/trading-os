@@ -728,6 +728,7 @@ def _main(argv: list[str] | None = None) -> int:
     from trading_os.config import load_config
     from trading_os.logsafe import status
 
+    started = time.time()  # --minutes counts from here, candidates included (job time limit)
     parser = argparse.ArgumentParser(description="Minute-bar entry and exit study")
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--fetch", type=Path, help="folder of the minute files to add to")
@@ -783,7 +784,7 @@ def _main(argv: list[str] | None = None) -> int:
         if not key or not secret:
             status("Intraday study: ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY not set")
             return 1
-        deadline = time.time() + args.minutes * 60 if args.minutes else None
+        deadline = started + args.minutes * 60 if args.minutes else None
         fetch(AlpacaClient(key, secret), fetch_windows(cands, sessions), args.fetch, deadline)
     if args.run and g is not None:
         trades = run_study(g, tickers, sessions, cands, args.run, cfg)
