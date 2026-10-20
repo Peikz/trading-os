@@ -100,11 +100,14 @@ def slippage_pct(dvol: np.ndarray, price: np.ndarray, conf: Mapping = COSTS) -> 
 def add_costs(
     df: pd.DataFrame, conf: Mapping = COSTS, days_col: str | None = None, price_col: str = "price"
 ) -> pd.DataFrame:
-    """`cost_pct` (round trip, % of the entry) and `cost_r` (the same in R) for each trade.
-    `price_col`: the real traded price when known (raw), else the adjusted one."""
+    """Per trade: `stop_pct` (stop distance, % of the entry), `cost_pct` (commission on both
+    orders, the entry's slippage and a market exit's slippage; borrow too when `days_col` is
+    given), `cost_r` (the same in R) and `stop_slip_r` (the extra slip, in R, of an exit by
+    the stop: `net_r` charges it only to trades that stopped out). `price_col`: the real
+    traded price when known (raw), else the adjusted one."""
     out = df.copy()
     price = out[price_col].to_numpy(dtype=float)
-    stop_pct = (out["price"] - out["stop"]).abs() / out["price"] * 100
+    stop_pct = ((out["price"] - out["stop"]).abs() / out["price"] * 100).to_numpy(dtype=float)
     base = slippage_pct(out.get("d_dvol20", pd.Series(np.nan, index=out.index)), price, conf)
     entry = out["entry"].to_numpy()
     mult = np.where(
@@ -115,9 +118,7 @@ def add_costs(
     adr_pct = (out["adr_usd"] / out["prev_close"] * 100).to_numpy(dtype=float)
     stop_slip = conf["stop_slip_adr"] * np.nan_to_num(adr_pct, nan=0.0)
     entry_slip = base * mult + np.where(np.isin(entry, list(STOP_ENTRIES)), stop_slip, 0.0)
-    exit_slip = base + stop_slip  # most exits are stops or closes; priced as a stop
-    commission = 2 * conf["commission_pct"]
-    cost = commission + entry_slip + exit_slip
+    cost = 2 * conf["commission_pct"] + entry_slip + base
     if "side" in out and days_col and days_col in out:
         short = out["side"].to_numpy() < 0
         dvol = np.nan_to_num(out.get("d_dvol20", pd.Series(0.0, index=out.index)).to_numpy())
@@ -125,16 +126,23 @@ def add_costs(
         rate = np.where(easy, conf["borrow_easy_pct"], conf["borrow_hard_pct"])
         days = np.nan_to_num(out[days_col].to_numpy(dtype=float), nan=0.0)
         cost = cost + np.where(short, rate * np.maximum(days, 1) / 252, 0.0)
-    out["stop_pct"] = stop_pct.astype("float32")
-    out["cost_pct"] = cost.astype("float32")
-    out["cost_r"] = (cost / stop_pct).astype("float32")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["stop_pct"] = stop_pct.astype("float32")
+        out["cost_pct"] = cost.astype("float32")
+        out["cost_r"] = (cost / stop_pct).astype("float32")
+        out["stop_slip_r"] = (stop_slip / stop_pct).astype("float32")
     return out
 
 
+STOPPED_R = -0.98  # an exit at about -1R (or worse, on a gap) went out by the stop
+
+
 def net_r(df: pd.DataFrame, exit_name: str, cap: float = CAP) -> pd.Series:
-    """Net R of one exit: gross R capped at `cap`, minus the trade's cost in R."""
-    r = df[f"r_{exit_name}"].astype(float).clip(upper=cap)
-    return r - df["cost_r"].astype(float)
+    """Net R of one exit: gross R capped at `cap`, minus the trade's cost in R, and the stop
+    order's extra slip when the exit was the stop."""
+    r = df[f"r_{exit_name}"].astype(float)
+    slip = df["stop_slip_r"].astype(float) if "stop_slip_r" in df else 0.0
+    return r.clip(upper=cap) - df["cost_r"].astype(float) - np.where(r <= STOPPED_R, slip, 0.0)
 
 
 def exits_of(df: pd.DataFrame) -> list[str]:
@@ -326,16 +334,71 @@ def fit_scorecard(
     return card
 
 
+def _candidates(values: pd.Series, max_categories: int = 12):
+    """(label, numeric series) pairs to test: the feature itself when numeric, else one 0/1
+    series per category."""
+    numeric = pd.api.types.is_numeric_dtype(values) and not pd.api.types.is_bool_dtype(values)
+    if numeric and values.nunique() > 2:
+        return [(None, values.astype(float))]
+    cats = values.dropna().astype(object).astype(str).value_counts().index[:max_categories]
+    text = values.astype(object).where(values.notna(), None).astype(str)
+    return [(c, (text == c).astype(float).where(values.notna())) for c in cats]
+
+
+def stable_features(
+    train: pd.DataFrame,
+    target: pd.Series,
+    names: Sequence[str],
+    min_share: float = 0.7,
+    min_rho: float = 0.02,
+    max_features: int = 8,
+    min_years: int = 3,
+) -> pd.DataFrame:
+    """Features whose rank correlation with `target` keeps its sign in at least `min_share`
+    of the training years (each year with 30+ trades), strongest first, at most
+    `max_features`. Categories count through their own 0/1 series; a feature is kept when
+    any of its categories is. Returns name, mean rho, sign share, years."""
+    rows = []
+    t = target.astype(float).clip(upper=FIT_CAP)
+    for name in names:
+        if name not in train:
+            continue
+        for label, x in _candidates(train[name]):
+            rhos = []
+            for _, idx in train.groupby("year").groups.items():
+                xs, ts = x.loc[idx], t.loc[idx]
+                ok = xs.notna() & ts.notna()
+                if ok.sum() >= 30 and xs[ok].nunique() > 1:
+                    rhos.append(xs[ok].rank().corr(ts[ok].rank()))
+            rhos = [r for r in rhos if r == r]
+            if len(rhos) < min_years:
+                continue
+            mean = float(np.mean(rhos))
+            share = float(np.mean(np.sign(rhos) == np.sign(mean)))
+            rows.append(
+                {"name": name, "label": label, "rho": mean, "share": share, "years": len(rhos)}
+            )
+    table = pd.DataFrame(rows, columns=["name", "label", "rho", "share", "years"])
+    keep = table[(table["share"] >= min_share) & (table["rho"].abs() >= min_rho)].copy()
+    keep["strength"] = keep["rho"].abs() * keep["share"]
+    keep = keep.sort_values("strength", ascending=False).drop_duplicates("name")
+    return keep.head(max_features).reset_index(drop=True)
+
+
 def walk_forward_scores(
     df: pd.DataFrame,
     target: pd.Series,
     names: Sequence[str],
     first_test: int,
     min_train_years: int = 3,
+    select: Mapping[str, Any] | None = None,
+    chosen: dict | None = None,
     **fit_args,
 ) -> pd.Series:
     """Out-of-sample predicted R: every year from `first_test` scored by a scorecard fitted
-    on the years before it only (NaN for the years before `first_test`)."""
+    on the years before it only (NaN for the years before `first_test`). With `select`
+    (arguments of `stable_features`), the features are picked on those training years too;
+    `chosen` collects each test year's picks."""
     pred = pd.Series(np.nan, index=df.index, dtype=float)
     for y in sorted(df["year"].unique()):
         if y < first_test:
@@ -343,7 +406,12 @@ def walk_forward_scores(
         past = df["year"] < y
         if df.loc[past, "year"].nunique() < min_train_years:
             continue
-        card = fit_scorecard(df[past], target[past], names, **fit_args)
+        use = list(names)
+        if select is not None:
+            use = stable_features(df[past], target[past], names, **select)["name"].tolist()
+            if chosen is not None:
+                chosen[y] = use
+        card = fit_scorecard(df[past], target[past], use, **fit_args)
         now = df["year"] == y
         pred[now] = card.predict(df[now])
     return pred

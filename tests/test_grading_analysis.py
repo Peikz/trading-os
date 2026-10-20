@@ -29,9 +29,11 @@ def test_costs_in_r_grow_as_the_stop_tightens():
         }
     )
     out = ga.add_costs(df)
-    # 2 x 0.08 commission + 0.05 entry + (0.05 + 0.05 x 4 % ADR) exit = 0.46 %
-    assert out["cost_pct"].tolist() == pytest.approx([0.46, 0.46])
-    assert out["cost_r"].tolist() == pytest.approx([0.23, 0.046])
+    # 2 x 0.08 commission + 0.05 entry + 0.05 exit = 0.26 %; a stop exit slips 0.05 x 4 % ADR
+    assert out["cost_pct"].tolist() == pytest.approx([0.26, 0.26])
+    assert out["cost_r"].tolist() == pytest.approx([0.13, 0.026])
+    out["r_x"] = [-1.0, 2.0]
+    assert ga.net_r(out, "x").tolist() == pytest.approx([-1.0 - 0.13 - 0.1, 2.0 - 0.026])
 
 
 def test_scorecard_finds_a_planted_bucket_and_walk_forward_uses_the_past_only():
@@ -62,7 +64,7 @@ def test_grades_follow_the_cutoffs():
 def test_walk_forward_plan_choice_scores_the_next_year():
     rows = []
     for year in (2016, 2017, 2018, 2019):
-        for k in range(200):
+        for _k in range(200):
             rows.append(
                 {
                     "strategy": "s",
