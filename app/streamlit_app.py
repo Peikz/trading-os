@@ -23,6 +23,7 @@ import streamlit as st
 
 from trading_os import (
     breadth,
+    chart_marks,
     charts,
     clock,
     dashboard,
@@ -45,6 +46,7 @@ from trading_os import (
     tv,
     validation,
 )
+from trading_os import interactive_chart as ichart
 from trading_os.config import load_config
 
 st.set_page_config(page_title="Trading OS", page_icon="📈", layout="wide")
@@ -59,6 +61,7 @@ DEFAULT_DATA = Path(
 PAGES = [
     "Today",
     "Screens",
+    "Chart",
     "Watchlists",
     "Journal",
     "Graded signals",
@@ -252,45 +255,43 @@ def study_by_strategy(folder: str) -> dict[str, pd.DataFrame]:
 
 
 def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
-    """Daily chart around one trade with the fills marked and the stop line."""
+    """Interactive daily chart around one trade: the entry and exit marked, the stop line."""
     bars = ticker_bars(str(data_dir), trade["ticker"])
     if bars.empty:
         st.caption("No daily bars for this ticker in the data repo.")
         return
     end = trade.get("exit_date") if not open_trade else None
     end = end if end is not None and end == end else bars["session_date"].max()
-    held = (bars["session_date"] > trade["entry_date"]) & (bars["session_date"] <= end)
-    after = int(held.sum()) + 5
+    before = bars[bars["session_date"] <= trade["entry_date"]].tail(60)
+    window = bars[bars["session_date"] >= before["session_date"].min()]
+    window = window[window["session_date"] <= end].tail(400)
+    later = bars[bars["session_date"] > end].head(5)
+    data = pd.concat([window, later])
     buy = "buy" if trade["direction"] == "long" else "sell"
     sell = "sell" if buy == "buy" else "buy"
-    marks = [(trade["entry_date"], trade["entry_avg"], buy)]
+    rows = [(trade["entry_date"], trade["entry_avg"], buy, trade.get("quantity", 0))]
     if not open_trade and trade.get("exit_avg") == trade.get("exit_avg"):
-        marks.append((trade["exit_date"], trade["exit_avg"], sell))
+        rows.append((trade["exit_date"], trade["exit_avg"], sell, trade.get("quantity", 0)))
+    fills = pd.DataFrame(rows, columns=["session_date", "price", "side", "quantity"])
     stop = pd.to_numeric(trade.get("order_stop"), errors="coerce")
-    tag = f"{trade['ticker']}_{trade['entry_date']}_{end}_{len(marks)}"
-    drawn = charts.before_shot(
-        bars,
-        Path(CHART_CACHE) / f"trade_{tag}.png",
+    fig = ichart.daily_figure(
+        data,
         title=f"{trade['ticker']} · {trade['direction']} {trade['entry_date']} → {end}",
-        signal_session=trade["entry_date"],
-        sessions=60,
-        order_stop=stop if stop == stop else None,
-        after=after,
-        marks=marks,
+        overlays=["MA10", "MA20", "MA50"],
+        fills=fills,
+        levels={"stop": float(stop)} if stop == stop else None,
+        height=520,
     )
-    if drawn:
-        st.image(str(drawn))
+    key = f"trade-{trade['ticker']}-{trade['entry_date']}-{open_trade}"
+    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
 
 
 EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
 
 LONG_HISTORY = ("data", "history_10y")  # the history-10y release, downloaded
-MINUTE_10Y = ("data", "intraday_10y")
-REGIME_10Y = (
-    "data",
-    "regime_10y",
-)  # the regime-10y release, downloaded  # the intraday-10y release's summaries, downloaded
+MINUTE_10Y = ("data", "intraday_10y")  # the intraday-10y release's summaries, downloaded
+REGIME_10Y = ("data", "regime_10y")  # the regime-10y release, downloaded
 HISTORY_COLUMNS = [
     "strategy",
     "side",
@@ -370,6 +371,193 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
         if column not in hist:
             hist = hist.assign(**{column: None})
     return pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
+
+
+ALPACA_BARS = ("data", "bars_alpaca")  # the bars-alpaca release, downloaded
+MINUTES = ("data", "intraday_minutes")  # the intraday-minutes release, downloaded
+OVERLAYS = ["MA10", "MA20", "MA50", "MA200", "EMA9", "EMA21"]
+
+
+@st.cache_data(ttl=600)
+def bars_for(folder: str, ticker: str, period: str) -> pd.DataFrame:
+    """Daily bars: 2 years (Massive, in git) or 10 years (Alpaca's yearly files)."""
+    if period == "2y":
+        return ticker_bars(folder, ticker)
+    import pyarrow.dataset as ds
+
+    root = Path(folder).joinpath(*ALPACA_BARS)
+    files = sorted(root.glob("*.parquet"))
+    if not files:
+        return pd.DataFrame()
+    table = ds.dataset(files, format="parquet").to_table(filter=ds.field("ticker") == ticker)
+    bars = table.to_pandas()
+    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
+    return bars.drop_duplicates("session_date").sort_values("session_date")
+
+
+@st.cache_data(ttl=600)
+def all_hits(folder: str, period: str) -> pd.DataFrame:
+    """Every scan hit (strategy, session_date, ticker, side), EP-Days included."""
+    cols = ["strategy", "session_date", "ticker", "side"]
+    if period == "10y":
+        long_dir = Path(folder).joinpath(*LONG_HISTORY)
+        hits = long_history.load(long_dir, "strategy", cols)
+        eps = long_history.load(long_dir, "ep", ["session_date", "ticker", "is_ep_day", "tier"])
+    else:
+        hits = strategy_cached(folder)
+        built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
+        eps = read_parquet(str(built[-1])) if built else pd.DataFrame()
+    frames = [hits[[c for c in cols if c in hits]]] if len(hits) else []
+    if len(eps):
+        ep = eps[eps["is_ep_day"] & (eps["tier"] == "alert")]
+        frames.append(ep[["session_date", "ticker"]].assign(strategy="ep_day", side="long"))
+    if not frames:
+        return pd.DataFrame(columns=cols)
+    out = pd.concat(frames, ignore_index=True)
+    out["session_date"] = pd.to_datetime(out["session_date"]).dt.date
+    return out
+
+
+def hits_for(folder: str, ticker: str, period: str) -> pd.DataFrame:
+    hits = all_hits(folder, period)
+    mine = hits[hits["ticker"] == ticker].copy()
+    mine["label_text"] = mine["strategy"]
+    mine["side"] = mine["side"].fillna("long")
+    return mine
+
+
+@st.cache_data(ttl=600)
+def minute_days(folder: str, ticker: str) -> list:
+    """Sessions that have minute bars for `ticker` (newest first)."""
+    import pyarrow.dataset as ds
+
+    files = [
+        f
+        for f in sorted(Path(folder).joinpath(*MINUTES).glob("*.parquet"))
+        if not f.name.endswith(".asked.parquet")
+    ]
+    if not files:
+        return []
+    table = ds.dataset(files, format="parquet").to_table(
+        columns=["session_date"], filter=ds.field("ticker") == ticker
+    )
+    days = pd.to_datetime(pd.Series(table.column("session_date").to_pylist())).dt.date
+    return sorted(set(days), reverse=True)
+
+
+def minute_bars(folder: str, ticker: str, day) -> pd.DataFrame:
+    """One stock-day's minute bars, New York time, with `minute` after midnight."""
+    import pyarrow.dataset as ds
+
+    month = f"{day:%Y-%m}"
+    files = [
+        f
+        for f in sorted(Path(folder).joinpath(*MINUTES).glob(f"{month}_*.parquet"))
+        if not f.name.endswith(".asked.parquet")
+    ]
+    if not files:
+        return pd.DataFrame()
+    flt = (ds.field("ticker") == ticker) & (ds.field("session_date") == day)
+    bars = ds.dataset(files, format="parquet").to_table(filter=flt).to_pandas()
+    if bars.empty:
+        return bars
+    bars = bars.drop_duplicates("ts")
+    bars["ts"] = pd.to_datetime(bars["ts"], utc=True).dt.tz_convert("America/New_York")
+    bars["minute"] = bars["ts"].dt.hour * 60 + bars["ts"].dt.minute
+    return bars[bars["ts"].dt.date == day].sort_values("ts")
+
+
+def levels_for(ticker: str) -> dict:
+    """Pivot and order stop from the newest EOD snapshot; your open position's stop and open
+    plans' entries and stops."""
+    out = {}
+    eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    if eod:
+        uni = read_parquet(str(eod[0].universe))
+        row = uni[uni["ticker"] == ticker]
+        if len(row):
+            for column, label in (("bo_pivot", "pivot"), ("bo_order_stop", "order stop")):
+                value = row.iloc[0].get(column)
+                if value is not None and value == value:
+                    out[label] = float(value)
+    positions = dashboard.latest_positions(data_dir)
+    if len(positions):
+        mine = positions[positions["ticker"] == ticker]
+        if len(mine) and mine.iloc[0].get("order_stop") == mine.iloc[0].get("order_stop"):
+            out["stop"] = float(mine.iloc[0]["order_stop"])
+    events = plans.load(data_dir)
+    if len(events):
+        today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
+        fills = journal.reconcile(journal.load_fills(data_dir))
+        current = plans.status(
+            events, fills, CFG.schedule, CFG.journal["plan_valid_sessions"], today
+        )
+        open_plans = current[(current["ticker"] == ticker) & (current["status"] == "open")]
+        if len(open_plans):
+            out["plan entry"] = float(open_plans.iloc[0]["entry"])
+            out.setdefault("stop", float(open_plans.iloc[0]["stop"]))
+    return out
+
+
+def fills_for(ticker: str) -> pd.DataFrame:
+    fills = journal.reconcile(journal.load_fills(data_dir))
+    return fills[fills["ticker"] == ticker]
+
+
+def to_weeks(frame: pd.DataFrame, weeks: pd.DataFrame) -> pd.DataFrame:
+    """Move each row's session_date to its week's label (the week's last session)."""
+    if frame is None or frame.empty:
+        return frame
+    period = pd.to_datetime(weeks["session_date"]).dt.to_period("W-FRI")
+    label = dict(zip(period, weeks["session_date"], strict=True))
+    out = frame.copy()
+    out["session_date"] = pd.to_datetime(out["session_date"]).dt.to_period("W-FRI").map(label)
+    return out.dropna(subset=["session_date"])
+
+
+def stock_chart(
+    ticker: str,
+    *,
+    period: str = "2y",
+    timeframe: str = "Daily",
+    overlays: list[str] | None = None,
+    sessions: int | None = 250,
+    show_hits: bool = True,
+    show_fills: bool = True,
+    show_levels: bool = True,
+    anchors: dict | None = None,
+    lines: list | None = None,
+    key: str = "chart",
+) -> None:
+    """The interactive chart for one stock, drawn into the page."""
+    bars = bars_for(str(data_dir), ticker, period)
+    if bars.empty:
+        st.caption(f"No daily bars for {ticker} in the data repo.")
+        return
+    hits = hits_for(str(data_dir), ticker, period) if show_hits else None
+    fills = fills_for(ticker) if show_fills else None
+    if fills is not None and len(fills):
+        fills = fills.rename(columns={"trade_date": "session_date"})
+    data = bars
+    if timeframe == "Weekly":
+        data = ichart.weekly(bars)
+        hits, fills = to_weeks(hits, data), to_weeks(fills, data)
+        sessions = sessions // 5 if sessions else None
+    fig = ichart.daily_figure(
+        data,
+        title=f"{ticker} · {timeframe.lower()}",
+        overlays=overlays or [],
+        markers=hits,
+        fills=fills,
+        levels=levels_for(ticker) if show_levels else None,
+        sessions=sessions,
+    )
+    shown = list(fig.data[0].x)
+    if anchors and timeframe == "Daily":
+        ichart.add_avwaps(fig, bars, anchors, shown)
+    if lines and timeframe == "Daily":
+        ichart.add_trend_lines(fig, shown, lines)
+    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
 
 
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
@@ -479,14 +667,161 @@ elif page == "Screens":
         ticker = st.selectbox("Look at", hits["ticker"].tolist())
         st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
         row = hits[hits["ticker"] == ticker].iloc[0]
-        chart = dashboard.chart_for(run, scan, ticker)
-        if chart:
-            st.image(str(chart))
-        else:
-            st.caption("No chart for this one (charts are drawn for pushed candidates).")
+        stock_chart(ticker, sessions=126, key=f"scr-{scan}-{ticker}")
         grade_form(
             "signal", row["signal_id"], f"Grade {ticker} · {scan}", f"sig-{row['signal_id']}"
         )
+
+elif page == "Chart":
+    st.header("Chart")
+    picks = []
+    if runs:
+        hits_now = candidates_of(runs[0])
+        picks += list(dict.fromkeys(hits_now.loc[hits_now["pushed"].fillna(False), "ticker"]))
+    picks += list(my_watchlists.current(my_watchlists.load(data_dir))["ticker"])
+    picks += list(dashboard.latest_positions(data_dir).get("ticker", []))
+    picks = list(dict.fromkeys(picks))
+    a, b = st.columns([2, 2])
+    quick = a.selectbox("Pushed today, watchlists, open positions", ["—", *picks], key="ch_pick")
+    typed = b.text_input("…or type any ticker (wins over the list)", key="ch_ticker")
+    ticker = (typed.strip() or ("" if quick == "—" else quick)).upper()
+    if not ticker:
+        st.info("Pick or type a ticker.")
+        st.stop()
+    a, b, c = st.columns(3)
+    period = a.radio(
+        "History",
+        ["2y", "10y"],
+        horizontal=True,
+        key="ch_period",
+        format_func=lambda p: "2 years" if p == "2y" else "10 years",
+    )
+    timeframe = b.radio("Bars", ["Daily", "Weekly"], horizontal=True, key="ch_tf")
+    span = c.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
+    sessions = {"3M": 63, "6M": 126, "1Y": 252, "2Y": 504, "All": None}[span]
+    if period == "10y" and not list(data_dir.joinpath(*ALPACA_BARS).glob("*.parquet")):
+        st.info("10 years needs Alpaca's daily bars on this PC (about 350 MB).")
+        if st.button("Download them"):
+            ok, out = dashboard.download_release(
+                data_dir, "bars-alpaca", data_dir.joinpath(*ALPACA_BARS)
+            )
+            if ok:
+                st.success("Downloaded.")
+            else:
+                st.error(out)
+            st.cache_data.clear()
+            st.rerun()
+        st.stop()
+    overlays = st.multiselect("Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines")
+    a, b, c = st.columns(3)
+    show_hits = a.toggle("Scan hits", value=True, key="ch_hits")
+    show_fills = b.toggle("My trades", value=True, key="ch_fills")
+    show_levels = c.toggle("Pivot and stops", value=True, key="ch_levels")
+
+    bars = bars_for(str(data_dir), ticker, period)
+    marks = chart_marks.current(data_dir, ticker)
+    quick_anchor = ichart.quick_anchors(bars) if len(bars) else {}
+    last_hit = hits_for(str(data_dir), ticker, period)
+    if len(last_hit):
+        quick_anchor["latest scan hit"] = max(last_hit["session_date"])
+    chosen = st.multiselect(
+        "Anchored VWAP from", list(quick_anchor), default=[], key="ch_anchor_quick"
+    )
+    anchors = {name: quick_anchor[name] for name in chosen}
+    for m in marks[marks["kind"] == "anchor"].to_dict("records"):
+        anchors[m["label"] or f"{m['anchor']}"] = m["anchor"]
+    lines = marks[marks["kind"] == "line"].to_dict("records")
+    stock_chart(
+        ticker,
+        period=period,
+        timeframe=timeframe,
+        overlays=overlays,
+        sessions=sessions,
+        show_hits=show_hits,
+        show_fills=show_fills,
+        show_levels=show_levels,
+        anchors=anchors,
+        lines=lines,
+        key="ch_main",
+    )
+    st.caption(
+        "Drag to pan, scroll or pinch to zoom, double-click to reset. The pen icons (top right) "
+        "draw lines that disappear when the page reloads; to keep a trend line, save it below. "
+        "Saved lines and anchors show on the daily bars. Triangles: amber = a scan's hit, "
+        "green/red = your buys/sells."
+    )
+    exchanges = {}
+    eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    if eod:
+        exchanges = exchanges_of(str(eod[0].universe))
+    st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
+
+    with st.expander("Save a trend line or an anchor"):
+        recent = bars.tail(504) if len(bars) else bars
+        dates = list(recent["session_date"])[::-1]
+        with st.form("ch-line", clear_on_submit=True):
+            st.markdown("**Trend line** through two points (it is extended to today)")
+            a, b = st.columns(2)
+            d0 = a.selectbox("First point: day", dates, key="ch_d0")
+            p0 = b.number_input("First point: price", min_value=0.0, format="%.2f", key="ch_p0")
+            a, b = st.columns(2)
+            d1 = a.selectbox("Second point: day", dates, key="ch_d1")
+            p1 = b.number_input("Second point: price", min_value=0.0, format="%.2f", key="ch_p1")
+            a, b = st.columns(2)
+            label = a.text_input("Name (optional)", key="ch_line_label")
+            extend = b.checkbox("Extend to today", value=True, key="ch_extend")
+            if st.form_submit_button("Save line") and p0 > 0 and p1 > 0 and d0 != d1:
+                chart_marks.add_line(data_dir, ticker, d0, p0, d1, p1, label, extend)
+                st.rerun()
+        with st.form("ch-anchor", clear_on_submit=True):
+            st.markdown("**Anchored VWAP** from a day (an earnings gap, a base high or low)")
+            a, b = st.columns(2)
+            day = a.selectbox("Anchor day", dates, key="ch_anchor_day")
+            name = b.text_input("Name (optional)", key="ch_anchor_label")
+            if st.form_submit_button("Save anchor"):
+                chart_marks.add_anchor(data_dir, ticker, day, name)
+                st.rerun()
+        if len(marks):
+            st.markdown("**Saved for this stock**")
+            for m in marks.to_dict("records"):
+                text = (
+                    f"Line {m['x0']} {m['y0']:.2f} → {m['x1']} {m['y1']:.2f}"
+                    if m["kind"] == "line"
+                    else f"AVWAP from {m['anchor']}"
+                )
+                a, b = st.columns([5, 1])
+                a.write(f"{text} {('· ' + m['label']) if m['label'] else ''}")
+                if b.button("Remove", key=f"rm-{m['mark_id']}"):
+                    chart_marks.remove(data_dir, m["mark_id"])
+                    st.rerun()
+
+    with st.expander("Intraday (minute bars)"):
+        days = minute_days(str(data_dir), ticker)
+        if not days:
+            st.caption(
+                "No minute bars for this stock on this PC. They exist for days a strategy could "
+                "have traded it (the minute study's data)."
+            )
+        else:
+            a, b = st.columns(2)
+            day = a.selectbox("Day", days, key="ch_day")
+            every = b.radio(
+                "Candle",
+                [1, 5, 15],
+                horizontal=True,
+                key="ch_every",
+                format_func=lambda m: f"{m} min",
+            )
+            minutes = minute_bars(str(data_dir), ticker, day)
+            prior = bars[bars["session_date"] < day]["close"]
+            fig = ichart.intraday_figure(
+                minutes,
+                title=f"{ticker} · {day}",
+                prev_close=float(prior.iloc[-1]) if len(prior) else None,
+                every=every,
+            )
+            st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_intraday", width="stretch")
+            st.caption("VWAP from the 09:30 open; pre- and post-market shaded.")
 
 elif page == "Watchlists":
     st.header("Watchlists")
@@ -1063,18 +1398,26 @@ elif page == "History":
         row = events[
             (events["ticker"] == ticker) & (events["session_date"].astype(str) == day_text)
         ].iloc[0]
-        path = Path(CHART_CACHE) / f"{one}_{ticker}_{day_text}.png"
-        drawn = charts.before_shot(
-            ticker_bars(str(data_dir), ticker),
-            path,
-            title=f"{ticker} · {one} {day_text} · then 63 sessions",
-            signal_session=row["session_date"],
-            sessions=120,
-            order_stop=row["stop"] if row["stop"] == row["stop"] else None,
-            after=63,
+        bars = bars_for(str(data_dir), ticker, period)  # 10 years: Alpaca's bars
+        if bars.empty or row["session_date"] < bars["session_date"].min():
+            st.caption("No daily bars for that day on this PC (10 years: download them on Chart).")
+            st.stop()
+        before = bars[bars["session_date"] <= row["session_date"]].tail(120)
+        after = bars[bars["session_date"] > row["session_date"]].head(63)
+        side = "short" if row.get("side") == "short" else "long"
+        marker = pd.DataFrame(
+            [{"session_date": row["session_date"], "label_text": one, "side": side}]
         )
-        if drawn:
-            st.image(str(drawn))
+        stop = row["stop"] if row["stop"] == row["stop"] else None
+        fig = ichart.daily_figure(
+            pd.concat([before, after]),
+            title=f"{ticker} · {one} {day_text} · then 63 sessions",
+            overlays=["MA10", "MA20", "MA50"],
+            markers=marker,
+            levels={"stop": float(stop)} if stop is not None else None,
+            height=520,
+        )
+        st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="hist-chart", width="stretch")
 
 elif page == "Entries & exits":
     st.header("Entries & exits")

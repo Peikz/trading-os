@@ -242,7 +242,8 @@ watchlists to the private repo).
 | Page | What it shows |
 |---|---|
 | **Today** | The market panel (Market Light, breadth, SPY/QQQ/VIX) and the newest run's pushed scans with facts, charts and TradingView links |
-| **Screens** | Any run, any scan, both tiers: the full table, a chart, Open in TradingView, and the grading form (grade, notes, screenshots) |
+| **Screens** | Any run, any scan, both tiers: the full table, an interactive chart, Open in TradingView, and the grading form (grade, notes, screenshots) |
+| **Chart** | Any stock, interactive (drag to pan, scroll or pinch to zoom): daily or weekly candles with volume, 2 or 10 years, MA 10/20/50/200 and EMA 9/21, the scans' past hits (amber triangles, hover for the scan), your buys and sells, today's pivot and stops; anchored VWAPs (from the highest high, the lowest low, the year start, the latest scan hit, or any day you save); trend lines (draw them with the pen tool, or save them through two points so they stay); and an intraday view of any day with minute bars (1/5/15-minute candles, VWAP from the open, pre-/post-market shaded) |
 | **Watchlists** | Your own lists (add by typing or a TradingView export; each ticker with close, change, RVOL, ADR, RS, distance to the high and pivot, earnings, today's scans) and the scans' EP-Watch and BO-Watch |
 | **Journal** | Tabs: *Open positions* (open P&L, open R, money at risk to the stops), *Log a trade*, *Plans*, *Closed trades* (stats, R curve, MFE/MAE, review chart, grading), *Real vs study* |
 | **Graded signals** | The signals you graded, with what happened after |
@@ -277,7 +278,8 @@ address in Safari (Share → Add to Home Screen for one tap). The PC has to be o
 | R | Profit or loss in units of the starting risk |
 | MFE / MAE | Best / worst price reached during a trade |
 | EMA / MA | Exponential / simple moving average |
-| AVWAP | VWAP anchored at a chosen day (here: the base's high) |
+| VWAP | Volume-weighted average price: intraday from the 09:30 open |
+| AVWAP | VWAP anchored at a chosen day (a gap, a base high or low), from each day's VWAP and volume |
 | VCP | Volatility contraction pattern (Minervini) |
 | SIP / IEX | Alpaca's full-market feed / one exchange's feed (a small slice of the volume) |
 

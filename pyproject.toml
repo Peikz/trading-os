@@ -21,6 +21,7 @@ analysis = [
     "duckdb>=1.1",
 ]
 app = [
+    "plotly>=5.24",
     "streamlit>=1.40",
 ]
 dev = ["pytest>=8", "ruff>=0.6"]
