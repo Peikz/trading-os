@@ -375,3 +375,68 @@ notify:                                     # SPEC §8
   max_tickers_per_scan: 10
   # Tapping a push opens the run's report in the private data repo ({owner} from the runner)
   report_url: "https://github.com/{owner}/trading-os-data/blob/main/{path}"
+
+grading:                                    # Study grades (Emil, 20 Oct 2026; SPEC §1.4 changed): every
+                                            # value below is (proposed) until Emil confirms the rules.
+                                            # From the 10-year grading study, walk-forward by year:
+                                            # data repo docs/research/2026-10-20-grading-research.md
+  enabled: false                            # pushes and the dashboard show grades once confirmed
+  stats_file: data/grading/grade_stats.json # per-grade history (private, data repo)
+  risk_mult: {"A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
+  ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard
+  costs:                                    # Saxo lowest tier, USD account; cost in R = % / stop %
+    commission_pct: 0.08                    # per order
+    slip_by_dvol: [[50000000, 0.05], [10000000, 0.10], [2000000, 0.25], [0, 0.50]]
+    min_tick_usd: 0.01
+    open_mult: 2.0
+    offhours_mult: 3.0
+    stop_slip_adr: 0.05                     # a filled stop slips 0.05 ADR (about half of trades)
+  strategies:                               # predicted net R = base + points - cost in R
+    ep:
+      live_scans: ["ep_day"]
+      entry: close                # at the close of the gap day: buy 15:45-15:58 New York (21:45-21:58 Copenhagen)
+      stop_adr: 1.0                       # 1 ADR under the entry (at least the 1 % floor)
+      hold_sessions: 21                   # out at the close 21 sessions after entry; the stop rests
+      base: -0.081
+      bands: [[0.3, "A"], [0.1, "B"]]          # predicted net R at least -> grade, first match
+      features:
+        mkt_scan_count: {edges: [18, 44, 81, 147], points: [0.713, -0.136, -0.194, -0.127, -0.256]}
+        d_tight5_adr: {edges: [1.7727, 2.2893, 2.9046, 3.9915], points: [-0.046, 0.033, 0.086, -0.027, -0.047]}
+        d_rvol: {edges: [0.7597, 1.1947, 1.7432, 3.0019], points: [-0.012, 0.068, 0.084, -0.057, -0.157], na: 0.074}
+        mkt_spy_above_ma200: {points: {"1": -0.078, "0": 0.078}}
+        mkt_light: {points: {GREEN: 0.098, YELLOW: 0.066, RED: 0.047, STOP: -0.211}}
+        mkt_breadth_state: {points: {neutral: 0.067, strong: 0.026, weak: -0.093}}
+        d_vol_dry: {edges: [0.8169, 1.0301, 1.2967, 2.0763], points: [0.076, 0.048, 0.074, -0.033, -0.228], na: 0.064}
+        d_tight10_adr: {edges: [2.6382, 3.2924, 4.0638, 5.3755], points: [-0.013, 0.026, -0.008, 0.083, -0.089]}
+    ep9m:
+      live_scans: ["ep9m_pace"]
+      entry: t_1200               # at the 12:00 New York check (18:00 Copenhagen), at the market
+      stop_adr: 1.0                       # 1 ADR under the entry (at least the 1 % floor)
+      hold_sessions: 21                   # out at the close 21 sessions after entry; the stop rests
+      base: 0.09
+      bands: [[0.3, "B"]]          # predicted net R at least -> grade, first match
+      features:
+        mkt_spy_above_ma200: {points: {"1": -0.114, "0": 0.114}}
+        d_dist_ma10_adr: {edges: [-0.9533, -0.0937, 0.5476, 1.3029], points: [0.082, 0.029, 0.015, -0.016, -0.11]}
+        d_ret_5: {edges: [-7.1824, -0.7997, 3.9711, 12.699], points: [0.027, 0.115, -0.002, 0.056, -0.195]}
+        d_dist_ma20_adr: {edges: [-1.4932, -0.155, 0.8352, 1.8726], points: [-0.105, 0.035, 0.015, -0.004, 0.058]}
+        mkt_qqq_above_ma50: {points: {"1": 0.038, "0": -0.038}}
+        mkt_light: {points: {GREEN: -0.05, YELLOW: -0.122, RED: 0.071, STOP: 0.102}}
+        mkt_scan_count: {edges: [19, 40, 74, 139], points: [0.326, -0.073, -0.015, -0.069, -0.17]}
+        mkt_breadth_state: {points: {neutral: 0.152, strong: 0.153, weak: -0.305}}
+    luk_avwap_flush:
+      live_scans: []
+      entry: next_1030            # the session after the flush, 10:30 New York (16:30 Copenhagen), at the market
+      stop_adr: 1.0                       # 1 ADR under the entry (at least the 1 % floor)
+      hold_sessions: 21                   # out at the close 21 sessions after entry; the stop rests
+      base: 0.389
+      bands: [[0.5, "A"], [0.1, "B"]]          # predicted net R at least -> grade, first match
+      features:
+        mkt_light: {points: {GREEN: -0.178, YELLOW: 0.149, RED: 0.112, STOP: -0.083}}
+        d_ma50_slope: {edges: [-0.3348, 1.045, 2.6265, 4.4751], points: [0.218, -0.067, -0.092, 0.035, -0.094]}
+        revenue_growth_accel: {edges: [-22.5677, -3.385, 3.4636, 26.4231], points: [-0.173, 0.093, 0.005, 0.144, 0.047], na: -0.116}
+        sig_base_days: {edges: [56, 89, 166.6, 224.8], points: [0.11, -0.04, -0.013, -0.041, -0.016]}
+        d_ret_63: {edges: [-4.7787, 8.6915, 28.6106, 49.4471], points: [0.067, 0.106, -0.045, -0.103, -0.024]}
+        mkt_spy_above_ma200: {points: {"1": -0.098, "0": 0.098}}
+        d_ma_stack: {points: {"1": -0.074, "0": 0.074}}
+        d_surf20: {edges: [0.45, 0.525, 0.625, 0.77], points: [-0.001, -0.02, -0.037, 0.044, 0.014]}

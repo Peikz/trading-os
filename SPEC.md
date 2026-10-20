@@ -10,7 +10,9 @@ Personal scanning, data-collection and trade-tracking system for momentum tradin
 1. **No AI at runtime.** Scans are deterministic Python run by GitHub Actions. Same input → same output.
 2. **Collect broadly, trade narrowly.** Every scan is logged. Only EP and Breakout produce trade alerts.
 3. **Point-in-time data.** Every row is stored as it was known at run time. Never recompute or overwrite historical rows with later data. Outcomes go in a separate table.
-4. **Screens find, the human grades.** Code never assigns a trade grade.
+4. **Screens find, the human decides.** Code may show a *study grade* (A+/A/B/C): how setups like
+   this one did in the history of the owner's own rules (§11.17), labelled as such. Code never makes
+   the trade decision, and the journal grade stays the human's.
 5. **One config file.** All thresholds live in `config/scans.yaml`. No magic numbers in code.
 6. **Validate before trusting.** Phase 1 runs side by side with manual TradingView screens for 2 weeks.
 
@@ -173,7 +175,8 @@ so `risk_adr = (pivot − order_stop) / ADR $ ≤ 1`. Stored for every breakout 
 
 `pivot` = highest high within the base. B2 and B4 are heuristics: all parameters in config, all
 intermediate values (base length, contraction depths, right-side range, pivot) stored so the human can audit.
-Code computes B1–B5 as booleans; **code never assigns the A/B/C grade** (A = all 5, B = 4, C ≤ 3 is the human's call).
+Code computes B1–B5 as booleans; the human's A/B/C (A = all 5, B = 4, C ≤ 3) stays the human's call.
+The study grade (§11.17) is separate and labelled as such.
 Reference implementation for contraction detection: `phuazz/vcp-screener` (check license before copying).
 
 ### 6.5 Market Light (from TRADING-OS.md — owner's rules, do not change)
@@ -269,7 +272,7 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 
 - No automated order placement.
 - No AI/LLM calls in any scheduled job.
-- No grading of setups by code.
+- No trade decisions by code. Study grades only as in §11.17, labelled as history, never as advice.
 - No new setups beyond this spec without the owner's explicit decision.
 
 ---
@@ -344,6 +347,17 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 17. ~~Late GitHub crons~~ — decided 20 Oct 2026 by Emil: a cron-job.org timer starts the timed jobs on
    the minute through GitHub's workflow_dispatch API, with a fine-grained token limited to Actions on this
    repo; GitHub's cron is the backup (§3). System health checks each job's start against the timer.
+
+17. ~~Study grades~~ — decided 20 Oct 2026 by Emil (grading research; answers to the 20 questions):
+   code shows a study grade A+/A/B/C per setup from the 10-year grading study (`grading_study.py`,
+   `grading_analysis.py`, walk-forward by year, net of Saxo costs, stocks only), with the trade plan
+   (entry and when, stop, exit, expected hold, size from the account risk x the grade's multiple) and
+   the history behind it (trades, win rate, mean/median R, years positive, from the data repo's
+   `data/grading/grade_stats.json`). Rules in config `grading:` (all proposed, `enabled: false` until
+   Emil confirms them); `grader.py` applies them, deterministic. Scans without a validated scorecard
+   grade C ("no edge after costs"). New study-only setups for the research: Qullamaggie's MA-surf
+   breakout (`qm_setups.py`), high tight flag and pocket pivot (`patterns.py`); live only with a SPEC
+   entry and Emil's OK. Report: data repo `docs/research/2026-10-20-grading-research.md`.
 
 ## 12. References
 

@@ -55,6 +55,7 @@ TOP_LEVEL_KEYS = {
     "htf",
     "pocket_pivot",
     "sec_bulk",
+    "grading",
 }
 WATCHLIST_KEYS = {"ep_watch_sources", "ep_watch_max_sessions", "bo_watch_stale_sessions"}
 CATS_KEYS = {
@@ -250,6 +251,25 @@ SEC_BULK_KEYS = {
     "header_minutes",
 }
 
+GRADING_KEYS = {"enabled", "stats_file", "risk_mult", "ungraded", "costs", "strategies"}
+GRADING_COST_KEYS = {
+    "commission_pct",
+    "slip_by_dvol",
+    "min_tick_usd",
+    "open_mult",
+    "offhours_mult",
+    "stop_slip_adr",
+}
+GRADING_STRATEGY_KEYS = {
+    "live_scans",
+    "entry",
+    "stop_adr",
+    "hold_sessions",
+    "base",
+    "bands",
+    "features",
+}
+
 SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
 SCAN_PARAM_KEYS: dict[str, set[str]] = {
@@ -388,6 +408,7 @@ class Config:
     htf: Mapping[str, Any]
     pocket_pivot: Mapping[str, Any]
     sec_bulk: Mapping[str, Any]
+    grading: Mapping[str, Any]
 
 
 def load_config(path: Path | str = DEFAULT_PATH) -> Config:
@@ -453,6 +474,7 @@ def parse_config(raw: Any) -> Config:
         _check_keys(section, raw[section], keys)
         _check_numbers(section, raw[section])
     _check_keys("sec_bulk", raw["sec_bulk"], SEC_BULK_KEYS)
+    _check_grading(raw["grading"])
 
     return Config(
         version=raw["version"],
@@ -484,7 +506,25 @@ def parse_config(raw: Any) -> Config:
         htf=_freeze(raw["htf"]),
         pocket_pivot=_freeze(raw["pocket_pivot"]),
         sec_bulk=_freeze(raw["sec_bulk"]),
+        grading=_freeze(raw["grading"]),
     )
+
+
+def _check_grading(raw: Any) -> None:
+    """Study grades (Emil, 20 Oct 2026): the section's keys, every strategy's keys, and
+    feature points that match their bucket edges (one more point than edges)."""
+    _check_keys("grading", raw, GRADING_KEYS)
+    _check_keys("grading.costs", raw["costs"], GRADING_COST_KEYS)
+    for name, rule in raw["strategies"].items():
+        _check_keys(f"grading.strategies.{name}", rule, GRADING_STRATEGY_KEYS)
+        for feature, spec in rule["features"].items():
+            points = spec["points"]
+            edges = spec.get("edges")
+            if edges is not None and len(points) != len(edges) + 1:
+                raise ConfigError(
+                    f"grading.strategies.{name}.features.{feature}: "
+                    f"{len(edges)} edges need {len(edges) + 1} points"
+                )
 
 
 def _parse_schedule(raw: Any) -> Schedule:
