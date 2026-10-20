@@ -18,6 +18,7 @@ PAGES = [
     "Chart",
     "Watchlists",
     "Journal",
+    "Study grades",
     "Graded signals",
     "Market",
     "Stats",
@@ -98,3 +99,38 @@ def test_my_watchlists_render(data_repo, monkeypatch):
     at.sidebar.radio[0].set_value("Watchlists").run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("AAA" in str(df.value) for df in at.dataframe)
+
+
+def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkeypatch):
+    import json
+
+    path = data_repo / "data" / "candidates" / "2026" / "2026-10-19_eod.parquet"
+    graded = pd.read_parquet(path).assign(
+        grade="A",
+        grade_score=0.42,
+        grade_why="few scan hits (+0.71)",
+        grade_entry_rule="close",
+        grade_hold_sessions=21,
+        grade_stat_trades=1234,
+        grade_stat_win_pct=55.0,
+        grade_stat_mean_r=0.31,
+        grade_stat_median_r=-0.2,
+        grade_stat_years=8,
+        grade_stat_years_pos=7,
+        grade_stat_days_median=12.0,
+    )
+    graded.to_parquet(path)
+    stats = {
+        "source": "docs/research/grading.md",
+        "period": "out of sample 2019-2026",
+        "strategies": {"ep": {"grades": {"A": {"trades": 1234, "win_pct": 55.0, "mean_r": 0.31}}}},
+    }
+    (data_repo / "data" / "grading").mkdir(parents=True)
+    (data_repo / "data" / "grading" / "grade_stats.json").write_text(json.dumps(stats))
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Study A" in str(m.value) for m in at.markdown)  # Today's grade block
+    at.sidebar.radio[0].set_value("Study grades").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("1234" in str(df.value) for df in at.dataframe)  # the history behind A

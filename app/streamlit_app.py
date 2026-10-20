@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import datetime as dt
 import io
+import json
 import os
 import re
 import sys
@@ -38,6 +39,7 @@ from trading_os import (
     luk,
     minervini,
     my_watchlists,
+    notify,
     outcomes,
     plans,
     remote_data,
@@ -68,6 +70,7 @@ PAGES = [
     "Chart",
     "Watchlists",
     "Journal",
+    "Study grades",
     "Graded signals",
     "Market",
     "Stats",
@@ -208,6 +211,7 @@ def exchanges_of(universe_path: str) -> dict[str, str]:
 def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> None:
     """The same columns and number formats as the Markdown report, plus a TradingView link."""
     columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text")]
+    columns += [("Study grade", "grade", "text"), ("Pred. R", "grade_score", "+.2f")]
     columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
     view = hits.copy()
@@ -227,6 +231,44 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
             )
     view = view[[c for _, c, _ in present]].rename(columns={c: h for h, c, _ in present})
     st.dataframe(view, hide_index=True, width="stretch", column_config=config)
+
+
+def feature_points(features) -> pd.DataFrame:
+    """A scorecard's features as rows: the feature, the range of values, and the points it
+    adds to the predicted net R."""
+    rows = []
+    for feature, spec in features.items():
+        points = spec["points"]
+        if "edges" in spec:
+            edges = list(spec["edges"])
+            labels = [f"< {edges[0]:g}"]
+            labels += [f"{a:g} to {b:g}" for a, b in zip(edges, edges[1:], strict=False)]
+            labels += [f">= {edges[-1]:g}"]
+            pairs = list(zip(labels, points, strict=True))
+        else:
+            pairs = list(points.items())
+        if "na" in spec:
+            pairs.append(("unknown", spec["na"]))
+        rows += [{"Feature": feature, "Value": v, "Points (R)": f"{p:+.3f}"} for v, p in pairs]
+    return pd.DataFrame(rows)
+
+
+def grade_blocks(hits: pd.DataFrame) -> None:
+    """The A+, A and B hits as their push shows them: the study grade, when to buy, the exit,
+    the history behind the grade, why, and the plan (C hits are saved, not shown)."""
+    if "grade" not in hits:
+        return
+    graded = hits[hits["grade"].isin(["A+", "A", "B"])]
+    graded = graded.assign(_order=graded["grade"].map(notify.GRADE_RANK)).sort_values("_order")
+    for row in graded.to_dict("records"):
+        lines = notify.grade_lines(row)
+        if not lines:
+            continue
+        why = row.get("grade_why")
+        body = [*lines[1:], *([f"Why: {why}"] if isinstance(why, str) and why else [])]
+        body += notify.plan_lines(row)
+        items = "\n".join(f"- {b}" for b in body)
+        st.markdown(f"**{row['ticker']}** · {lines[0]}\n{items}")
 
 
 @st.cache_data(ttl=3600)
@@ -749,6 +791,7 @@ if page == "Today":
             label = report.SCAN_LABELS.get(scan, scan)
             st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
             show_table(scan, shown, exchanges_of(str(run.universe)))
+            grade_blocks(shown)
             facts = report.fact_lines(scan, shown)
             if facts:
                 st.markdown("\n".join(facts))
@@ -774,6 +817,7 @@ elif page == "Screens":
     st.caption(f"{len(hits)} hits")
     exchanges = exchanges_of(str(run.universe))
     show_table(scan, hits, exchanges)
+    grade_blocks(hits)
     if len(hits):
         ticker = st.selectbox("Look at", hits["ticker"].tolist())
         st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
@@ -1354,6 +1398,88 @@ elif page == "System health":
                 "minutes_late: how long after its cron GitHub started a scheduled run. A run "
                 "that starts after its window closes exits without scanning."
             )
+
+elif page == "Study grades":
+    st.header("Study grades")
+    rules = CFG.grading
+    st.caption(
+        "Each hit of a scan with a scorecard gets the grade its setup earned in the 10-year "
+        "grading study (rules confirmed by you on 20 Oct 2026, SPEC §11.17): predicted net R = "
+        "the strategy's base + the points of each feature - trading costs in R, and the bands "
+        "turn it into a grade. A grade is a fact from the study, never advice."
+    )
+    stats_path = data_dir / rules["stats_file"]
+    stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else {}
+    if stats:
+        st.caption(f"History: {stats.get('period', '')}. Report: data repo {stats.get('source')}.")
+    else:
+        st.info("The history behind the grades isn't in your data copy yet: Pull latest (sidebar).")
+    push_text = {"full": "full block", "line": "one line", "count": "saved and counted only"}
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Grade": grade,
+                    "Size (x your risk per trade)": mult,
+                    "Push": push_text.get(rules["push"][grade], rules["push"][grade]),
+                }
+                for grade, mult in rules["risk_mult"].items()
+            ]
+        ),
+        hide_index=True,
+    )
+    st.caption(f"Every other scan: {rules['ungraded']}.")
+    for name, rule in rules["strategies"].items():
+        st.subheader(" / ".join(report.SCAN_LABELS.get(s, s) for s in rule["live_scans"]))
+        bands = " · ".join(f"{grade} from {cut:+.2f}R" for cut, grade in rule["bands"])
+        st.markdown(
+            f"- **Entry:** {notify.ENTRY_TEXT.get(rule['entry'], rule['entry'])}\n"
+            f"- **Stop:** {rule['stop_adr']:g} ADR under the entry · **Exit:** at the close "
+            f"{rule['hold_sessions']} sessions after the entry\n"
+            f"- **Grades** (predicted net R): {bands}; below that C. Base {rule['base']:+.3f}R"
+        )
+        history = stats.get("strategies", {}).get(name, {}).get("grades", {})
+        if history:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Grade": grade,
+                            "Trades": h.get("trades"),
+                            "Win %": h.get("win_pct"),
+                            "Mean R": h.get("mean_r"),
+                            "Median R": h.get("median_r"),
+                            "Years +": f"{h.get('years_pos')}/{h.get('years')}",
+                            "Worst year R": h.get("worst_year_r"),
+                            "Days held (median)": h.get("days_median"),
+                        }
+                        for grade, h in history.items()
+                    ]
+                ),
+                hide_index=True,
+                column_config={
+                    "Win %": st.column_config.NumberColumn(format="%.0f"),
+                    "Mean R": st.column_config.NumberColumn(format="%+.2f"),
+                    "Median R": st.column_config.NumberColumn(format="%+.2f"),
+                    "Worst year R": st.column_config.NumberColumn(format="%+.2f"),
+                    "Days held (median)": st.column_config.NumberColumn(format="%.0f"),
+                },
+            )
+        with st.expander("Points per feature"):
+            st.dataframe(feature_points(rule["features"]), hide_index=True, width="stretch")
+    with st.expander("Trading costs in the score"):
+        costs = rules["costs"]
+        slips = ", ".join(f"${lo / 1e6:g}M+: {pct:g} %" for lo, pct in costs["slip_by_dvol"])
+        st.markdown(
+            f"- Commission {costs['commission_pct']:g} % per order\n"
+            f"- Slippage by the day's dollar volume: {slips}; x{costs['open_mult']:g} at the "
+            f"open, x{costs['offhours_mult']:g} outside regular hours\n"
+            f"- A filled stop slips {costs['stop_slip_adr']:g} ADR"
+        )
+    research = data_dir / str(stats.get("source", ""))
+    if stats and research.is_file():
+        with st.expander("The research report"):
+            st.markdown(research.read_text(encoding="utf-8"))
 
 elif page == "Graded signals":
     st.header("Graded signals")

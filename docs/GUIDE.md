@@ -79,7 +79,7 @@ once:
 3. In a terminal in the Trading-OS folder: `uv run python scripts/timer_setup.py`, and paste the
    two keys at its prompts (they aren't shown or saved on the PC; the GitHub token ends up only
    in the cron-job.org jobs).
-4. Check: `uv run python scripts/timer_setup.py --list` shows 12 jobs. The next trading day,
+4. Check: `uv run python scripts/timer_setup.py --list` shows 14 jobs. The next trading day,
    System health → *Load the latest runs from GitHub* should say ✅ on time.
 
 The token can do nothing but start, cancel and re-run jobs in the public code repo; it can't
@@ -294,11 +294,12 @@ watchlists to the private repo).
 
 | Page | What it shows |
 |---|---|
-| **Today** | The market panel (Market Light, breadth, SPY/QQQ/VIX) and the newest run's pushed scans with facts, charts and TradingView links |
-| **Screens** | Any run, any scan, both tiers: the full table, an interactive chart, Open in TradingView, and the grading form (grade, notes, screenshots) |
+| **Today** | The market panel (Market Light, breadth, SPY/QQQ/VIX) and the newest run's pushed scans with their study grade, facts, charts and TradingView links; each A+, A or B hit also gets its block as in the push (when to buy, the exit, the history behind the grade, why, the plan) |
+| **Screens** | Any run, any scan, both tiers: the full table with each hit's study grade and the A+/A/B blocks, an interactive chart, Open in TradingView, and your own grading form (grade, notes, screenshots) |
 | **Chart** | Any stock, interactive (drag to pan, scroll or pinch to zoom): daily or weekly candles with volume, 2 or 10 years, MA 10/20/50/200 and EMA 9/21, the scans' past hits (amber triangles, hover for the scan), your buys and sells, today's pivot and stops; anchored VWAPs (from the highest high, the lowest low, the year start, the latest scan hit, or any day you save); trend lines, saved per stock in the data repo as you draw them on the daily bars (the line tool, top right; drag a line or its ends to move it, click it and use the eraser to delete it; a line drawn past the last bar keeps extending each day; or type one in through two points); and an intraday view of any day with minute bars (1/5/15-minute candles, VWAP from the open, pre-/post-market shaded) |
 | **Watchlists** | Your own lists (add by typing or a TradingView export; each ticker with close, change, RVOL, ADR, RS, distance to the high and pivot, earnings, today's scans) and the scans' EP-Watch and BO-Watch |
 | **Journal** | Tabs: *Open positions* (open P&L, open R, money at risk to the stops), *Log a trade*, *Plans*, *Closed trades* (stats, R curve, MFE/MAE, review chart, grading), *Real vs study* |
+| **Study grades** | The grading rules per strategy (entry, stop, exit, the score bands, the points per feature, the trading costs), the size and push per grade, the history behind each grade, and the research report |
 | **Graded signals** | The signals you graded, with what happened after |
 | **Market** | Breadth history: the 5- and 10-day ratios over time |
 | **Stats** | Outcome statistics of the live signals per scan |
