@@ -54,6 +54,7 @@ TOP_LEVEL_KEYS = {
     "qm_surf",
     "htf",
     "pocket_pivot",
+    "sec_bulk",
 }
 WATCHLIST_KEYS = {"ep_watch_sources", "ep_watch_max_sessions", "bo_watch_stale_sessions"}
 CATS_KEYS = {
@@ -241,6 +242,13 @@ POCKET_PIVOT_KEYS = {
     "close_ext_adr_max",
     "ma50_slope_days",
 }
+SEC_BULK_KEYS = {
+    "events_since",
+    "facts_since",
+    "quarter_sessions",
+    "requests_per_second",
+    "header_minutes",
+}
 
 SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
@@ -379,6 +387,7 @@ class Config:
     qm_surf: Mapping[str, Any]
     htf: Mapping[str, Any]
     pocket_pivot: Mapping[str, Any]
+    sec_bulk: Mapping[str, Any]
 
 
 def load_config(path: Path | str = DEFAULT_PATH) -> Config:
@@ -443,6 +452,7 @@ def parse_config(raw: Any) -> Config:
     ):
         _check_keys(section, raw[section], keys)
         _check_numbers(section, raw[section])
+    _check_keys("sec_bulk", raw["sec_bulk"], SEC_BULK_KEYS)
 
     return Config(
         version=raw["version"],
@@ -473,6 +483,7 @@ def parse_config(raw: Any) -> Config:
         qm_surf=_freeze(raw["qm_surf"]),
         htf=_freeze(raw["htf"]),
         pocket_pivot=_freeze(raw["pocket_pivot"]),
+        sec_bulk=_freeze(raw["sec_bulk"]),
     )
 
 

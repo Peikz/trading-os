@@ -357,6 +357,13 @@ sec:                                        # SEC EDGAR (free): exact earnings d
   user_agent: ""                            # contact from the SEC_USER_AGENT secret (not public)
   requests_per_second: 5                    # SEC allows 10
 
+sec_bulk:                                   # 10-year point-in-time fundamentals from EDGAR's bulk files
+  events_since: 2015-01-01                  # earnings events from this date (Emil, 20 Oct 2026)
+  facts_since: 2013-01-01                   # quarterly facts from here, so 2015 has YoY and its trend
+  quarter_sessions: 63                      # (proposed) next earnings: last reaction + one quarter
+  requests_per_second: 8                    # (proposed) SEC allows 10
+  header_minutes: 150                       # (proposed) time for EDGAR header checks per run
+
 report:                                     # Markdown report per run (reports/ in the data repo)
   max_rows_per_scan: 25
 

@@ -1,6 +1,9 @@
 # Point-in-time fundamentals for the 10-year study from SEC EDGAR's free bulk files (Emil,
-# 20 Oct 2026). "check" compares the submissions JSON's acceptance times with EDGAR's own
-# filing headers on a small sample. Manual runs only. This repo is public: counts only.
+# 20 Oct 2026). "build" downloads submissions.zip and companyfacts.zip, checks ambiguous
+# earnings acceptance times against EDGAR's filing headers (cached in the release, so a rerun
+# continues), builds the five tables and uploads them to the data repo's "sec-10y" release
+# (not git). "check" compares JSON and header times on a small sample. Manual runs only.
+# This repo is public: the job prints counts and status only.
 
 name: SEC bulk
 
@@ -8,10 +11,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "check = acceptance-time audit on a sample (counts only)"
+        description: "build = the five tables to release sec-10y; check = acceptance-time audit"
         type: choice
-        options: [check]
-        default: check
+        options: [build, check]
+        default: build
 
 concurrency:
   group: sec
@@ -23,9 +26,19 @@ permissions:
 jobs:
   sec-bulk:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
+
+      - name: Check out data repo (ticker list only)
+        if: ${{ inputs.mode == 'build' }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: data/ep_enrich/tickers.parquet
+          sparse-checkout-cone-mode: false
 
       - uses: astral-sh/setup-uv@v10.3.0
         with:
@@ -33,7 +46,36 @@ jobs:
 
       - run: uv sync --frozen --no-dev
 
+      - name: Daily bars and earlier header checks
+        if: ${{ inputs.mode == 'build' }}
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          mkdir -p bars work
+          gh release download bars-alpaca -R "$REPO" -D bars -p "20*.parquet"
+          gh release download sec-10y -R "$REPO" -D work -p acceptance_checks.parquet 2>/dev/null || true
+          echo "bar files: $(ls bars | wc -l), cached checks: $(ls work | wc -l)"
+
       - name: SEC bulk
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: uv run --frozen --no-dev python -m trading_os.sec_bulk_cli --mode ${{ inputs.mode }}
+        run: uv run --frozen --no-dev python -m trading_os.sec_bulk_cli --mode ${{ inputs.mode }} --data-dir data-repo --bars bars --work work --out out
+
+      - name: Keep the header checks (also after a failure, so a rerun continues)
+        if: ${{ always() && inputs.mode == 'build' && hashFiles('out/acceptance_checks.parquet') != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view sec-10y -R "$REPO" >/dev/null 2>&1 || gh release create sec-10y -R "$REPO" --title "SEC fundamentals, 10 years" --notes "Point-in-time earnings events, quarterly EPS/revenue/net income, shares, companies and ticker-CIK map from SEC EDGAR's bulk files (trading_os/sec_bulk.py)." >/dev/null
+          gh release upload sec-10y out/acceptance_checks.parquet -R "$REPO" --clobber
+
+      - name: Upload
+        if: ${{ inputs.mode == 'build' }}
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release upload sec-10y out/*.parquet out/summary.json -R "$REPO" --clobber
+          echo "uploaded: $(ls out | wc -l) files"

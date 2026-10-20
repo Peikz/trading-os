@@ -67,7 +67,7 @@ start time in UTC.
 | TradingView screener | The live universe at every run: price, change, gaps, volumes, fundamentals, pre-/after-market |
 | Massive (free plan) | Daily bars for the last 2 years (exact history metrics), news headlines, ticker list incl. delisted and their types |
 | Alpaca (free plan) | Daily bars since 2016 and minute bars for the studies (full SIP feed) |
-| SEC EDGAR | Exact earnings release times (8-K item 2.02) and quarterly EPS/revenue as filed |
+| SEC EDGAR | Exact earnings release times (8-K item 2.02) and quarterly EPS/revenue as filed; the bulk files for 10 years of fundamentals |
 
 The private data repo (`trading-os-data`) holds the runs (`data/universe`, `data/candidates`,
 `data/manual`), breadth, charts, reports, watchlists, the journal and your settings. Large
@@ -77,7 +77,10 @@ at 10:15 UTC), `bars-alpaca` (daily bars per year since 2016, adjusted for split
 dividends), `bars-alpaca-raw` (the same stock-days at the prices they really traded at, with
 the factor between the two: a price floor or a per-share cost needs these, not the adjusted
 bars), `intraday-minutes` (minute bars and their index), `intraday-2y`, `intraday-10y`,
-`history-10y`, `regime-10y`.
+`history-10y`, `regime-10y`, `sec-10y` (SEC fundamentals since 2015, point in time:
+earnings events with their reaction session, quarterly EPS/revenue/net income, shares
+outstanding, companies with a sector from SIC, and the ticker-to-company map; joined to any
+stock-day with `sec_bulk.pit_join`).
 
 Your PC keeps a slim copy of the data repo: only the latest version of each file (no
 history) and without the per-session bar files, which only the GitHub jobs read. Recreate it
