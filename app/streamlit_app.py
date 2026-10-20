@@ -423,7 +423,7 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     if missing:  # one block of columns, so the frame isn't fragmented
         hist = pd.concat([hist, pd.DataFrame(None, index=hist.index, columns=missing)], axis=1)
     out = pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
-    out = out[~out["ticker"].isin(funds_cached(folder))]  # stocks only, like the screens
+    out = out[~out["ticker"].isin(funds_cached(folder))].copy()  # stocks only; one block
     return out.assign(year=pd.to_datetime(out["session_date"]).dt.year)
 
 

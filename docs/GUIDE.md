@@ -72,8 +72,14 @@ start time in UTC.
 The private data repo (`trading-os-data`) holds the runs (`data/universe`, `data/candidates`,
 `data/manual`), breadth, charts, reports, watchlists, the journal and your settings. Large
 study data lives only in its releases on GitHub, not in git and not on your PC:
-`bars-alpaca` (daily bars per year), `intraday-minutes` (minute bars and their index),
-`intraday-2y`, `intraday-10y`, `history-10y`, `regime-10y`. The dashboard fetches just what a
+`bars-2y` (the last two years of daily bars as small per-letter files, refreshed each morning
+at 10:15 UTC), `bars-alpaca` (daily bars per year since 2016), `intraday-minutes` (minute bars
+and their index), `intraday-2y`, `intraday-10y`, `history-10y`, `regime-10y`.
+
+Your PC keeps a slim copy of the data repo: only the latest version of each file (no
+history) and without the per-session bar files, which only the GitHub jobs read. Recreate it
+with `git clone --depth 1 --filter=blob:none --sparse` and the sparse patterns `/*`,
+`!/data/bars/`, `!/data/ep_enrich/`, `/data/ep_enrich/tickers.parquet`. The dashboard fetches just what a
 page needs into a cache (`%LOCALAPPDATA%	rading-os-cache`, at most 1.5 GB, least used files
 dropped first); **System health → Empty the cache** clears it.
 
