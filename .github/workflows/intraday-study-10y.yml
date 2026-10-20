@@ -12,12 +12,17 @@ on:
       years:
         description: "JSON list of years"
         default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+      summary_only:
+        description: "only rebuild the summaries from the published year files"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   year:
+    if: ${{ !inputs.summary_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     strategy:
@@ -68,6 +73,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check out data repo (ticker types)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/ep_enrich/tickers.parquet
+          sparse-checkout-cone-mode: false
+
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
@@ -81,5 +96,5 @@ jobs:
           REPO="${{ github.repository_owner }}/trading-os-data"
           mkdir -p years
           gh release download intraday-10y -R "$REPO" -D years -p 'intraday_[0-9]*.parquet'
-          uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir . --aggregate years --out out
+          uv run --frozen --no-dev python -m trading_os.intraday_cli --data-dir data-repo --aggregate years --out out
           gh release upload intraday-10y out/*.parquet -R "$REPO" --clobber

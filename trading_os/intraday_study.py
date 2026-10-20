@@ -700,12 +700,17 @@ def run_year(cfg, year: int, bars_dir, hits_dir, minutes_dir, cands=None) -> pd.
     return out
 
 
-def aggregate(folder) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """(summary over every year, summary per year) from the `intraday_<year>.parquet` files."""
+def aggregate(folder, funds: set[str] = frozenset()) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(summary over every year, summary per year) from the `intraday_<year>.parquet` files,
+    `funds` (ETFs, ETNs, funds) left out."""
     from pathlib import Path
 
     files = sorted(Path(folder).glob("intraday_[0-9][0-9][0-9][0-9].parquet"))
-    trades = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    frames = []
+    for f in files:
+        part = pd.read_parquet(f)
+        frames.append(part[~part["ticker"].isin(funds)])
+    trades = pd.concat(frames, ignore_index=True)
     trades["year"] = pd.to_datetime(trades["session_date"]).dt.year
     return summary(trades), summary(trades, ["year"])
 
@@ -744,7 +749,9 @@ def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     cfg = load_config()
     if args.aggregate:
-        overall, by_year = aggregate(args.aggregate)
+        from trading_os.regime_study import non_stocks
+
+        overall, by_year = aggregate(args.aggregate, non_stocks(args.data_dir))
         args.out.mkdir(parents=True, exist_ok=True)
         overall.to_parquet(args.out / "intraday_summary_10y.parquet", index=False)
         by_year.to_parquet(args.out / "intraday_summary_10y_by_year.parquet", index=False)
@@ -790,7 +797,9 @@ def _main(argv: list[str] | None = None) -> int:
         trades = run_study(g, tickers, sessions, cands, args.run, cfg)
         folder = args.data_dir / "data" / "intraday_study" / sessions[-1].isoformat()
         write_results(trades, folder)
-        write_summaries(folder)  # the dashboard reads these, not the 2-3 million trades
+        from trading_os.regime_study import non_stocks
+
+        write_summaries(folder, non_stocks(args.data_dir))  # read by the dashboard
         counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
         unnamed = int(trades["strategy"].isna().sum()) if len(trades) else 0
         status(
@@ -813,11 +822,13 @@ def add_splits(trades: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def summaries(files) -> dict[str, pd.DataFrame]:
-    """The dashboard's tables, one per split, built one strategy file at a time (memory)."""
+def summaries(files, funds: set[str] = frozenset()) -> dict[str, pd.DataFrame]:
+    """The dashboard's tables, one per split, built one strategy file at a time (memory).
+    `funds` (ETFs, ETNs, funds) are left out, like the live screens."""
     parts: dict[str, list[pd.DataFrame]] = {s: [] for s in SPLITS}
     for path in files:
-        trades = add_splits(pd.read_parquet(path))
+        trades = pd.read_parquet(path)
+        trades = add_splits(trades[~trades["ticker"].isin(funds)])
         for split in SPLITS:
             if split == "none":
                 parts[split].append(summary(trades))
@@ -826,14 +837,14 @@ def summaries(files) -> dict[str, pd.DataFrame]:
     return {s: pd.concat(p, ignore_index=True) for s, p in parts.items() if p}
 
 
-def write_summaries(folder) -> list:
+def write_summaries(folder, funds: set[str] = frozenset()) -> list:
     """`summary_<split>.parquet` next to the per-strategy results in `folder`."""
     from pathlib import Path
 
     folder = Path(folder)
     files = [f for f in sorted(folder.glob("*.parquet")) if not f.name.startswith("summary_")]
     written = []
-    for split, table in summaries(files).items():
+    for split, table in summaries(files, funds).items():
         path = folder / f"summary_{split}.parquet"
         table.to_parquet(path, index=False)
         written.append(path)

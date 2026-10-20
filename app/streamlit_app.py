@@ -386,6 +386,14 @@ EP_COLUMNS = [
 ]
 
 
+@st.cache_resource(ttl=3600)
+def funds_cached(folder: str) -> frozenset:
+    """ETFs, ETNs and funds (Massive's ticker types): left out of the study views."""
+    from trading_os.regime_study import non_stocks
+
+    return frozenset(non_stocks(Path(folder)))
+
+
 @st.cache_resource(ttl=600)
 def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     """The strategy history plus the EP study's alert-tier EP-Days as strategy `ep_day`, in
@@ -401,6 +409,7 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
         built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
         ep = read_parquet(str(built[-1])) if built else pd.DataFrame()
     if ep.empty:
+        hist = hist[~hist["ticker"].isin(funds_cached(folder))]
         return hist.assign(year=pd.to_datetime(hist["session_date"]).dt.year)
     ep = ep[ep["is_ep_day"] & (ep["tier"] == "alert")].copy()
     ep["session_date"] = pd.to_datetime(ep["session_date"]).dt.date
@@ -414,6 +423,7 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     if missing:  # one block of columns, so the frame isn't fragmented
         hist = pd.concat([hist, pd.DataFrame(None, index=hist.index, columns=missing)], axis=1)
     out = pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
+    out = out[~out["ticker"].isin(funds_cached(folder))]  # stocks only, like the screens
     return out.assign(year=pd.to_datetime(out["session_date"]).dt.year)
 
 
