@@ -396,30 +396,49 @@ def add_avwaps(fig: go.Figure, bars: pd.DataFrame, anchors: Mapping[str, object]
         )
 
 
-def add_trend_lines(fig: go.Figure, shown: list, marks: list[Mapping]):
-    """Draw saved trend lines (x0, y0, x1, y1, label, extend) on the price panel."""
+def line_shapes(dates, shown: list, marks: list[Mapping]) -> list[dict]:
+    """Saved trend lines (mark_id, x0, y0, x1, y1, label, extend) as shapes on the price panel
+    that you can drag or erase, computed on all the bars' `dates` and clipped to the `shown`
+    ones. Each is named "mark:<id>" so the chart can tell the app which line you changed."""
+    dates, keep = _labels(sorted(dates)), set(shown)
+    out = []
     for mark in marks:
         pts = trend_line(
-            shown, mark["x0"], mark["y0"], mark["x1"], mark["y1"], bool(mark.get("extend", True))
+            dates, mark["x0"], mark["y0"], mark["x1"], mark["y1"], bool(mark.get("extend", True))
         )
         if pts is None:
             continue
-        fig.add_trace(
-            go.Scatter(
-                x=pts[0],
-                y=pts[1],
-                mode="lines",
-                name=mark.get("label") or "trend line",
-                line={"width": 1.6, "color": "#e53935"},
-            ),
-            row=1,
-            col=1,
-        )
+        inside = [(x, y) for x, y in zip(*pts, strict=True) if x in keep]
+        if len(inside) < 2:
+            continue
+        (xa, ya), (xb, yb) = inside[0], inside[-1]
+        shape = {
+            "type": "line",
+            "xref": "x",
+            "yref": "y",
+            "x0": xa,
+            "y0": ya,
+            "x1": xb,
+            "y1": yb,
+            "name": f"mark:{mark['mark_id']}",
+            "editable": True,
+            "line": {"color": "#e53935", "width": 2},
+        }
+        if isinstance(mark.get("label"), str) and mark["label"]:
+            shape["label"] = {"text": mark["label"], "textposition": "end", "font": {"size": 11}}
+        out.append(shape)
+    return out
 
 
 AVWAP_COLORS = ["#6a1b9a", "#ad1457", "#283593", "#00695c", "#ef6c00"]
 DRAW_CONFIG = {
     "modeBarButtonsToAdd": ["drawline", "drawopenpath", "eraseshape"],
+    "scrollZoom": True,
+    "displaylogo": False,
+}
+# The Chart page, where lines are saved: straight lines only (a freehand path has no slope)
+SAVE_CONFIG = {
+    "modeBarButtonsToAdd": ["drawline", "eraseshape"],
     "scrollZoom": True,
     "displaylogo": False,
 }

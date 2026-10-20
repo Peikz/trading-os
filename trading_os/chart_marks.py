@@ -103,3 +103,46 @@ def current(data_dir, ticker: str) -> pd.DataFrame:
     alive = set(latest.loc[latest["action"] == "add", "mark_id"])
     out = adds[adds["mark_id"].isin(alive) & (adds["ticker"] == normalize_ticker(ticker))]
     return out.reset_index(drop=True)
+
+
+def _same(a: dict, b: dict, tol: float = 1e-4) -> bool:
+    return (
+        str(a["x0"]) == str(b["x0"])
+        and str(a["x1"]) == str(b["x1"])
+        and abs(float(a["y0"]) - float(b["y0"])) <= tol * max(1.0, abs(float(b["y0"])))
+        and abs(float(a["y1"]) - float(b["y1"])) <= tol * max(1.0, abs(float(b["y1"])))
+    )
+
+
+def drawn_changes(rendered: dict, shapes: list[dict]):
+    """What you changed with the chart's pen. `rendered`: saved line id -> its points as the
+    chart drew them; `shapes`: the chart's lines now ({id or None, x0, y0, x1, y1, past_end}).
+    Returns (new lines, erased ids, moved: id -> new points). A line with both ends on one day
+    has no slope and is left out."""
+    shapes = [s for s in shapes if str(s["x0"]) != str(s["x1"])]
+    new = [s for s in shapes if not s.get("id")]
+    now = {s["id"]: s for s in shapes if s.get("id")}
+    erased = [i for i in rendered if i not in now]
+    moved = {i: s for i, s in now.items() if i in rendered and not _same(s, rendered[i])}
+    return new, erased, moved
+
+
+def apply_drawn(data_dir, ticker: str, report: dict, saved: pd.DataFrame) -> dict[str, int]:
+    """Save the chart's report (see `drawn_changes`): new lines are added (extended to today
+    when drawn past the last bar), erased ones removed, moved ones replaced keeping their name
+    and extension. `saved`: the ticker's current marks. Returns counts."""
+    if normalize_ticker(report.get("ticker", "")) != normalize_ticker(ticker):
+        return {"added": 0, "removed": 0, "moved": 0}
+    new, erased, moved = drawn_changes(report.get("rendered") or {}, report.get("shapes") or [])
+    known = saved.set_index("mark_id") if len(saved) else pd.DataFrame()
+    for s in new:
+        add_line(data_dir, ticker, s["x0"], s["y0"], s["x1"], s["y1"], "", bool(s["past_end"]))
+    for mark_id in erased:
+        remove(data_dir, mark_id)
+    for mark_id, s in moved.items():
+        old = known.loc[mark_id] if mark_id in known.index else {}
+        label = old.get("label") if isinstance(old.get("label"), str) else ""
+        extend = bool(old.get("extend") == 1) or bool(s["past_end"])  # NaN/None: not extended
+        remove(data_dir, mark_id)
+        add_line(data_dir, ticker, s["x0"], s["y0"], s["x1"], s["y1"], label, extend)
+    return {"added": len(new), "removed": len(erased), "moved": len(moved)}

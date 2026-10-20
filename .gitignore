@@ -16,3 +16,6 @@ START-HERE.md
 
 # Local tool config (paths on this machine)
 .claude/
+
+# Copied from the plotly package when the dashboard starts
+app/components/chart_draw/plotly.min.js

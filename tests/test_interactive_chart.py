@@ -109,3 +109,30 @@ def test_intraday_figure_draws_vwap_from_the_open():
     assert vwap[m["minute"] < 570].isna().all() and vwap.iloc[-1] == pytest.approx(10.0)
     fig = ic.intraday_figure(m, title=A, prev_close=9.5, every=5)
     assert "VWAP" in [t.name for t in fig.data]
+
+
+def test_saved_lines_become_named_draggable_shapes_clipped_to_the_chart():
+    b = bars(10)
+    days = list(b["session_date"])
+    labels = [d.isoformat() for d in days]
+    shown = labels[4:]  # the chart shows the last six bars
+    marks = [
+        {"mark_id": "a", "x0": days[1], "y0": 10.0, "x1": days[3], "y1": 11.0, "extend": True},
+        {
+            "mark_id": "b",
+            "x0": days[5],
+            "y0": 12.0,
+            "x1": days[7],
+            "y1": 13.0,
+            "extend": False,
+            "label": "neckline",
+        },
+        {"mark_id": "c", "x0": days[0], "y0": 9.0, "x1": days[2], "y1": 9.5, "extend": False},
+    ]
+    shapes = ic.line_shapes(days, shown, marks)
+    assert [s["name"] for s in shapes] == ["mark:a", "mark:b"]  # c ends before the chart starts
+    a, b2 = shapes
+    assert a["x0"] == labels[4] and a["y0"] == pytest.approx(11.5)  # clipped, on the same line
+    assert a["x1"] == labels[-1] and a["y1"] == pytest.approx(14.0)  # extended to the last bar
+    assert a["editable"] and a["xref"] == "x" and a["yref"] == "y"
+    assert b2["x1"] == labels[7] and b2["label"]["text"] == "neckline"

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
 
 from trading_os import (
     breadth,
@@ -577,9 +578,12 @@ def stock_chart(
     show_levels: bool = True,
     anchors: dict | None = None,
     lines: list | None = None,
+    drawable: bool = False,
     key: str = "chart",
-) -> None:
-    """The interactive chart for one stock, drawn into the page."""
+) -> dict | None:
+    """The interactive chart for one stock, drawn into the page. `lines`: saved trend lines,
+    shown on the daily bars as shapes you can drag or erase. `drawable`: the chart reports the
+    lines you draw, move or erase (returned; see chart_draw) so the page can save them."""
     bars = bars_for(str(data_dir), ticker, period)
     if bars.empty:
         st.caption(f"No daily bars for {ticker} in the data repo.")
@@ -605,9 +609,19 @@ def stock_chart(
     shown = list(fig.data[0].x)
     if anchors and timeframe == "Daily":
         ichart.add_avwaps(fig, bars, anchors, shown)
-    if lines and timeframe == "Daily":
-        ichart.add_trend_lines(fig, shown, lines)
+    if timeframe == "Daily":
+        for shape in ichart.line_shapes(bars["session_date"], shown, lines or []):
+            fig.add_shape(shape)
+    if drawable and timeframe == "Daily":
+        # Keep your zoom and drawing tool when the figure comes back with a saved line; a
+        # changed set of saved lines replaces whatever the pen left on the chart.
+        fig.update_layout(
+            uirevision=f"{ticker}|{period}|{sessions}",
+            editrevision="|".join(sorted(str(m["mark_id"]) for m in lines or [])),
+        )
+        return chart_draw(fig, ticker=ticker, config=ichart.SAVE_CONFIG, key=key)
     st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
+    return None
 
 
 @st.cache_resource(ttl=600, show_spinner=False)
@@ -814,7 +828,7 @@ elif page == "Chart":
     for m in marks[marks["kind"] == "anchor"].to_dict("records"):
         anchors[m["label"] or f"{m['anchor']}"] = m["anchor"]
     lines = marks[marks["kind"] == "line"].to_dict("records")
-    stock_chart(
+    drawn = stock_chart(
         ticker,
         period=period,
         timeframe=timeframe,
@@ -825,12 +839,18 @@ elif page == "Chart":
         show_levels=show_levels,
         anchors=anchors,
         lines=lines,
+        drawable=True,
         key="ch_main",
     )
+    if drawn and drawn.get("seq") != st.session_state.get("ch_drawn_seq"):
+        st.session_state["ch_drawn_seq"] = drawn["seq"]  # each report is saved once
+        if any(chart_marks.apply_drawn(data_dir, ticker, drawn, marks).values()):
+            st.rerun()
     st.caption(
-        "Drag to pan, scroll or pinch to zoom, double-click to reset. The pen icons (top right) "
-        "draw lines that disappear when the page reloads; to keep a trend line, save it below. "
-        "Saved lines and anchors show on the daily bars. Triangles: amber = a scan's hit, "
+        "Drag to pan, scroll or pinch to zoom, double-click to reset. On the daily bars, the "
+        "line tool (top right) draws a trend line that is saved at once, for this stock; drag "
+        "a line or its ends to move it, or click it and use the eraser to delete it. A line "
+        "drawn past the last bar keeps extending each day. Triangles: amber = a scan's hit, "
         "green/red = your buys/sells."
     )
     exchanges = {}
@@ -839,7 +859,7 @@ elif page == "Chart":
         exchanges = exchanges_of(str(eod[0].universe))
     st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
 
-    with st.expander("Save a trend line or an anchor"):
+    with st.expander("Type in a trend line or an anchor"):
         recent = bars.tail(504) if len(bars) else bars
         dates = list(recent["session_date"])[::-1]
         with st.form("ch-line", clear_on_submit=True):
