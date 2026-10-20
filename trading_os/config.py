@@ -51,6 +51,9 @@ TOP_LEVEL_KEYS = {
     "report",
     "stats",
     "notify",
+    "qm_surf",
+    "htf",
+    "pocket_pivot",
 }
 WATCHLIST_KEYS = {"ep_watch_sources", "ep_watch_max_sessions", "bo_watch_stale_sessions"}
 CATS_KEYS = {
@@ -204,6 +207,40 @@ MARKET_LIGHT_KEYS = {
     "thresholds": {"stop_count_below", "red_count_below", "green_count_min"},
 }
 NOTIFY_KEYS = {"server", "max_tickers_per_scan", "report_url"}
+QM_SURF_KEYS = {
+    "adr_min_pct",
+    "prior_move_min_pct",
+    "prior_move_max_days",
+    "base_min_days",
+    "base_max_days",
+    "surf_mas",
+    "surf_min_days",
+    "surf_tol_adr",
+    "near_ma_adr_max",
+    "right_side_days",
+    "right_range_adr_max",
+    "right_volume_ratio_max",
+    "trigger_within_adr",
+    "stop_adr_max",
+    "trail_fast_adr_min_pct",
+}
+HTF_KEYS = {
+    "pole_min_pct",
+    "pole_max_days",
+    "flag_min_days",
+    "flag_max_days",
+    "flag_depth_max_pct",
+    "flag_volume_ratio_max",
+    "right_side_days",
+    "stop_max_pct",
+}
+POCKET_PIVOT_KEYS = {
+    "down_volume_days",
+    "mas",
+    "touch_adr",
+    "close_ext_adr_max",
+    "ma50_slope_days",
+}
 
 SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
@@ -339,6 +376,9 @@ class Config:
     report: Mapping[str, Any]
     stats: Mapping[str, Any]
     notify: Mapping[str, Any]
+    qm_surf: Mapping[str, Any]
+    htf: Mapping[str, Any]
+    pocket_pivot: Mapping[str, Any]
 
 
 def load_config(path: Path | str = DEFAULT_PATH) -> Config:
@@ -396,6 +436,13 @@ def parse_config(raw: Any) -> Config:
     _check_keys("report", raw["report"], REPORT_KEYS)
     _check_keys("stats", raw["stats"], STATS_KEYS)
     _check_keys("notify", raw["notify"], NOTIFY_KEYS)
+    for section, keys in (
+        ("qm_surf", QM_SURF_KEYS),
+        ("htf", HTF_KEYS),
+        ("pocket_pivot", POCKET_PIVOT_KEYS),
+    ):
+        _check_keys(section, raw[section], keys)
+        _check_numbers(section, raw[section])
 
     return Config(
         version=raw["version"],
@@ -423,6 +470,9 @@ def parse_config(raw: Any) -> Config:
         report=_freeze(raw["report"]),
         stats=_freeze(raw["stats"]),
         notify=_freeze(raw["notify"]),
+        qm_surf=_freeze(raw["qm_surf"]),
+        htf=_freeze(raw["htf"]),
+        pocket_pivot=_freeze(raw["pocket_pivot"]),
     )
 
 
