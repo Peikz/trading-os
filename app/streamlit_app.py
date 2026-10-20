@@ -10,6 +10,7 @@ from the public repo with data in it: the data stays in the private repo.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import io
 import os
@@ -142,16 +143,39 @@ def read_big(path: str, columns: tuple | None = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=600)
 def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
-    """One stock's daily bars from the Massive files (for the EP history charts)."""
+    """One stock's 2-year daily bars from the compact bars-2y file (fetched from GitHub)."""
     import pyarrow.dataset as ds
 
-    root = Path(folder) / "data" / "bars"
-    if not root.exists():
+    path = bars_file(folder, ticker)
+    if path is None:
         return pd.DataFrame(columns=["session_date", "open", "high", "low", "close", "volume"])
-    table = ds.dataset(root, format="parquet").to_table(filter=ds.field("ticker") == ticker)
+    table = ds.dataset(path, format="parquet").to_table(filter=ds.field("ticker") == ticker)
     bars = table.to_pandas()
     bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
     return bars.drop_duplicates("session_date").sort_values("session_date")
+
+
+def bars_file(folder: str, ticker: str) -> Path | None:
+    """The compact 2-year bars file holding `ticker` (the data repo's bars-2y release: one
+    small file per first letter, refreshed each morning); older cached copies are removed."""
+    from trading_os.bars_pack import shard_of
+
+    pattern = f"bars_2y_*_{shard_of(ticker)}.parquet"
+    with contextlib.suppress(Exception):  # offline or gh missing: use what the cache has
+        remote_data.fetch(data_repo(folder), "bars-2y", pattern)
+    files = sorted((remote_data.CACHE / "bars-2y").glob(pattern))
+    for old in files[:-1]:
+        old.unlink(missing_ok=True)
+    return files[-1] if files else None
+
+
+def bars_date(folder: str):
+    """The newest session in the published compact bars (from the file names, no download)."""
+    with contextlib.suppress(Exception):
+        found = remote_data.names(data_repo(folder), "bars-2y", "bars_2y_*.parquet")
+        if found:
+            return dt.date.fromisoformat(found[-1].split("_")[2])
+    return None
 
 
 def candidates_of(run: dashboard.Run) -> pd.DataFrame:
@@ -226,13 +250,17 @@ def setup_names() -> list[str]:
 
 @st.cache_data(ttl=600)
 def recent_bars(folder: str, tickers: tuple[str, ...], sessions: int = 10) -> pd.DataFrame:
-    """The newest daily bars of a few tickers (Massive, else EOD snapshots)."""
-    days = clock.sessions_back(CFG.schedule, dt.date.today(), sessions)
-    try:
-        bars = history.load_bars(Path(folder), days)
-    except (KeyError, ValueError, OSError):  # a snapshot without the bar columns: no marks
+    """The newest daily bars of a few tickers, from the compact bars-2y file."""
+    import pyarrow.dataset as ds
+
+    paths = {bars_file(folder, t) for t in tickers} - {None}
+    if not paths:
         return pd.DataFrame(columns=["ticker", "session_date", "close"])
-    return bars[bars["ticker"].isin(tickers)]
+    flt = ds.field("ticker").isin(list(tickers))
+    bars = ds.dataset(sorted(paths), format="parquet").to_table(filter=flt).to_pandas()
+    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
+    newest = sorted(set(bars["session_date"]))[-sessions:]
+    return bars[bars["session_date"].isin(newest)]
 
 
 def trade_bars(folder: str, trades: pd.DataFrame) -> pd.DataFrame:
@@ -382,7 +410,9 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
     ep["criteria_met"] = ep[EP_FLAGS].fillna(False).astype(bool).sum(axis=1)
     extra = ("gap_pct", "rvol50", "months_sideways", "earnings_inferred", "criteria_met")
     extra += ("eps_growth_yoy", "sales_growth_yoy", *EP_FLAGS)
-    hist = hist.assign(**{c: None for c in extra if c not in hist})  # one step: no fragments
+    missing = [c for c in extra if c not in hist]
+    if missing:  # one block of columns, so the frame isn't fragmented
+        hist = pd.concat([hist, pd.DataFrame(None, index=hist.index, columns=missing)], axis=1)
     out = pd.concat([hist, ep[[c for c in ep.columns if c in hist]]], ignore_index=True)
     return out.assign(year=pd.to_datetime(out["session_date"]).dt.year)
 
@@ -1244,7 +1274,11 @@ elif page == "System health":
         "⏳ not due yet. pm 07:15-07:55, am 10:10-11:30, mid 11:55-13:30, eod 16:15-23:59 ET."
     )
     st.subheader("Data freshness")
-    st.dataframe(health.freshness(data_dir, CFG.schedule, now), hide_index=True, width="stretch")
+    newest_bars = bars_date(str(data_dir))  # the bars live on GitHub; the file names say when
+    extra = {"Daily bars (Massive)": newest_bars} if newest_bars else {}
+    st.dataframe(
+        health.freshness(data_dir, CFG.schedule, now, extra), hide_index=True, width="stretch"
+    )
     st.subheader("Failures (newest first)")
     failures = health.errors(data_dir)
     if failures.empty:

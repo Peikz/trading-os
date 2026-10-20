@@ -61,8 +61,9 @@ def _date_in(name: str) -> dt.date | None:
     return dt.datetime.strptime(m[1], "%Y%m%d").date() if m else None
 
 
-def freshness(data_dir: Path, schedule, now: dt.datetime) -> pd.DataFrame:
-    """Newest date of each dataset and how many sessions behind the last closed one it is."""
+def freshness(data_dir: Path, schedule, now: dt.datetime, extra=None) -> pd.DataFrame:
+    """Newest date of each dataset and how many sessions behind the last closed one it is.
+    `extra`: dataset -> newest date for data that isn't in the local clone (it wins)."""
     root = Path(data_dir) / "data"
     ny = clock.ny_time(schedule, now)
     last_closed = clock.previous_session(schedule, ny.date())
@@ -80,7 +81,7 @@ def freshness(data_dir: Path, schedule, now: dt.datetime) -> pd.DataFrame:
     }
     rows = []
     for name, paths in items.items():
-        newest = _newest(paths, lambda p: _date_in(p.name))
+        newest = (extra or {}).get(name) or _newest(paths, lambda p: _date_in(p.name))
         behind = None
         if newest is not None and newest <= last_closed:
             behind = len(clock.sessions_after(schedule, newest, 1000, last_closed))

@@ -1,7 +1,8 @@
 """The dashboard's 2-year daily bars as one compact file (Emil, 20 Oct 2026).
 
 The per-session Massive files in the data repo stay as they are (append-only). This packs
-the last `SESSIONS` of them into `bars_2y_<newest session>.parquet`: only the columns the
+the last `SESSIONS` of them into `bars_2y_<newest session>_<letter>.parquet`, one small file
+per first letter of the ticker (a chart downloads only its letter): only the columns the
 charts use, 32-bit numbers, ordinary tickers (ETFs like SPY and QQQ included), sorted by
 ticker so one stock's rows sit together. The `bars-pack` workflow refreshes it daily in the
 data repo's `bars-2y` release; the dashboard reads it from its cache instead of keeping 500
@@ -23,6 +24,12 @@ from trading_os.logsafe import status
 SESSIONS = 520  # two years and a little (the 200-day MA needs a run-up)
 COLUMNS = ["session_date", "ticker", "open", "high", "low", "close", "volume", "vwap"]
 PREFIX = "bars_2y_"
+
+
+def shard_of(ticker: str) -> str:
+    """The file a ticker's bars are in: its first letter, `_` for anything else."""
+    first = str(ticker)[:1].upper()
+    return first if first.isalpha() else "_"
 
 
 def pack(data_dir: Path, sessions: int = SESSIONS) -> pd.DataFrame:
@@ -47,10 +54,13 @@ def main(argv: list[str] | None = None) -> int:
         status("Bars pack: no bars")
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"{PREFIX}{max(bars['session_date'])}.parquet"
-    bars.to_parquet(path, index=False, compression="zstd", row_group_size=100_000)
+    newest = max(bars["session_date"])
+    for shard, part in bars.groupby(bars["ticker"].map(shard_of)):
+        path = args.out / f"{PREFIX}{newest}_{shard}.parquet"
+        part.to_parquet(path, index=False, compression="zstd", row_group_size=100_000)
     sessions = bars["session_date"].nunique()
-    status(f"Bars pack: {sessions} sessions, {bars['ticker'].nunique()} tickers, {path.name}")
+    files = len(list(args.out.glob(f"{PREFIX}{newest}_*.parquet")))
+    status(f"Bars pack: {sessions} sessions, {bars['ticker'].nunique()} tickers, {files} files")
     return 0
 
 

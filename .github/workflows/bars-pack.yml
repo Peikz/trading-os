@@ -44,9 +44,9 @@ jobs:
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
           gh release view bars-2y -R "$REPO" >/dev/null 2>&1 || gh release create bars-2y -R "$REPO" --title "Daily bars, 2 years (compact)" --notes "The dashboard's 2-year daily bars in one file, refreshed each morning." >/dev/null
-          NEW=$(ls out)
-          gh release upload bars-2y out/$NEW -R "$REPO" --clobber
+          DAY=$(ls out | head -1 | cut -d_ -f3)
+          gh release upload bars-2y out/*.parquet -R "$REPO" --clobber
           for old in $(gh release view bars-2y -R "$REPO" --json assets -q '.assets[].name'); do
-            [ "$old" != "$NEW" ] && gh release delete-asset bars-2y "$old" -R "$REPO" -y
+            case "$old" in bars_2y_${DAY}_*) ;; *) gh release delete-asset bars-2y "$old" -R "$REPO" -y ;; esac
           done
-          echo "published $NEW"
+          echo "published $(ls out | wc -l) files for $DAY"
