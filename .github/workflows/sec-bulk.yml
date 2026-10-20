@@ -1,0 +1,39 @@
+# Point-in-time fundamentals for the 10-year study from SEC EDGAR's free bulk files (Emil,
+# 20 Oct 2026). "check" compares the submissions JSON's acceptance times with EDGAR's own
+# filing headers on a small sample. Manual runs only. This repo is public: counts only.
+
+name: SEC bulk
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = acceptance-time audit on a sample (counts only)"
+        type: choice
+        options: [check]
+        default: check
+
+concurrency:
+  group: sec
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sec-bulk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: SEC bulk
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: uv run --frozen --no-dev python -m trading_os.sec_bulk_cli --mode ${{ inputs.mode }}
