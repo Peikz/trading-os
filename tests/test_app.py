@@ -21,8 +21,10 @@ PAGES = [
     "Market",
     "Stats",
     "Entries & exits",
+    "Market regime",
     "System health",
     "Validation",
+    "Guide",
 ]
 
 

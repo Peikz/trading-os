@@ -66,8 +66,10 @@ PAGES = [
     "Stats",
     "History",
     "Entries & exits",
+    "Market regime",
     "System health",
     "Validation",
+    "Guide",
 ]
 
 
@@ -284,7 +286,11 @@ EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
 
 LONG_HISTORY = ("data", "history_10y")  # the history-10y release, downloaded
-MINUTE_10Y = ("data", "intraday_10y")  # the intraday-10y release's summaries, downloaded
+MINUTE_10Y = ("data", "intraday_10y")
+REGIME_10Y = (
+    "data",
+    "regime_10y",
+)  # the regime-10y release, downloaded  # the intraday-10y release's summaries, downloaded
 HISTORY_COLUMNS = [
     "strategy",
     "side",
@@ -778,6 +784,79 @@ elif page == "Journal":
                 "entry, stop and exit. The gap between your R and the study's is execution "
                 "(entries, exits, selection). Facts, not advice."
             )
+
+elif page == "Market regime":
+    st.header("Market regime")
+    folder = data_dir.joinpath(*REGIME_10Y)
+    needed = ["regime_daily", "regime_minute", "regime_minute_by_year"]
+    needed += ["regime_daily_study", "regime_daily_study_by_year"]
+    if not all((folder / f"{n}.parquet").exists() for n in needed):
+        st.info("The regime study isn't on this PC yet (the data repo's regime-10y release).")
+        if st.button("Download it"):
+            ok, out = dashboard.download_release(data_dir, "regime-10y", folder)
+            if ok:
+                st.success("Downloaded.")
+            else:
+                st.error(out)
+            st.rerun()
+        st.stop()
+    st.caption(
+        "Would skipping trades in a bad market have helped? Each trade gets the regime known "
+        "before it was entered (the prior close; for entries at a signal's close, that close) "
+        "and each filter keeps or skips it. Market Light = your rules (QQQ trend, breadth, the "
+        "Sunday scan count) rebuilt from 10 years of daily bars; ETFs and funds left out. "
+        "Mean R capped at 20 per trade. Facts, not advice."
+    )
+    daily = read_parquet(str(folder / "regime_daily.parquet"))
+    daily["year"] = pd.to_datetime(daily["session_date"]).dt.year
+    mix = pd.crosstab(daily["year"], daily["light"].fillna("n/a"), normalize="index") * 100
+    st.subheader("Market Light per year (% of sessions)")
+    st.dataframe(mix.round(0), width="stretch")
+    source = st.radio(
+        "Trades",
+        ["minute", "daily"],
+        horizontal=True,
+        format_func=lambda s: (
+            "Minute study (entries and stops)" if s == "minute" else "Daily histories"
+        ),
+        key="rg_source",
+    )
+    name = "regime_minute" if source == "minute" else "regime_daily_study"
+    table = read_parquet(str(folder / f"{name}.parquet"))
+    by_year = read_parquet(str(folder / f"{name}_by_year.parquet"))
+    exits = [c[2:] for c in table.columns if c.startswith("R_")]
+    a, b = st.columns(2)
+    strategy = a.selectbox("Strategy", sorted(table["strategy"].unique()), key="rg_strategy")
+    exit_name = b.selectbox("Exit", exits, index=0, key="rg_exit")
+    part = table[table["strategy"] == strategy]
+    year_part = by_year[by_year["strategy"] == strategy]
+    if source == "minute":
+        a, b = st.columns(2)
+        entry = a.selectbox("Entry", sorted(part["entry"].unique()), key="rg_entry")
+        stops = sorted(part.loc[part["entry"] == entry, "stop_rule"].unique())
+        stop = b.selectbox("Stop", stops, key="rg_stop")
+        part = part[(part["entry"] == entry) & (part["stop_rule"] == stop)]
+        year_part = year_part[(year_part["entry"] == entry) & (year_part["stop_rule"] == stop)]
+    base = part.loc[part["filter"] == "all", "trades"]
+    view = part[["filter", "trades", f"R_{exit_name}", f"win_{exit_name}%"]].copy()
+    if len(base):
+        view.insert(2, "kept_%", view["trades"] / base.iloc[0] * 100)
+    st.subheader("Each filter, all years")
+    st.dataframe(
+        view.sort_values(f"R_{exit_name}", ascending=False).round(2),
+        hide_index=True,
+        width="stretch",
+    )
+    st.subheader("Year by year (mean R)")
+    pivot = year_part.pivot_table(index="year", columns="filter", values=f"R_{exit_name}")
+    st.dataframe(pivot.round(2), width="stretch")
+
+elif page == "Guide":
+    st.header("Guide")
+    guide = Path(__file__).resolve().parents[1] / "docs" / "GUIDE.md"
+    text = guide.read_text(encoding="utf-8")
+    body = text.splitlines()[1:]  # the file's own title is the page header
+    st.markdown("\n".join(body))
 
 elif page == "System health":
     st.header("System health")

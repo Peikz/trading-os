@@ -9,6 +9,10 @@ the jobs print counts and status only, because Actions logs here are public.
 
 [`SPEC.md`](SPEC.md) is the source of truth, and [`BACKLOG.md`](BACKLOG.md) is the work queue.
 
+
+New here? [docs/GUIDE.md](docs/GUIDE.md) explains the logic, every scan and study, and each
+dashboard page (also on the dashboard's Guide page).
+
 ## Jobs
 
 | Job | Workflow | When | What |
