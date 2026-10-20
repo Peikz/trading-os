@@ -1,0 +1,57 @@
+# Market regime filters over ten years (Emil, 20 Oct 2026): the daily regime table from
+# Alpaca's bars, then the 10-year minute study and the daily histories scored with and
+# without each filter. Results go to the data repo's "regime-10y" release. Manual runs only.
+# This repo is public: counts only.
+
+name: Regime study
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo (ticker types)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/ep_enrich/tickers.parquet
+          sparse-checkout-cone-mode: false
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Inputs
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          mkdir -p bars hist minute
+          gh release download bars-alpaca -R "$REPO" -D bars
+          gh release download history-10y -R "$REPO" -D hist
+          gh release download intraday-10y -R "$REPO" -D minute -p 'intraday_[0-9]*.parquet'
+          echo "bars $(ls bars | wc -l), histories $(ls hist | wc -l), minute years $(ls minute | wc -l)"
+
+      - name: Score the filters
+        run: uv run --frozen --no-dev python -m trading_os.regime_cli --bars bars --data-dir data-repo --history hist --minute minute --out out
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view regime-10y -R "$REPO" >/dev/null 2>&1 || gh release create regime-10y -R "$REPO" --title "Market regime filters, 10 years" --notes "The daily regime table and every strategy scored with and without each filter." >/dev/null
+          gh release upload regime-10y out/*.parquet -R "$REPO" --clobber
