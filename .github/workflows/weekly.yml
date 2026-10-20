@@ -11,6 +11,10 @@ on:
     - cron: "0 17 * * 0"      # 18:00 CET
   workflow_dispatch:
     inputs:
+      timer:
+        description: "Started by the cron-job.org timer (counts as the scheduled run)"
+        type: boolean
+        default: false
       force:
         description: "Skip the time guard (output goes to data/manual/, never counts as the session run)"
         type: boolean
@@ -47,6 +51,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           FORCE: ${{ inputs.force && '--force' || '' }}
+          RUN_TRIGGER: ${{ inputs.timer && 'timer' || '' }}
         run: uv run --frozen --no-dev python scripts/weekly.py --data-dir data-repo $FORCE
 
       - name: Commit data

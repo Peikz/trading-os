@@ -41,24 +41,50 @@ Ground rules:
 
 ## 2. The day: jobs and schedule
 
-All times New York (ET). Each job has two cron times (US summer and winter time) and a guard
-that runs it only inside its window; a run that already saved its output exits.
+All times New York (ET). A timer at cron-job.org starts each job on the minute (below); GitHub's
+own schedule, two cron times per job for US summer and winter time, is the backup. Each job has
+a guard that runs it only inside its window, and a run that already saved its output exits, so
+the extra starts are harmless.
 
 | Job | Window | What it does |
 |---|---|---|
-| Pre-market | 07:15–07:55 | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
-| Intraday checks | 10:10–11:30 and 11:55–13:30 (runs 10:15, 12:00) | EP9M on pace for the day's volume; BO-Watch names at their pivot |
-| EOD | 16:15–23:59 | All end-of-day scans, breadth, Market Light, charts, report, push |
-| Weekly | Sunday 18:00 Copenhagen | QM gainers, growth buckets, tight bases, the Sunday scan count |
-| Outcomes | 22:00 UTC weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
-| Backfill | 09:30 UTC Tue–Sat | Adds the previous session's daily bars (Massive) |
+| Backfill | starts 05:30 Tue–Sat | Adds the previous session's daily bars (Massive) |
+| Bars pack | starts 06:15 Tue–Sat | Packs the last 2 years of daily bars into the dashboard's compact files |
+| Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
+| Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; BO-Watch names at their pivot |
+| EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report, push |
+| Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
+| Weekly | Sunday, starts 12:00 (18:00 Copenhagen) | QM gainers, growth buckets, tight bases, the Sunday scan count |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |
 
-GitHub sometimes starts scheduled runs late (on 19 Oct 2026 by up to six hours). A run that
-starts after its window does nothing, which is why the EOD window runs to midnight and has a
-third, later cron. The **System health** page shows every miss. A run started by hand
+GitHub starts its scheduled runs late, on 19–20 Oct 2026 by 2½ to 6½ hours, so pre-market and
+the intraday checks never ran inside their windows. A run that starts after its window does
+nothing. That is why the timer exists, and why the EOD window runs to midnight. The **System
+health** page shows, per job, when the timer fired and when GitHub started it, and every miss. A run started by hand
 (`force`) skips the guard and saves under `data/manual/`, shown as "(manual HHMMSS)" with the
 start time in UTC.
+
+### The timer (cron-job.org)
+
+A free cron-job.org account calls GitHub's API at each start time above (New York time, so
+summer and winter time take care of themselves), and emails you when a call fails. The start
+times live in `trading_os/timer.py`; `scripts/timer_setup.py` creates the jobs there. Setup,
+once:
+
+1. Make a free account at cron-job.org. In its Console, **Settings → API**: create an API key.
+2. On GitHub: **Settings → Developer settings → Fine-grained tokens → Generate new token**.
+   Repository access: *Only select repositories* → `trading-os`. Permissions: *Actions: Read and
+   write* (nothing else). Expiry: up to a year; note the date.
+3. In a terminal in the Trading-OS folder: `uv run python scripts/timer_setup.py`, and paste the
+   two keys at its prompts (they aren't shown or saved on the PC; the GitHub token ends up only
+   in the cron-job.org jobs).
+4. Check: `uv run python scripts/timer_setup.py --list` shows 12 jobs. The next trading day,
+   System health → *Load the latest runs from GitHub* should say ✅ on time.
+
+The token can do nothing but start, cancel and re-run jobs in the public code repo; it can't
+read the data repo or any secret. When it expires, every call fails: cron-job.org emails you,
+System health shows every job ❌ missed, and GitHub's own (late) schedule carries on. Make a new
+token and run step 3 again. After changing a start time in `timer.py`, run step 3 again too.
 
 ## 3. Data: where it comes from and where it lives
 
@@ -267,7 +293,7 @@ watchlists to the private repo).
 | **History** | Every strategy's history (2 or 10 years): win rate and median move after 1/5/21/63 sessions, R, the exits compared, splits by year/market/price (EP-Day adds its own filters), the events and their charts |
 | **Entries & exits** | The minute study: the best entry, stop and exit per strategy; every combination with any exit; splits; the trades (2 years) or the summaries and a by-year table (10 years) |
 | **Market regime** | How often each light occurred per year, and for any strategy every filter's effect on trades kept, mean R and win rate, overall and per year |
-| **System health** | Which scheduled job ran for which session, data freshness, failure logs, and how late GitHub started each run |
+| **System health** | Which scheduled job ran for which session, data freshness, failure logs, whether each timed job started on time (timer vs GitHub), and how late GitHub started each run |
 | **Validation** | Compare a run with a TradingView screener export and record it in `docs/validation.md` |
 | **Guide** | This page |
 

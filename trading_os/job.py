@@ -70,6 +70,13 @@ def parse_args(description: str, argv: list[str] | None = None) -> argparse.Name
     return args
 
 
+def run_kind() -> str:
+    """scheduled: started by GitHub's cron or by the cron-job.org timer (the workflow's
+    `timer` input sets RUN_TRIGGER); manual: started by hand."""
+    timed = os.environ.get("RUN_TRIGGER") == "timer"
+    return "scheduled" if timed or os.environ.get("GITHUB_EVENT_NAME") == "schedule" else "manual"
+
+
 def run(slot: str, label: str, args: argparse.Namespace) -> int:
     cfg = load_config()
     now = dt.datetime.now(dt.UTC)
@@ -90,7 +97,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         session=session,
         slot=slot,
         run_ts=now,
-        run_kind="scheduled" if os.environ.get("GITHUB_EVENT_NAME") == "schedule" else "manual",
+        run_kind=run_kind(),
         forced=args.force,
     )
     status(f"{label}: session {session}, run_kind {ctx.run_kind}, forced {ctx.forced}")

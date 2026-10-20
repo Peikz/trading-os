@@ -10,6 +10,10 @@ on:
     - cron: "30 9 * * 2-6"    # catch-up after each session, before the pre-market job
   workflow_dispatch:
     inputs:
+      timer:
+        description: "Started by the cron-job.org timer (counts as the scheduled run)"
+        type: boolean
+        default: false
       max_calls:
         description: "API calls this run (504 = the full 2-year backfill)"
         type: number
@@ -45,7 +49,7 @@ jobs:
       - name: Fetch bars
         env:
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
-          MODE: ${{ github.event_name == 'workflow_dispatch' && format('--max-calls {0}', inputs.max_calls) || '--catchup' }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && !inputs.timer && format('--max-calls {0}', inputs.max_calls) || '--catchup' }}
         run: uv run --frozen --no-dev python scripts/backfill.py --data-dir data-repo $MODE
 
       - name: Commit data

@@ -46,6 +46,7 @@ from trading_os import (
     sizing,
     stats,
     strategy_history,
+    timer,
     tv,
     validation,
 )
@@ -1326,15 +1327,29 @@ elif page == "System health":
         remote_data.clear()
         st.cache_resource.clear()
         st.success("Emptied. Pages fetch what they need again.")
-    st.subheader("GitHub runs")
+    st.subheader("Timer and GitHub runs")
     if st.button("Load the latest runs from GitHub"):
-        st.session_state["gh_runs"] = health.github_runs()
+        st.session_state["gh_runs"] = health.run_list()
     gh_runs = st.session_state.get("gh_runs")
     if gh_runs is not None:
         if gh_runs.empty:
             st.warning("No answer from GitHub (is the gh CLI installed and signed in?).")
         else:
-            st.dataframe(gh_runs, hide_index=True, width="stretch")
+            st.markdown("**Did each timed job start on time?**")
+            st.dataframe(
+                timer.check(gh_runs, CFG.schedule.windows_et, now),
+                hide_index=True,
+                width="stretch",
+            )
+            st.caption(
+                "The cron-job.org timer starts each job at its New York time; GitHub's own "
+                "schedule is the backup. Late: started after 10 minutes. Missed: no start "
+                "before the job's window closed (2 hours for the jobs without one). If every "
+                "job is missed, the timer stopped: check cron-job.org's email, or a GitHub "
+                "token that expired (see the Guide)."
+            )
+            st.markdown("**Latest runs**")
+            st.dataframe(health.github_runs(gh_runs), hide_index=True, width="stretch")
             st.caption(
                 "minutes_late: how long after its cron GitHub started a scheduled run. A run "
                 "that starts after its window closes exits without scanning."

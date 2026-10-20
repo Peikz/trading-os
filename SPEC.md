@@ -66,6 +66,13 @@ EOD cron is the fallback). GitHub cron can start minutes to hours late; schedule
 decide.
 All workflows also get `workflow_dispatch` for manual runs.
 
+Timer (Emil, 20 Oct 2026): GitHub started the scheduled runs 2½–6½ h late on 19–20 Oct, so
+pre-market and intraday never ran in their windows. A cron-job.org account now starts each
+timed workflow through `workflow_dispatch` (input `timer`) at its New York time, with a second
+start for each scan in case the first run failed (`trading_os/timer.py`,
+`scripts/timer_setup.py`). Timer runs count as scheduled (`run_kind`). GitHub's crons stay as
+the backup; the guards make duplicate starts harmless.
+
 ---
 
 ## 4. Universe tiers
@@ -334,6 +341,9 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    contractions, volume dry-up, pivot = the last contraction's high, stop <= 8 %); the VCP reading is
    (proposed). Luk's EMA 9/21 exit is measured for every strategy. A live scan for any of them needs Emil's
    OK on the rules and a SPEC entry first.
+17. ~~Late GitHub crons~~ — decided 20 Oct 2026 by Emil: a cron-job.org timer starts the timed jobs on
+   the minute through GitHub's workflow_dispatch API, with a fine-grained token limited to Actions on this
+   repo; GitHub's cron is the backup (§3). System health checks each job's start against the timer.
 
 ## 12. References
 

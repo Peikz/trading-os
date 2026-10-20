@@ -125,8 +125,9 @@ def minutes_late(created: dt.datetime, crons: list[tuple[int, int]]) -> float | 
     return None if best is None else (created - best).total_seconds() / 60
 
 
-def github_runs(limit: int = 40) -> pd.DataFrame:
-    """Recent workflow runs via `gh` (one API call), with how late scheduled ones started."""
+def run_list(limit: int = 100) -> pd.DataFrame:
+    """Recent workflow runs via `gh` (one API call): workflowName, event, status, conclusion,
+    createdAt (UTC). Empty without the gh CLI or a connection."""
     try:
         raw = subprocess.run(
             [
@@ -146,9 +147,14 @@ def github_runs(limit: int = 40) -> pd.DataFrame:
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return pd.DataFrame()
-    runs = pd.DataFrame(json.loads(raw or "[]"))
+    return pd.DataFrame(json.loads(raw or "[]"))
+
+
+def github_runs(runs: pd.DataFrame, limit: int = 40) -> pd.DataFrame:
+    """The newest `limit` of `run_list`, with how late GitHub started the scheduled ones."""
     if runs.empty:
         return runs
+    runs = runs.head(limit).copy()
     crons = _crons()
     created = pd.to_datetime(runs["createdAt"], utc=True)
     runs["started"] = created.dt.tz_convert(NEW_YORK).dt.strftime("%a %d %b %H:%M ET")

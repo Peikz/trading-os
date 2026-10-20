@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "15 10 * * 2-6"   # after the Backfill job (09:30 UTC)
   workflow_dispatch:
+    inputs:
+      timer:
+        description: "Started by the cron-job.org timer (counts as the scheduled run)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read

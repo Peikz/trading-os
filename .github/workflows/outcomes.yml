@@ -10,6 +10,10 @@ on:
     - cron: "0 22 * * 1-5"    # after EOD (20:17 UTC in EDT, 21:17 UTC in EST)
   workflow_dispatch:
     inputs:
+      timer:
+        description: "Started by the cron-job.org timer (counts as the scheduled run)"
+        type: boolean
+        default: false
       force:
         description: "Skip the trading-day guard"
         type: boolean
