@@ -3,7 +3,7 @@ import datetime as dt
 import pandas as pd
 import pytest
 
-from trading_os import dashboard
+from trading_os import chart_marks, dashboard, my_watchlists
 
 
 def touch_run(root, stem, manual_stamp=None):
@@ -78,6 +78,11 @@ def test_git_save_and_push_roundtrip(tmp_path):
     dashboard.git(local, "commit", "-qm", "init")
     dashboard.git(local, "push", "-q", "origin", "HEAD")
     dashboard.save_note(local, "trade", "tr1", "A", "n", "", [])
+    chart_marks.add_line(local, "AAA", "2026-01-05", 10, "2026-01-09", 11)
+    my_watchlists.add(local, "Leaders", ["AAA"])
     ok, out = dashboard.save_and_push(local)
     assert ok, out
     assert dashboard.save_and_push(local) == (True, "nothing new to save")
+    pushed = dashboard.git(remote, "ls-tree", "-r", "--name-only", "HEAD")[1]
+    for folder in ("data/journal/", "data/chart_marks/", "data/my_watchlists/"):
+        assert folder in pushed, folder

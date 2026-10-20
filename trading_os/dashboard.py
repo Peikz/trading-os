@@ -239,8 +239,13 @@ def pull(data_dir: Path) -> tuple[bool, str]:
     return git(data_dir, "pull", "--rebase", "--autostash")
 
 
+# What the dashboard writes for you: journal, plans, notes and grades, your watchlists, your
+# chart lines and anchors, and docs. Save & push commits these folders and nothing else.
+SAVED_BY_YOU = ("data/journal", "data/my_watchlists", "data/chart_marks", "docs")
+
+
 def save_and_push(data_dir: Path, message: str = "journal: notes and grades") -> tuple[bool, str]:
-    paths = [p for p in ("data/journal", "docs") if (Path(data_dir) / p).exists()]
+    paths = [p for p in SAVED_BY_YOU if (Path(data_dir) / p).exists()]
     if paths:
         ok, out = git(data_dir, "add", "--", *paths)
         if not ok:
