@@ -140,6 +140,59 @@ def from_github(tag: str, pattern: str = "*") -> Path:
     return remote_data.CACHE / tag
 
 
+def history_graded() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Every History strategy net of costs and graded walk-forward (grading study, 20 Oct
+    2026): (one row per strategy, out-of-sample grades per strategy). Empty when offline or
+    not built yet."""
+    try:
+        folder = from_github("grading-10y", "history_grades_*.parquet")
+    except Exception:  # noqa: BLE001 - offline: the section says it has nothing
+        return pd.DataFrame(), pd.DataFrame()
+    files = [folder / f"history_grades_{n}.parquet" for n in ("summary", "by_grade")]
+    if not all(f.exists() for f in files):
+        return pd.DataFrame(), pd.DataFrame()
+    return pd.read_parquet(files[0]), pd.read_parquet(files[1])
+
+
+def show_history_graded() -> None:
+    summary, by_grade = history_graded()
+    with st.expander("Net of costs and graded: every strategy, 10 years", expanded=True):
+        if summary.empty:
+            st.info("Not built yet (data repo release grading-10y).")
+            return
+        st.caption(
+            "The same events, tested the way the grading study tests them: stocks only (no ETFs "
+            "or funds), real price at least $1, Saxo's commission and slippage (borrow for "
+            "shorts), entry at the signal close (a buy-stop at the pivot for BO-Watch, VCP and "
+            "the inside day), the exit with the best net R, and grades from scorecards fitted on "
+            "earlier years only (2019-2026 out of sample). QM gainers, tight bases and the Trend "
+            "Template have no stop of their own: 1 ADR under the Friday close, judged on the "
+            "lows. Entries tested on minute bars (the open, the 10:15 and 12:00 checks, opening "
+            "ranges, next-day breaks) are on the Study grades page."
+        )
+        show = summary.rename(
+            columns={
+                "best_exit": "best exit",
+                "gross_r": "gross R",
+                "mean_r": "net R",
+                "median_r": "median R",
+                "win_pct": "win %",
+                "years_pos": "years +",
+                "days": "days held",
+            }
+        )
+        st.dataframe(show.round(3), hide_index=True, width="stretch")
+        pick = st.selectbox(
+            "Grades out of sample (2019-2026) for", summary["strategy"].tolist(), key="hist_grade"
+        )
+        rows = by_grade[by_grade["strategy"] == pick].drop(columns=["strategy"])
+        st.dataframe(rows.round(3), hide_index=True, width="stretch")
+        st.caption(
+            "A+/A/B/C: predicted net R of at least +0.5 / +0.3 / +0.1, else C. daily_mean_r "
+            "weighs every signal day the same: what an account with a few slots could reach."
+        )
+
+
 @st.cache_resource(ttl=600)
 def read_big(path: str, columns: tuple | None = None) -> pd.DataFrame:
     """A large parquet file, shared between reruns (no copy); treat as read-only."""
@@ -1563,8 +1616,10 @@ elif page == "History":
         "with its criteria), the market that day and what happened after. P&L is in the strategy's "
         "direction (shorts profit when it falls). Entries at the signal close (EP-Day: the gap-day "
         "close, stop at the day low within the live ADR bounds); other stops as in "
-        "`strategy_history.py`. Facts, not advice; the grade is yours."
+        "`strategy_history.py`. Gross: no costs, ETFs and funds left out on load. Facts, not "
+        "advice."
     )
+    show_history_graded()
     names = sorted(hist["strategy"].unique())
     a, b, c = st.columns(3)
     picked = a.multiselect("Strategies", names, default=names, key="hist_strategies")
