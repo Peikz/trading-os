@@ -19,6 +19,7 @@ from trading_os.scans.ep import (
 from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
+    luk_flush,
     parabolic_long,
     parabolic_short,
     tight_bases,
@@ -34,6 +35,7 @@ REGISTRY: dict[str, ScanFn] = {
     "ep9m_early": ep9m_early,
     "watchlist_gappers": watchlist_gappers,
     "ep_day": ep_day,
+    "ep_close": ep_day,  # the EP-Day rule on the live data 15 minutes before the close
     "ep_ah": ep_ah,
     "ep9m": ep9m,
     "ep9m_pace": ep9m_pace,
@@ -48,6 +50,7 @@ REGISTRY: dict[str, ScanFn] = {
     "growth_bucket_1": growth_bucket_1,
     "growth_bucket_2": growth_bucket_2,
     "tight_bases": tight_bases,
+    "luk_flush": luk_flush,
 }
 
 

@@ -27,6 +27,7 @@ SLOT_LABELS = {
     "pm": "Pre-market",
     "am": "Intraday 10:15",
     "mid": "Intraday 12:00",
+    "close": "Close 15:45",
     "eod": "EOD",
     "weekly": "Weekly",
 }
@@ -35,6 +36,7 @@ SCAN_LABELS = {
     "ep9m_early": "EP9M early",
     "watchlist_gappers": "Watchlist gappers",
     "ep_day": "EP-Day",
+    "ep_close": "EP close",
     "ep_ah": "EP-AH",
     "ep9m": "EP9M",
     "ep9m_pace": "EP9M pace",
@@ -49,10 +51,13 @@ SCAN_LABELS = {
     "growth_bucket_1": "Growth 1",
     "growth_bucket_2": "Growth 2",
     "tight_bases": "Tight bases",
+    "luk_flush": "Luk flush",
 }
 # An icon per section, so the eye finds the setup type (no meaning beyond the type).
 SECTION_ICONS = {
     "ep_day": "⚡",
+    "ep_close": "⚡",
+    "luk_flush": "🌊",
     "ep9m": "📊",
     "ep9m_pace": "⏱️",
     "ep_pm": "🌅",
@@ -86,9 +91,18 @@ PCT_COLUMNS = {
     "ep9m_early": "pm_gap_used",
     "watchlist_gappers": "pm_gap_used",
     "ep_day": "gap_pct",
+    "ep_close": "gap_pct",
     "ep_ah": "ah_change_pct",
     "ep9m": "chg_pct",
 }
+
+# Study grades (SPEC §11.17): when to enter, per the grading study's plan (entry rule).
+ENTRY_TEXT = {
+    "close": "buy 15:45-15:58 NY (21:45 CPH)",
+    "t_1200": "buy after the 12:00 check (18:00 CPH)",
+    "next_1030": "buy next session ~10:30 NY (16:30 CPH)",
+}
+GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
@@ -119,6 +133,19 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
         eligible = hits
         if "push_tier" in scan.params:
             eligible = hits[hits["tier"] == scan["push_tier"]]
+        if graded(cfg, eligible):
+            # Study grades (SPEC §11.17): A+/A get a full block, B one line, C is saved and
+            # counted in the closing line.
+            mode = push_modes(cfg, eligible)
+            order = eligible.assign(_g=eligible["grade"].map(GRADE_RANK).fillna(9))
+            keys = [k for k in ("_g", "grade_score", "rank") if k in order]
+            order = order.sort_values(keys, ascending=[k != "grade_score" for k in keys])
+            full = order[mode.loc[order.index] == "full"].head(limit)
+            line = order[mode.loc[order.index] == "line"].head(limit)
+            selected[name] = pd.concat(
+                [full.assign(push_partial=False), line.assign(push_partial=True)]
+            ).drop(columns="_g")
+            continue
         if "push_if_all" in scan.params:
             # A breakout trigger with B1-B4 gets a full block; the top B5-only ones get one
             # line each below (`push_partial`), so trigger days stay visible without the noise.
@@ -129,6 +156,60 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
             continue
         selected[name] = eligible.sort_values("rank").head(limit)
     return selected
+
+
+def graded(cfg: Config, hits: pd.DataFrame) -> bool:
+    return bool(cfg.grading["enabled"]) and "grade" in hits
+
+
+def push_modes(cfg: Config, hits: pd.DataFrame) -> pd.Series:
+    """full / line / count per hit, from its grade (config `grading.push`)."""
+    modes = cfg.grading["push"]
+    return hits["grade"].fillna("C").map(lambda g: modes.get(g, "count"))
+
+
+def grade_lines(row: Mapping[str, Any]) -> list[str]:
+    """`🅰 Study A · +0.52R`, the plan's timing and exit, and the history behind the grade."""
+    grade = row.get("grade")
+    if grade is None or pd.isna(grade) or grade == "C":
+        return []
+    score = row.get("grade_score")
+    head = f"🅰 Study {grade}" + ("" if score is None or pd.isna(score) else f" · {score:+.2f}R")
+    out = [head]
+    when = ENTRY_TEXT.get(str(row.get("grade_entry_rule")), "")
+    hold = row.get("grade_hold_sessions")
+    median = row.get("grade_stat_days_median")
+    exit_text = ""
+    if hold is not None and not pd.isna(hold):
+        exit_text = f"out at the close after {int(hold)} sessions"
+        if median is not None and not pd.isna(median):
+            exit_text += f" (median {median:.0f})"
+    out += wrap([p for p in (when, exit_text) if p], WIDTH - len(INDENT))
+    trades = row.get("grade_stat_trades")
+    if trades is not None and not pd.isna(trades):
+        years = row.get("grade_stat_years")
+        tail = ""
+        if years is not None and not pd.isna(years) and years:
+            tail = f" · {int(row['grade_stat_years_pos'])}/{int(years)} yrs +"
+        out.append(
+            f"📚 {int(trades):,} trades · {row['grade_stat_win_pct']:.0f}% win · "
+            f"avg {row['grade_stat_mean_r']:+.2f}R · med {row['grade_stat_median_r']:+.1f}R{tail}"
+        )
+    return out
+
+
+def c_counts(results: Mapping[str, pd.DataFrame], cfg: Config) -> list[str]:
+    """`EP close 2 · Breakout 3`: alert-tier hits graded C (saved, not pushed)."""
+    out = []
+    for name, hits in results.items():
+        scan = cfg.scans[name]
+        if scan.action != "push" or hits.empty or not graded(cfg, hits):
+            continue
+        eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
+        n = int((push_modes(cfg, eligible) == "count").sum())
+        if n:
+            out.append(f"{SCAN_LABELS.get(name, name)} {n}")
+    return out
 
 
 def partial_rows(hits: pd.DataFrame) -> pd.Series:
@@ -282,6 +363,7 @@ def wrap(parts: Iterable[str], width: int) -> list[str]:
 
 def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     out = [Line("hit", "▸ " + _first_line(row, scan, slot))]
+    out += [Line("plan", INDENT + text) for text in grade_lines(row)]
     out += [Line("plan", INDENT + text) for text in plan_lines(row)]
     if context.has_context(row):
         out += [
@@ -296,8 +378,23 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     return out
 
 
+def _grade_line_rows(partial, shown, name, slot) -> list[Line]:
+    """Grade B: one line each, under the plan they share."""
+    when = ENTRY_TEXT.get(str(partial.iloc[0].get("grade_entry_rule")), "")
+    out = [Line("note", "B: " + (when or "see the report") + ":")]
+    for row in partial.to_dict("records"):
+        seen = shown.get(row["ticker"])
+        score = row.get("grade_score")
+        tail = "" if score is None or pd.isna(score) else f" · B {score:+.2f}R"
+        seen_text = f"  ↑ {seen}" if seen else ""
+        out.append(Line("hit", f"▸ {_first_line(row, name, slot)}{tail}{seen_text}"))
+    return out
+
+
 def _partial_lines(name, partial, hits, scan, shown, slot) -> list[Line]:
     """`B5 only · top 5 of 13:` and one line per trigger (its squares show what's missing)."""
+    if "grade" in partial and partial["grade"].notna().all():
+        return _grade_line_rows(partial, shown, name, slot)
     alerts = hits[hits["tier"] == "alert"] if "tier" in hits else hits
     held = int((~_all_pass(alerts, scan["push_if_all"])).sum())
     out = [Line("note", f"B5 only · top {len(partial)} of {held}:")]
@@ -350,7 +447,8 @@ def build_message(
         if len(chosen):
             counts.append(f"{TITLE_LABELS.get(name, label)} {len(chosen)}")
         if len(partial):
-            counts.append(f"B5-only {len(partial)}")
+            graded_line = "grade" in partial and partial["grade"].notna().all()
+            counts.append(f"{'B' if graded_line else 'B5-only'} {len(partial)}")
         total = len(results[name])
         more = f" of {total}" if total > len(chosen) else ""
         size = f"{len(chosen)}{more}" if len(chosen) else "no full setup"
@@ -380,6 +478,9 @@ def build_message(
             lines += _partial_lines(name, partial, results[name], cfg.scans[name], shown, ctx.slot)
     if quiet:
         lines += [Line("gap", ""), Line("note", "Nothing new: " + " · ".join(quiet))]
+    saved = c_counts(results, cfg)
+    if saved:
+        lines += [Line("note", "Study C, saved: " + " · ".join(saved))]
     if click:
         lines.append(Line("note", "Tap for the full report with charts."))
     first = (header_lines or [""])[0][:1]

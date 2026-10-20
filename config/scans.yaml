@@ -43,6 +43,8 @@ schedule:                                   # SPEC §3
     pm: ["07:15", "07:55"]
     am: ["10:10", "11:30"]                  # intraday checks (Emil, 19 Oct 2026)
     mid: ["11:55", "13:30"]
+    close: ["15:40", "15:58"]               # EP close check at 15:45 (Emil, 20 Oct 2026):
+                                            # TradingView is 15 min delayed, so it sees ~15:30
     eod: ["16:15", "23:59"]                 # until midnight (Emil, 20 Oct 2026): GitHub's
                                             # scheduler ran 5 h late on 19 Oct; the closing
                                             # data is the same at 23:00 as at 16:20
@@ -65,6 +67,11 @@ scans:
   # --- End of day (SPEC §6.2) ---
   ep_day:
     {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
+     gap_min_pct: 10, rvol_min: 3, volume_min: 300_000, price_min: 1.00, market_cap_min: 50_000_000}
+  ep_close:                                 # EP-Day's rule 15 minutes before the close (Emil,
+                                            # 20 Oct 2026): the grading study's A plan buys the
+                                            # gap at the close; the EOD push comes too late
+    {enabled: true, phase: 1, slot: close, action: push, push_tier: alert,
      gap_min_pct: 10, rvol_min: 3, volume_min: 300_000, price_min: 1.00, market_cap_min: 50_000_000}
   ep_ah:                                    # toggle, default OFF
     {enabled: false, phase: 1, slot: eod, action: push, push_tier: alert,
@@ -104,6 +111,9 @@ scans:
      # Rest of Stockbee's Market Monitor (Emil, 19 Oct 2026): up/down >= 25 % and >= 50 %
      # in a month (22 sessions), up/down >= 13 % in 34 sessions (needs daily history)
      month_move_pct: 25, month_big_move_pct: 50, mid_move_pct: 13}
+  luk_flush:                                # Martin Luk's AVWAP flush, live (Emil, 20 Oct 2026):
+                                            # rules in `luk:`, bought the next session (grading)
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
@@ -376,13 +386,14 @@ notify:                                     # SPEC §8
   # Tapping a push opens the run's report in the private data repo ({owner} from the runner)
   report_url: "https://github.com/{owner}/trading-os-data/blob/main/{path}"
 
-grading:                                    # Study grades (Emil, 20 Oct 2026; SPEC §1.4 changed): every
-                                            # value below is (proposed) until Emil confirms the rules.
-                                            # From the 10-year grading study, walk-forward by year:
+grading:                                    # Study grades (Emil, 20 Oct 2026; SPEC §1.4, §11.17).
+                                            # Rules confirmed by Emil on 20 Oct 2026. From the
+                                            # 10-year grading study, walk-forward by year:
                                             # data repo docs/research/2026-10-20-grading-research.md
-  enabled: false                            # pushes and the dashboard show grades once confirmed
+  enabled: true
   stats_file: data/grading/grade_stats.json # per-grade history (private, data repo)
   risk_mult: {"A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
+  push: {"A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
   ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard
   costs:                                    # Saxo lowest tier, USD account; cost in R = % / stop %
     commission_pct: 0.08                    # per order
@@ -393,7 +404,7 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
     stop_slip_adr: 0.05                     # a filled stop slips 0.05 ADR (about half of trades)
   strategies:                               # predicted net R = base + points - cost in R
     ep:
-      live_scans: ["ep_day"]
+      live_scans: ["ep_close"]
       entry: close                # at the close of the gap day: buy 15:45-15:58 New York (21:45-21:58 Copenhagen)
       stop_adr: 1.0                       # 1 ADR under the entry (at least the 1 % floor)
       hold_sessions: 21                   # out at the close 21 sessions after entry; the stop rests
@@ -425,7 +436,7 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
         mkt_scan_count: {edges: [19, 40, 74, 139], points: [0.326, -0.073, -0.015, -0.069, -0.17]}
         mkt_breadth_state: {points: {neutral: 0.152, strong: 0.153, weak: -0.305}}
     luk_avwap_flush:
-      live_scans: []
+      live_scans: ["luk_flush"]
       entry: next_1030            # the session after the flush, 10:30 New York (16:30 Copenhagen), at the market
       stop_adr: 1.0                       # 1 ADR under the entry (at least the 1 % floor)
       hold_sessions: 21                   # out at the close 21 sessions after entry; the stop rests

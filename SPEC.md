@@ -57,6 +57,7 @@ non-trading days, because EU and US daylight-saving changes happen on different 
 |---|---|---|---|
 | `premarket` | 13:30 CET | 07:30 ET | EP-PM, EP9M early warning, watchlist gappers |
 | `intraday` (Emil, 19 Oct 2026) | 16:15 and 18:00 CET | 10:15 and 12:00 ET | EP9M pace (§6.1b); candidates only, no universe snapshot |
+| `intraday` close check (Emil, 20 Oct 2026) | 21:45 CET | 15:45 ET | EP close (§6.1b): the EP-Day rule before the close, graded (§11.17) |
 | `eod` | 22:20 CET | 16:20 ET | All end-of-day scans, universe snapshot, breadth |
 | `weekly` | Sunday 18:00 CET | — | Qullamaggie 1/3/6M gainers, growth buckets, tight bases, official Market Light count |
 | `outcomes` | daily after `eod` | — | Fill outcome horizons for past signals (Phase 3) |
@@ -128,6 +129,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
 | EP9M pace (Emil, 19 Oct 2026; rule proposed) | EP9M's rule (§6.2) on the day's projected volume: change ≥ +4% and volume so far or pace ≥ 9M shares. Pace = TradingView's relative volume at this time of day (5-minute bars) × normal daily volume (today excluded), never below the volume so far. A name pushes once per session: the 12:00 check skips names sent at 10:15 | 1 | Push |
+| EP close (Emil, 20 Oct 2026) | EP-Day's rule (§6.2) on the live data at 15:45 New York (TradingView sees about 15:30). The grading study's A plan buys the gap at the close, which the EOD push comes too late for. Pushed with its study grade (§11.17) | 1 | Push |
 | BO pivot (Emil, 19 Oct 2026; rule proposed) | Active BO-Watch names at or above their pivot, or at most 1% below it, during the session. Pivot and order stop from the name's latest EOD BO-Watch row (§6.4). Over the pivot: entry at the last price; under it: buy-stop at the pivot | 2 | Push |
 
 ### 6.2 End of day (22:20 CET)
@@ -141,6 +143,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Momentum Burst down (Stockbee) | Change ≤ −4%, volume > prior day, volume ≥ 100K | 1 | Log |
 | Parabolic Short (Kullamägi) | ≥ 50% gain in ≤ 10 days (mcap ≥ $1B) or ≥ 200% (mcap < $1B); ≥ 3 consecutive up days; distance from MA10 in ADR stored | 1 | Log |
 | Parabolic Long (Kullamägi) | ≥ 30% drop in ≤ 10 days; ≥ 3 consecutive down days; distance below MA10 in ADR stored | 1 | Log |
+| Luk AVWAP flush (Emil, 20 Oct 2026) | Martin Luk's AVWAP flush (§11.16, rules in config `luk:`), alert tier, from 300 sessions of daily bars. Graded (§11.17); the plan buys the next session around 10:30 | 2 | Push |
 | Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K. Extended 19 Oct 2026 (Emil) with the rest of Stockbee's Market Monitor: up/down ≥ 25% and ≥ 50% in a month (22 sessions), up/down ≥ 13% in 34 sessions (needs daily history); plus SPY and VIX next to QQQ; 20 Oct 2026 (Emil): QQQ shown like SPY (change, MA position), and the QQQ trend's SMA20 from 5 sessions ago taken from the daily bars until EOD runs have stored it | 1 | Push (top lines) |
 | Market Light (yours) | See §6.5. Computed daily; the scan count input only changes on Sundays | 1 | Push (one line) |
 | Universe snapshot | Every stock in the logged tier with all metrics | 1 | Log |
@@ -245,6 +248,9 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 ## 8. Notifications (ntfy.sh)
 
 - One message per job, not per ticker.
+- Study grades (§11.17, Emil 20 Oct 2026): A+/A get a full block (grade, when to buy, exit and expected hold,
+  the history behind the grade, size from the account risk x the grade's multiple), B one line under the
+  plan they share, C is saved and counted in one closing line ("Study C, saved: ...").
 - Format: title `Trading OS · EOD 2026-10-19`, body = breadth line, then each pushing scan with up to
   10 tickers: `TICKER  +14.2%  RVOL 5.1  $82M  [earnings]`.
   Phone layout (Emil, 19 Oct 2026): the title carries the counts (`🟡 EOD Fri 16 Oct · EP 2 · BO 3`),
@@ -353,8 +359,8 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    `grading_analysis.py`, walk-forward by year, net of Saxo costs, stocks only), with the trade plan
    (entry and when, stop, exit, expected hold, size from the account risk x the grade's multiple) and
    the history behind it (trades, win rate, mean/median R, years positive, from the data repo's
-   `data/grading/grade_stats.json`). Rules in config `grading:` (all proposed, `enabled: false` until
-   Emil confirms them); `grader.py` applies them, deterministic. Scans without a validated scorecard
+   `data/grading/grade_stats.json`). Rules in config `grading:`, confirmed by Emil on 20 Oct 2026 together with the
+   15:45 EP close check (§6.1b) and the live Luk AVWAP flush (§6.2); `grader.py` applies them, deterministic. Scans without a validated scorecard
    grade C ("no edge after costs"). New study-only setups for the research: Qullamaggie's MA-surf
    breakout (`qm_setups.py`), high tight flag and pocket pivot (`patterns.py`); live only with a SPEC
    entry and Emil's OK. Report: data repo `docs/research/2026-10-20-grading-research.md`.

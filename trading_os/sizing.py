@@ -36,7 +36,7 @@ PLAN_COLUMNS = [
     "plan_risk_usd",
     "plan_capped",
 ]
-EP_CLOSE = ("ep_day", "ep9m", "ep9m_pace")  # intraday: the last price
+EP_CLOSE = ("ep_day", "ep_close", "ep9m", "ep9m_pace")  # intraday: the last price
 EP_PREMARKET = ("ep_pm", "ep9m_early", "watchlist_gappers")
 BREAKOUT_RULES = ("breakout_trigger", "breakout_watch", "pivot_watch")
 

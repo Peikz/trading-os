@@ -106,3 +106,11 @@ def breakout_trigger(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
         return df.iloc[0:0].assign(rank=pd.Series(dtype="int64"))
     hits = ranked(df, _mask(df["trig_b5"]), "trig_rvol")
     return _with_breakout_fields(hits, _TRIGGER)
+
+
+def luk_flush(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Martin Luk's AVWAP flush (Emil, 20 Oct 2026): the rows `luk_live.attach` marked.
+    Ranked by dollar volume, largest first."""
+    if "luk_flush" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    return ranked(df, _mask(df["luk_flush"]), "dollar_volume")

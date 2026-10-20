@@ -121,6 +121,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
+    if slot == "eod" and cfg.scans["luk_flush"].enabled:
+        uni = _with_luk(uni, args.data_dir, cfg, session)
 
     state = watchlists.current(watchlists.load_events(args.data_dir))
     for name in watchlists.LISTS:
@@ -148,6 +150,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
             extras["watchlists"] = events
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
+    results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
     selected = notify.select_for_push(results, cfg)
     if slot == "mid":
         selected = _not_pushed_earlier(selected, args.data_dir, session, "am")
@@ -210,6 +213,66 @@ def _with_market_facts(uni: pd.DataFrame, cfg, session) -> tuple[pd.DataFrame, p
     except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
         status(f"Industries: FAILED ({type(exc).__name__}), facts without ranks")
         return uni, pd.DataFrame(columns=industries.COLUMNS)
+
+
+def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
+    """Martin Luk's AVWAP flush flags (EOD). A problem leaves the scan empty, never fails."""
+    from trading_os import luk_live
+
+    try:
+        out = luk_live.attach(uni, data_dir, cfg, session)
+        status(f"Luk flush: {int(out['luk_flush'].sum())} flagged")
+        return out
+    except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
+        status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
+        return uni
+
+
+def _with_grades(results: dict, data_dir: Path, cfg, session, slot: str, extras, df) -> dict:
+    """Study grades and the graded plans (SPEC §11.17). Auxiliary: a failure leaves the hits
+    ungraded and the push as before."""
+    from trading_os import grade_live
+
+    if not cfg.grading["enabled"]:
+        return results
+    try:
+        market = None
+        if "breadth" in extras and len(extras["breadth"]):
+            market = extras["breadth"].iloc[0].to_dict()
+        account, rate = _account_and_rate(data_dir, cfg)
+        today = enrich.todays_bars(df, session) if slot == "eod" else None
+        out = grade_live.add_grades(
+            results,
+            data_dir,
+            cfg,
+            session,
+            slot,
+            market,
+            account,
+            rate,
+            fetch_details=tv.fetch_details,
+            today=today,
+        )
+        counts: dict[str, int] = {}
+        for hits in out.values():
+            if "grade" in hits:
+                for g, n in hits["grade"].value_counts().items():
+                    counts[g] = counts.get(g, 0) + int(n)
+        status(f"Grades: {dict(sorted(counts.items()))}")
+        return out
+    except Exception as exc:  # noqa: BLE001 - grades are extra; alerts still go out
+        status(f"Grades: FAILED ({type(exc).__name__}), hits sent ungraded")
+        return results
+
+
+def _account_and_rate(data_dir: Path, cfg):
+    """(account or None, units of the account currency per USD)."""
+    account = sizing.load_account(data_dir)
+    if account is None or account.currency == "USD":
+        return account, 1.0
+    symbol = cfg.sizing["fx_symbol"].format(currency=account.currency)
+    rate = once_more(lambda: tv.fetch_fx(symbol), label="TradingView", wait_s=TV_RETRY_WAIT_S)
+    return account, rate
 
 
 def _with_breakout_levels(uni: pd.DataFrame, data_dir: Path, cfg, state, session) -> pd.DataFrame:

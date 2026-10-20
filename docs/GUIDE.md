@@ -52,6 +52,7 @@ the extra starts are harmless.
 | Bars pack | starts 06:15 Tue–Sat | Packs the last 2 years of daily bars into the dashboard's compact files |
 | Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
 | Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; BO-Watch names at their pivot |
+| Close check | 15:40–15:58 (starts 15:43, again 15:50) | EP close: the EP-Day rule before the close, with its study grade |
 | EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report, push |
 | Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
 | Weekly | Sunday, starts 12:00 (18:00 Copenhagen) | QM gainers, growth buckets, tight bases, the Sunday scan count |
@@ -153,6 +154,8 @@ ETFs or ETNs). Two tiers:
 
 - **EP9M pace**: up ≥ 4 % and 9M shares traded or on pace for it (TradingView's relative
   volume at that time of day × the stock's normal daily volume).
+- **EP close** (15:45): the EP-Day rule on the live data, so a graded gap can still be bought
+  at the close (the grading study's A plan).
 - **BO pivot**: BO-Watch names within 1 % of their pivot or over it. A name pushes once a
   session.
 
@@ -215,6 +218,15 @@ breakout block), 🛑 stop, 📢 earnings. The grey lines at the end say what wa
 ("N without B1-B4", "N sent earlier", "N below alert tier"). Up to 10 stocks per scan; if the
 message gets near ntfy's 4 KB, news goes first, then facts, then the last stocks ("… N more in
 the report"). Tap the message to open the full report.
+
+**Study grades** (since 20 Oct 2026): every pushed hit carries a grade from the 10-year grading
+study of these rules (net of Saxo costs, walk-forward by year; report in the data repo's
+`docs/research/`). Only EP gaps bought at the close (A/B), Luk's AVWAP flush (A/B) and EP9M at
+the 12:00 check (B) showed an edge after costs; every other scan grades C. A+/A: a full block with
+when to buy, the stop (1 ADR), the exit (the close after 21 sessions, the stop resting) and the
+expected hold, the history behind the grade, and the size (your risk x 2 / 1.5 / 1 for A+ / A /
+B). B: one line. C: saved and counted in the closing line. The Luk AVWAP flush is a live EOD scan
+since the same day. Rules: config `grading:`; code: `grader.py`, `grade_live.py`.
 
 ## 8. Position size, facts and watchlists
 

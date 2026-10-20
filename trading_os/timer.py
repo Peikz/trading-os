@@ -54,6 +54,8 @@ JOBS = (
     TimerJob("am", "intraday.yml", "Intraday", "10:40", WEEKDAYS, {"slot": "am"}, True),
     TimerJob("mid", "intraday.yml", "Intraday", "12:03", WEEKDAYS, {"slot": "mid"}),
     TimerJob("mid", "intraday.yml", "Intraday", "12:30", WEEKDAYS, {"slot": "mid"}, True),
+    TimerJob("close", "intraday.yml", "Intraday", "15:43", WEEKDAYS, {"slot": "close"}),
+    TimerJob("close", "intraday.yml", "Intraday", "15:50", WEEKDAYS, {"slot": "close"}, True),
     TimerJob("eod", "eod.yml", "EOD", "16:17", WEEKDAYS),
     TimerJob("eod", "eod.yml", "EOD", "17:00", WEEKDAYS, retry=True),
     TimerJob("outcomes", "outcomes.yml", "Outcomes", "18:00", WEEKDAYS),

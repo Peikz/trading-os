@@ -131,6 +131,26 @@ AUDIT_COLUMNS = [
     "ctx_news_publisher",
     "ctx_news_time",
     "ctx_news_url",
+    # Study grades (SPEC §11.17, Emil 20 Oct 2026)
+    "grade",
+    "grade_strategy",
+    "grade_score",
+    "grade_cost_r",
+    "grade_why",
+    "grade_entry_rule",
+    "grade_hold_sessions",
+    "grade_risk_mult",
+    "grade_stop",
+    "grade_stat_trades",
+    "grade_stat_win_pct",
+    "grade_stat_mean_r",
+    "grade_stat_median_r",
+    "grade_stat_years_pos",
+    "grade_stat_years",
+    "grade_stat_days_median",
+    "luk_level",
+    "luk_avwap",
+    "base_days",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

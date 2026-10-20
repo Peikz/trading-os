@@ -17,8 +17,9 @@ import pandas as pd
 from trading_os import clock, dashboard
 from trading_os.metrics import NEW_YORK
 
-SLOTS = ("pm", "am", "mid", "eod")
-MARKS = {"scheduled": "✅", "manual": "🟡 manual", "missing": "❌", "pending": "⏳"}
+SLOTS = ("pm", "am", "mid", "close", "eod")
+NEWER_SLOTS = {"close"}  # added 20 Oct 2026: sessions before its first run show "—"
+MARKS = {"scheduled": "✅", "manual": "🟡 manual", "missing": "❌", "pending": "⏳", "none": "—"}
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,12 +34,21 @@ def run_grid(data_dir: Path, schedule, now: dt.datetime, sessions: int = 10) -> 
             found[key] = run.kind
     ny = clock.ny_time(schedule, now)
     first = min((r.session for r in runs), default=ny.date())
+    started = {
+        slot: min((r.session for r in runs if r.slot == slot), default=None) for slot in NEWER_SLOTS
+    }
     rows = []
     days = [d for d in clock.sessions_back(schedule, ny.date(), sessions) if d >= first]
     for day in reversed(days):
         row = {"session": day}
         for slot in SLOTS:
             state = found.get((day, slot))
+            if (
+                state is None
+                and slot in NEWER_SLOTS
+                and (started[slot] is None or day < started[slot])
+            ):
+                state = "none"
             if state is None:
                 end = schedule.windows_et[slot][1]
                 due = day < ny.date() or (day == ny.date() and ny.time() > end)

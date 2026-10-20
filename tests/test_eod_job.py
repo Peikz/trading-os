@@ -9,6 +9,18 @@ from trading_os import clock, history, job, notify, store, tv
 from trading_os.config import load_config
 
 
+@pytest.fixture(autouse=True)
+def _grades_off(monkeypatch):
+    """These tests pin the push layout without study grades (tests/test_grade_live.py has
+    the graded one)."""
+    import dataclasses
+    from types import MappingProxyType
+
+    cfg = load_config()
+    off = dataclasses.replace(cfg, grading=MappingProxyType({**cfg.grading, "enabled": False}))
+    monkeypatch.setattr(job, "load_config", lambda *a, **k: off)
+
+
 def run_eod(argv):
     return job.main("eod", "EOD", "test", argv)
 

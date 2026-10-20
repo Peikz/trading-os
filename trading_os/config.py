@@ -17,9 +17,9 @@ import yaml
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "scans.yaml"
 
-SLOTS = frozenset({"pm", "am", "mid", "eod", "weekly"})
+SLOTS = frozenset({"pm", "am", "mid", "close", "eod", "weekly"})
 # During the session: 10:15 and 12:00 New York (Emil, 19 Oct 2026).
-INTRADAY_SLOTS = ("am", "mid")
+INTRADAY_SLOTS = ("am", "mid", "close")  # close: 15:45 (Emil, 20 Oct 2026)
 ACTIONS = frozenset({"push", "log", "watchlist"})
 TIERS = frozenset({"alert", "log"})
 # Pre-market "gap": TradingView field -> canonical column (docs/fields.md).
@@ -251,7 +251,7 @@ SEC_BULK_KEYS = {
     "header_minutes",
 }
 
-GRADING_KEYS = {"enabled", "stats_file", "risk_mult", "ungraded", "costs", "strategies"}
+GRADING_KEYS = {"enabled", "stats_file", "risk_mult", "push", "ungraded", "costs", "strategies"}
 GRADING_COST_KEYS = {
     "commission_pct",
     "slip_by_dvol",
@@ -277,6 +277,14 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     "ep9m_early": {"push_tier", "pm_volume_min", "pm_gap_min_pct", "pm_gap_basis"},
     "watchlist_gappers": {"lists", "pm_gap_min_pct", "pm_gap_basis"},
     "ep_day": {
+        "push_tier",
+        "gap_min_pct",
+        "rvol_min",
+        "volume_min",
+        "price_min",
+        "market_cap_min",
+    },
+    "ep_close": {
         "push_tier",
         "gap_min_pct",
         "rvol_min",
@@ -310,6 +318,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "up_count_rule",
     },
     "breakout_watch": {"push_tier"},
+    "luk_flush": {"push_tier"},
     "breakout_trigger": {"push_tier", "push_if_all", "partial_top_n"},
     "universe_snapshot": set(),
     "qm_gainers": {
