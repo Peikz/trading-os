@@ -275,6 +275,13 @@ intraday_study:                             # minute-bar entries and exits (Emil
                                             # done by then; EP9M "on pace" = volume so far /
                                             # this >= 9M (the live scan uses TradingView's
                                             # relative volume at time, not in the bars)
+  # Grading study only (Emil, 20 Oct 2026: "what makes most money"), all (proposed):
+  exit_sessions: 126                        # exits look up to 6 months ahead (the minute
+                                            # study's quarter cut long trends short)
+  mrev_mas: [10, 20]                        # out at yesterday's 10-/20-day MA: a bounce's
+                                            # target (parabolic long), a short's cover
+  r_targets: [1, 2, 3]                      # out at +1R / +2R / +3R ...
+  r_target_days: 10                         # ... within 10 sessions, else at that close
 
 luk:                                        # Martin Luk's setups, history studies only, not
                                             # live scans (Emil, 19 Oct 2026). He has published

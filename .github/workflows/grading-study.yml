@@ -1,0 +1,73 @@
+# The grading study (Emil, 20 Oct 2026): the 10-year minute study rebuilt for grading setups,
+# stocks only, every trade with its point-in-time features and every exit's holding days.
+# One job per year uploads grading_<year>.parquet to the data repo's "grading-10y" release.
+# Manual runs only. This repo is public: counts only.
+
+name: Grading study
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "JSON list of years"
+        default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+
+permissions:
+  contents: read
+
+jobs:
+  year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo (ticker types)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/ep_enrich/tickers.parquet
+          sparse-checkout-cone-mode: false
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Inputs for the year
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          Y=${{ matrix.year }}
+          mkdir -p bars hist cands minutes regime
+          for y in $((Y-2)) $((Y-1)) $Y $((Y+1)); do
+            gh release download bars-alpaca -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null || true
+          done
+          for y in $((Y-1)) $Y; do
+            gh release download history-10y -R "$REPO" -D hist -p "strategy_$y.parquet" -p "ep_$y.parquet" 2>/dev/null || true
+          done
+          gh release download intraday-minutes -R "$REPO" -D cands -p 'candidates_10y.parquet' 2>/dev/null || true
+          gh release download intraday-minutes -R "$REPO" -D minutes -p "$Y-*" 2>/dev/null || true
+          gh release download regime-10y -R "$REPO" -D regime -p 'regime_daily.parquet'
+          echo "bars $(ls bars | wc -l), histories $(ls hist | wc -l), minute files $(ls minutes | wc -l), cached candidates $(ls cands | wc -l)"
+
+      - name: Run the year
+        run: uv run --frozen --no-dev python -m trading_os.grading_study --year ${{ matrix.year }} --data-dir data-repo --bars bars --hits hist --minutes minutes --cands cands/candidates_10y.parquet --regime regime/regime_daily.parquet --out out
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view grading-10y -R "$REPO" >/dev/null 2>&1 || gh release create grading-10y -R "$REPO" --title "Grading study, 10 years" --notes "Stock trades only, each with its point-in-time features and every exit: one file per year." >/dev/null 2>&1 || true
+          gh release upload grading-10y out/grading_${{ matrix.year }}.parquet -R "$REPO" --clobber

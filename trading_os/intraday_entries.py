@@ -112,8 +112,9 @@ class Book:
         for rule, level in stops.items():
             if level is None or not np.isfinite(level):
                 continue
-            if rule != "adr":
-                level = min(level, price - floor) if side > 0 else max(level, price + floor)
+            # The floor holds for the 1-ADR stop too: on a quiet name (a T-bill fund, a
+            # merger target) 1 ADR is a few cents, and R ran into the hundreds.
+            level = min(level, price - floor) if side > 0 else max(level, price + floor)
             if (price - level) * side <= 0:
                 continue
             self.rows.append(

@@ -459,8 +459,11 @@ def trail_lines(g: dict) -> dict[str, np.ndarray]:
 KEEP = ("group", "session_date", "ticker", "prev_close", "adr_usd", "signal_date", "rs_rating")
 
 
-def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataFrame:
-    """Every entry x stop rule for one month's candidates, with every exit."""
+def study_month(
+    month_bars, cands, g, lines, sessions, tickers, cfg, keep=KEEP, extra=None, k=None
+) -> pd.DataFrame:
+    """Every entry x stop rule for one month's candidates, with every exit. `keep`: the
+    candidate columns each trade carries; `extra`, `k`: see `intraday_exits.run`."""
     from trading_os import intraday_entries as ie
     from trading_os import intraday_exits
 
@@ -474,8 +477,12 @@ def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataF
         b = ie.for_group(b, rec["group"])
         for entry in ie.RULES[rec["group"]](b, rec, p):
             stopped, price = ie.entry_day_exit(b, entry)
-            keep = {k: rec.get(k) for k in KEEP}
-            rows.append(keep | entry | {"stopped0": stopped, "exit0": price})
+            kept = {name: rec.get(name) for name in keep}
+            start = entry["start"]
+            minute = int(b.m[start]) if start < len(b.m) else ie.CLOSE
+            rows.append(
+                kept | entry | {"stopped0": stopped, "exit0": price, "entry_minute": minute}
+            )
     if not rows:
         return pd.DataFrame()
     trades = pd.DataFrame(rows)
@@ -497,6 +504,8 @@ def study_month(month_bars, cands, g, lines, sessions, tickers, cfg) -> pd.DataF
         trades["side"].to_numpy(dtype=int),
         (trades["stopped0"].to_numpy(dtype=bool), trades["exit0"].to_numpy(dtype=float)),
         cfg.exits,
+        extra,
+        k or intraday_exits.K,
     )
     trades = trades.assign(**results)
     trades["risk_adr"] = (trades["price"] - trades["stop"]).abs() / trades["adr_usd"]
@@ -597,8 +606,11 @@ def load_results(data_dir) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def run_study(g, tickers, sessions, cands, minutes_dir, cfg) -> pd.DataFrame:
-    """Month by month over the minute files in `minutes_dir`."""
+def run_study(
+    g, tickers, sessions, cands, minutes_dir, cfg, keep=KEEP, extra=None, k=None
+) -> pd.DataFrame:
+    """Month by month over the minute files in `minutes_dir` (`keep`, `extra`, `k`: see
+    `study_month`)."""
     from pathlib import Path
 
     lines = trail_lines(g)
@@ -611,7 +623,7 @@ def run_study(g, tickers, sessions, cands, minutes_dir, cfg) -> pd.DataFrame:
         if part.empty:
             continue
         bars = load_minutes(minutes_dir, month)
-        found = study_month(bars, part, g, lines, sessions, tickers, cfg)
+        found = study_month(bars, part, g, lines, sessions, tickers, cfg, keep, extra, k)
         if len(found):
             frames.append(found)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

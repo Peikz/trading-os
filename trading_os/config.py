@@ -140,6 +140,10 @@ INTRADAY_STUDY_KEYS = {
     "wide_stop_adr",
     "min_stop_pct",
     "pace_fraction",
+    "exit_sessions",
+    "mrev_mas",
+    "r_targets",
+    "r_target_days",
 }
 EP_HISTORY_KEYS = {
     "neglect_band_pct",
