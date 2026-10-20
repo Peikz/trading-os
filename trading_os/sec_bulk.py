@@ -31,13 +31,16 @@ Tables (release `sec-10y` in the data repo):
 Acceptance times: the submissions JSON writes `acceptanceDateTime` as UTC, but about a third of
 the values are UTC plus the Eastern offset again (checked against EDGAR's own filing headers,
 `--mode check`, 20 Oct 2026: 147 of 400 filings, every year since 2015, every form, no JSON
-field tells them apart). Times outside EDGAR's hours (06:00-22:00 New York) and times after
-17:30 that still kept that day's filing date are shifted back by the offset. A pre-market
-release shifted this way looks like a mid-morning one, so earnings events in that window
-(`ambiguous`) are checked against the filing header, newest first, within `header_minutes` a
-run; the checks are cached in the release (`acceptance_checks.parquet`). `time_basis` says
-which: header, json, json_shifted. Filings left unchecked keep the later JSON time, which can
-only make a quarter known later than it was, never earlier.
+field tells them apart). The bulk file also holds Eastern wall times written as UTC (4-5 hours
+early), mostly for 2015-2023 filings. Readings in the small hours of the filing day (02:00-06:00
+New York) are taken as Eastern times; other readings outside EDGAR's hours (06:00-22:00) and
+readings after 17:30 that still kept that day's filing date are moved back by the offset.
+Readings in the mid-morning window can be a pre-market release shown late, a real mid-day one
+or an afternoon one shown early, and only the first moves the reaction session, so earnings
+events there (`ambiguous`) are checked against the filing header, newest first, within
+`header_minutes` a run; the checks are cached in the release (`acceptance_checks.parquet`).
+`time_basis` says which: header, json, json_shifted. Outside that window the conventions can
+mislabel the timing (intraday vs after-close) but rarely the reaction session.
 
 `pit_join(rows, tables, ...)` adds the features for (ticker, session_date[, raw_close]) rows
 using only what was public before that session's 09:30 open. Logs print counts only.
@@ -95,6 +98,7 @@ FUND_FORMS = frozenset(
 )
 FOREIGN_FORMS = frozenset({"20-F", "40-F"})
 EDGAR_OPEN, EDGAR_CLOSE, LATE = 6 * 60, 22 * 60, 17 * 60 + 30  # minutes, New York
+WALL_FROM = 2 * 60  # 02:00-06:00 on the filing day: an Eastern time written as UTC
 OPEN, CLOSE = 9 * 60 + 30, 16 * 60
 
 # (taxonomy, concept, unit) -> (group, preference rank); the lowest rank a filing uses wins.
@@ -319,7 +323,10 @@ def offset_class(json_value: str, header_et: dt.datetime) -> str:
 def acceptance_times(raw: pd.Series, filed: pd.Series) -> pd.DataFrame:
     """Best UTC acceptance time from the JSON value alone (see the module docstring):
     `accepted` (tz-aware UTC), `time_basis` (json / json_shifted) and `ambiguous` (could be a
-    pre-market time shown 4-5 hours late, so worth a header check)."""
+    pre-market time shown 4-5 hours late, or an afternoon one shown 4-5 hours early, so worth a
+    header check). Readings in the small hours of the filing day are Eastern times written as
+    UTC (moved 4-5 hours later); other readings outside EDGAR's hours, and late ones that kept
+    the day's filing date, are UTC plus the offset again (moved earlier)."""
     utc = pd.to_datetime(raw, utc=True, format="ISO8601", errors="coerce")
     utc = utc.astype("datetime64[ns, UTC]")
     local = utc.dt.tz_convert(NEW_YORK).dt.tz_localize(None)
@@ -328,13 +335,16 @@ def acceptance_times(raw: pd.Series, filed: pd.Series) -> pd.DataFrame:
     same_day = local.dt.normalize() == pd.to_datetime(filed, errors="coerce").astype(
         "datetime64[ns]"
     )
-    shift = (minutes < EDGAR_OPEN) | (minutes >= EDGAR_CLOSE) | ((minutes >= LATE) & same_day)
+    wall = (minutes >= WALL_FROM) & (minutes < EDGAR_OPEN) & same_day
+    early = (minutes < EDGAR_OPEN) | (minutes >= EDGAR_CLOSE) | ((minutes >= LATE) & same_day)
+    early &= ~wall
     shifted = minutes - offset.dt.total_seconds() // 60
-    ambiguous = ~shift & (minutes >= OPEN) & (shifted >= EDGAR_OPEN) & (shifted < OPEN)
+    ambiguous = ~(early | wall) & (minutes >= OPEN) & (shifted >= EDGAR_OPEN) & (shifted < OPEN)
+    best = utc.where(~early, utc - offset).where(~wall, utc + offset)
     return pd.DataFrame(
         {
-            "accepted": utc.where(~shift, utc - offset),
-            "time_basis": np.where(shift, "json_shifted", "json"),
+            "accepted": best,
+            "time_basis": np.where(early | wall, "json_shifted", "json"),
             "ambiguous": ambiguous.fillna(False).astype(bool),
         },
         index=raw.index,

@@ -43,10 +43,19 @@ def test_acceptance_times_shift_impossible_and_late_same_day_values():
             "2025-07-31T02:10:00.000Z",  # 22:10 ET: EDGAR was closed, so 18:10
             "2025-07-31T22:00:00.000Z",  # 18:00 ET, filed the next day: genuinely late
             "2025-01-15T12:30:00.000Z",  # 07:30 EST: pre-market, nothing to check
+            "2021-05-05T07:30:00.000Z",  # 03:30 ET on the filing day: 07:30 ET written as UTC
         ]
     )
     filed = pd.Series(
-        ["2025-07-31", "2025-07-31", "2025-07-31", "2025-07-30", "2025-08-01", "2025-01-15"]
+        [
+            "2025-07-31",
+            "2025-07-31",
+            "2025-07-31",
+            "2025-07-30",
+            "2025-08-01",
+            "2025-01-15",
+            "2021-05-05",
+        ]
     )
     got = sec_bulk.acceptance_times(raw, filed)
     utc = [t.strftime("%Y-%m-%d %H:%M") for t in got["accepted"]]
@@ -57,6 +66,7 @@ def test_acceptance_times_shift_impossible_and_late_same_day_values():
         "2025-07-30 22:10",
         "2025-07-31 22:00",
         "2025-01-15 12:30",
+        "2021-05-05 11:30",
     ]
     assert list(got["time_basis"]) == [
         "json",
@@ -65,8 +75,9 @@ def test_acceptance_times_shift_impossible_and_late_same_day_values():
         "json_shifted",
         "json",
         "json",
+        "json_shifted",
     ]
-    assert list(got["ambiguous"]) == [False, False, True, False, False, False]
+    assert list(got["ambiguous"]) == [False, False, True, False, False, False, False]
 
 
 def test_apply_checks_takes_the_header_time():
