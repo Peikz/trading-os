@@ -94,3 +94,29 @@ def test_a_cap_per_grade_leaves_room_for_the_better_grades():
     capped = sim.Rules(**base, max_by_grade={"B": 2})
     _, taken = sim.simulate(trades, closes, sessions, tickers, capped)
     assert set(taken["ticker"]) == {"B1", "B2", "A1"}
+
+
+def test_a_trade_can_carry_its_own_risk_multiple():
+    from trading_os import portfolio_sim as sim
+
+    sessions = list(pd.bdate_range("2021-01-04", periods=30).date)
+    closes = np.full((30, 2), 10.0)
+    trades = pd.DataFrame(
+        {"ticker": ["X", "Y"], "grade": ["A", "A"], "entry_minute": [600, 600], "priority": 0.0}
+    ).assign(
+        session_date=sessions[0],
+        trade_id=[0, 1],
+        side=1,
+        price=10.0,
+        stop=9.0,
+        frac_1=1.0,
+        days_1=5,
+        r_1=1.0,
+        cost_pct=0.0,
+        strategy="x",
+        risk_mult=[2.0, np.nan],  # NaN: the grade's own risk
+    )
+    rules = sim.Rules(risk_pct={"A": 0.5}, max_position_pct=100.0, liquidity_pct=100.0)
+    _, taken = sim.simulate(trades, closes, sessions, ["X", "Y"], rules)
+    risk = taken.set_index("ticker")["risk_usd"]
+    assert risk["X"] == pytest.approx(2 * risk["Y"])

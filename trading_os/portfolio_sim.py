@@ -7,7 +7,8 @@ day, entry minute, entry price and stop, side, grade, and one or two exit legs (
 after the entry day, fraction of the position, R of that leg). The simulation decides which
 trades the account could take and how big:
 
-- risk per trade = equity x the grade's risk %, cut in a drawdown (`dd_steps`);
+- risk per trade = equity x the grade's risk %, times the trade's own `risk_mult` when the
+  trades have one (e.g. bigger in a cool market), cut in a drawdown (`dd_steps`);
 - shares = risk / (entry - stop), then capped by the largest position (% of equity), the
   stock's liquidity (% of its 20-day average dollar volume) and the room left under the
   gross exposure cap (100 % = no margin);
@@ -103,6 +104,8 @@ def simulate(
             if len(open_pos) >= rules.max_positions or new_today >= rules.max_new_per_day:
                 break
             risk_pct = rules.risk_pct.get(row["grade"], 0.0)
+            own = row.get("risk_mult", 1.0)  # the trade's own multiple; NaN or none: 1
+            risk_pct *= 1.0 if own is None or own != own else float(own)
             if risk_pct <= 0 or row["ticker"] in held:
                 continue
             cap = rules.max_by_grade.get(row["grade"])
