@@ -49,6 +49,7 @@ from trading_os import (
     review,
     sizing,
     stats,
+    stock_notes,
     strategy_history,
     timer,
     tv,
@@ -1076,6 +1077,40 @@ elif page == "Chart":
     if eod:
         exchanges = exchanges_of(str(eod[0].universe))
     st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
+
+    st.subheader(f"Notes on {ticker}")
+    with st.form("ch-note", clear_on_submit=True):
+        a, b = st.columns([1, 4])
+        note_day = a.date_input("Day", value=dt.date.today(), key="ch_note_day")
+        text = b.text_area("New note", key="ch_note_text", height=90)
+        if st.form_submit_button("Save note") and text.strip():
+            stock_notes.add(data_dir, ticker, text, note_day)
+            st.rerun()
+    notes = stock_notes.current(data_dir, ticker)
+    if not len(notes):
+        st.caption("No notes on this stock yet.")
+    for n in notes.to_dict("records"):
+        edited = n["saved_ts"] != n["created_ts"]
+        st.markdown(
+            f"**{n['note_date']}** · written {n['created_ts']:%Y-%m-%d}"
+            + (f" · edited {n['saved_ts']:%Y-%m-%d}" if edited else "")
+        )
+        st.text(n["text"])
+        with st.popover("Edit or delete"), st.form(f"ch-note-{n['note_id']}"):
+            new_day = st.date_input("Day", value=n["note_date"], key=f"nd-{n['note_id']}")
+            new_text = st.text_area("Note", value=n["text"], key=f"nt-{n['note_id']}")
+            a, b = st.columns(2)
+            if a.form_submit_button("Save") and new_text.strip():
+                stock_notes.edit(data_dir, n["note_id"], ticker, new_text, new_day)
+                st.rerun()
+            if b.form_submit_button("Delete"):
+                stock_notes.remove(data_dir, n["note_id"])
+                st.rerun()
+    st.caption(
+        "Notes are saved at once on this PC in the data repo (data/journal/stock_notes/) and "
+        "kept for good: an edit or a delete adds a row and never erases the old text. Use "
+        "“Save & push” to send them to GitHub."
+    )
 
     with st.expander("Type in a trend line or an anchor"):
         recent = bars.tail(504) if len(bars) else bars

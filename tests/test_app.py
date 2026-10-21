@@ -220,3 +220,23 @@ def test_the_market_page_shows_the_setups_at_todays_heat(data_repo, monkeypatch)
     assert not at.exception, [e.value for e in at.exception]
     assert any("Warm market: scan count 60" in s.value for s in at.subheader)
     assert any("held" in str(df.value) for df in at.dataframe)
+
+
+def test_chart_notes_show_old_notes_and_save_new_ones(data_repo, monkeypatch):
+    import datetime as dt
+
+    from trading_os import stock_notes
+
+    stock_notes.add(data_repo, "AAA", "base looked loose", dt.date(2025, 6, 2))
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Chart").run()
+    at.text_input(key="ch_ticker").input("AAA").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("base looked loose" in t.value for t in at.text)
+    at.text_area(key="ch_note_text").input("tight flag, watch the pivot")
+    next(b for b in at.button if b.label == "Save note").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    saved = stock_notes.current(data_repo, "AAA")["text"].tolist()
+    assert saved == ["tight flag, watch the pivot", "base looked loose"]
+    assert any("tight flag" in t.value for t in at.text)
