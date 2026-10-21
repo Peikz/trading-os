@@ -105,13 +105,72 @@ def variants(t: pd.DataFrame) -> dict:
     }
 
 
+LADDER = {
+    "0.5 / 0.375 %": (0.5, 0.375),
+    "0.75 / 0.5 %": (0.75, 0.5),
+    "1 / 0.75 %": (1.0, 0.75),
+    "1.5 / 1 %": (1.5, 1.0),
+    "2 / 1.5 %": (2.0, 1.5),
+    "2.5 / 2 %": (2.5, 2.0),
+    "3 / 2.25 %": (3.0, 2.25),
+}
+
+
+def quality_package(path: Path, r_column: str = R_COLUMN) -> pd.DataFrame:
+    """The clean quality package (section 8): EP A+ at the close, EP9M A+ at 10:15, Luk A."""
+    v = pd.read_parquet(path)
+    v["session_date"] = pd.to_datetime(v["session_date"]).dt.date
+    parts = [
+        v[(v.strategy == "ep") & (v.entry == "close") & (v.quality >= 5)].assign(grade="A+"),
+        v[(v.strategy == "ep9m") & (v.entry == "t_1015") & (v.quality >= 5)].assign(grade="A+"),
+        v[(v.strategy == "luk_avwap_flush") & (v.luk_market_tight == 1)].assign(grade="A"),
+    ]
+    t = pd.concat(parts, ignore_index=True)
+    t["trade_id"], t["priority"], t["side"] = np.arange(len(t)), t["quality"], t["side"].astype(int)
+    t["net"] = t[r_column]
+    t["frac_1"], t["days_1"], t["r_1"] = 1.0, t["days"].fillna(0).astype(int), t["net"]
+    t["cost_pct"] = 0.0
+    return t
+
+
+def sizing(t: pd.DataFrame, files) -> None:
+    """Setups only (section 9): the risk ladder, its bad-case drawdowns, and the brake."""
+    sessions, tickers, cl = closes(files, set(t.ticker))
+    curves, rows = {}, []
+    variants = {k: {"risk_pct": {"A+": a, "A": b}} for k, (a, b) in LADDER.items()}
+    variants["1 / 0.75 %, no drawdown brake"] = {"risk_pct": {"A+": 1.0, "A": 0.75}, "dd_steps": ()}
+    for name, rules in variants.items():
+        curve, taken = sim.simulate(t, cl, sessions, tickers, sim.Rules(r_cap=NO_CAP, **rules))
+        m = sim.summary(curve, taken)
+        rows.append({"risk": name} | {k: m[k] for k in ("cagr_pct", "max_dd_pct", "sharpe")})
+        curves[name] = curve.set_index(pd.to_datetime(curve["session_date"]))["equity"]
+    print(pd.DataFrame(rows).round(2).to_string(index=False))
+    # today's risk first: the bootstrap counts how often each level beats it
+    frame = pd.DataFrame({k: curves[k] for k in ["1 / 0.75 %", *LADDER]})
+    print(ps.bootstrap(frame.dropna().pct_change().dropna(), draws=2000).round(1).to_string())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--data-dir", type=Path, required=True)
-    parser.add_argument("--bench", type=Path, required=True, help="portfolio_study --out folder")
+    parser.add_argument("--bench", type=Path, help="portfolio_study --out folder")
+    parser.add_argument(
+        "--sizing", action="store_true", help="setups only: the risk ladder (section 9)"
+    )
     args = parser.parse_args()
     cfg = load_config()
     repo = remote_data.repo_of(args.data_dir)
+    if args.sizing:
+        bars = remote_data.fetch(repo, "bars-alpaca", "20[12][0-9].parquet")
+        live = graded_trades(remote_data.fetch(repo, "grading-10y", TRADES)[0], cfg)
+        print("Live grades, A only")
+        sizing(live[live["grade"].isin(["A+", "A"])], [f for f in bars if int(f.stem) >= 2019])
+        print("Clean quality package")
+        sizing(
+            quality_package(remote_data.fetch(repo, "grading-10y", "validated_trades.parquet")[0]),
+            bars,
+        )
+        return 0
     t = graded_trades(remote_data.fetch(repo, "grading-10y", TRADES)[0], cfg)
     files = remote_data.fetch(repo, "bars-alpaca", "20[12][0-9].parquet")
     recent = [f for f in files if int(f.stem) >= 2019]
