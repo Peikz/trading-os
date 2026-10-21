@@ -1004,15 +1004,35 @@ elif page == "Screens":
 
 elif page == "Chart":
     st.header("Chart")
-    picks = []
+    # Every alert-tier hit of the newest session's runs, pushed ones first (most hits are C:
+    # counted in the push, not shown, so "pushed" alone was often empty), then your
+    # watchlists and open positions.
+    where: dict[str, str] = {}
     if runs:
-        hits_now = candidates_of(runs[0])
-        picks += list(dict.fromkeys(hits_now.loc[hits_now["pushed"].fillna(False), "ticker"]))
-    picks += list(my_watchlists.current(my_watchlists.load(data_dir))["ticker"])
-    picks += list(dashboard.latest_positions(data_dir).get("ticker", []))
-    picks = list(dict.fromkeys(picks))
+        today = [r for r in runs if r.session == runs[0].session]
+        hits_today = pd.concat([candidates_of(r) for r in today], ignore_index=True)
+        if len(hits_today):
+            if "tier" in hits_today:
+                hits_today = hits_today[hits_today["tier"] == "alert"]
+            pushed = hits_today.get("pushed", pd.Series(False, index=hits_today.index))
+            hits_today = hits_today.assign(_pushed=pushed.fillna(False).astype(bool))
+            hits_today = hits_today.sort_values("_pushed", ascending=False, kind="stable")
+            for row in hits_today.to_dict("records"):
+                label = report.SCAN_LABELS.get(row["scan"], row["scan"])
+                tag = f"{label}{' · pushed' if row['_pushed'] else ''}"
+                where.setdefault(row["ticker"], tag)
+    for t in my_watchlists.current(my_watchlists.load(data_dir))["ticker"]:
+        where.setdefault(t, "watchlist")
+    for t in dashboard.latest_positions(data_dir).get("ticker", []):
+        where.setdefault(t, "open position")
+    picks = list(where)
     a, b = st.columns([2, 2])
-    quick = a.selectbox("Pushed today, watchlists, open positions", ["—", *picks], key="ch_pick")
+    quick = a.selectbox(
+        "Today's hits (pushed first), watchlists, open positions",
+        ["—", *picks],
+        format_func=lambda t: t if t == "—" else f"{t}  ({where[t]})",
+        key="ch_pick",
+    )
     typed = b.text_input("…or type any ticker (wins over the list)", key="ch_ticker")
     ticker = (typed.strip() or ("" if quick == "—" else quick)).upper()
     if not ticker:
