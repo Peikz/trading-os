@@ -375,7 +375,9 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    16:45–17:00 ET the evening of an after-close earnings release). The 15:45 EP close check is off.
    Quality grades for every graded setup (Emil, 21 Oct 2026: "switch to quality grades";
    `quality_enabled: true`): EP9M by the same six points with "earnings in the last 10 sessions"
-   (5–6 = A+, 4 = B, bought after the 10:15 check; names first found at 12:00 take the 12:00 plan),
+   (5–6 = A+, fewer = C: as B, 4 points doubled the trades and halved the 2022–26 account result
+   in the portfolio report's shuffled runs, so Emil made it C on 21 Oct 2026; bought after the
+   10:15 check; names first found at 12:00 take the 12:00 plan),
    the Luk flush A when the market isn't hot and the
    5-day range is tight (bought the next session ~10:30). An EP 10:30 gap that the 16:50 check pushed
    the evening before shows "flagged last evening" instead of a second buy (one position per stock).

@@ -431,7 +431,9 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
       hold_sessions: 21
     ep9m:
       parts: [earnings_recent, sideways_1_2m, market_cool_lt45, revenue_accel, eps_yoy_pos, near_52w_high]
-      grades: [[5, "A+"], [4, "B"]]         # 5-6: +0.65R at 10:15 on 2022-26
+      grades: [[5, "A+"]]                   # 5-6: +0.65R at 10:15 on 2022-26; 4 points is C
+                                            # (Emil, 21 Oct 2026: as B it doubled the trades and
+                                            # halved the 2022-26 account result, 14.4 % -> 6.7 %)
       live_scans: [ep9m_pace]
       entries: {ep9m_pace: t_1015, "ep9m_pace@mid": t_1200}   # 12:00 names: the 12:00 plan
       stop_adr: 1.0

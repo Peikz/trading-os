@@ -146,6 +146,10 @@ def test_the_quality_counts_grade_every_live_setup():
     assert grader.grade("ep_am", four | {"eps_yoy_pct": 5.0}, rules).grade == "A+"
     assert grader.grade("ep_ah", {}, rules).plan["entry"] == "ah_1645"
     assert grader.quality_for("ep9m_pace", rules) == "ep9m"
+    ep9m_four = four | {"sessions_since_earnings": 3}
+    ep9m_four.pop("is_earnings_reaction_day")
+    assert grader.grade("ep9m_pace", ep9m_four, rules).grade == "C"  # 4 points: C (21 Oct 2026)
+    assert grader.grade("ep9m_pace", ep9m_four | {"eps_yoy_pct": 5.0}, rules).grade == "A+"
     assert grader.quality_for("luk_flush", rules) == "luk_avwap_flush"
     only_ep = rules | {"quality_enabled": ["ep"]}
     assert grader.quality_for("ep9m_pace", only_ep) is None  # a list switches some on
