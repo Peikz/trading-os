@@ -278,3 +278,19 @@ def test_setup_candidates_fetch_the_trigger_day_when_it_reaches_the_pivot(monkey
     assert rows["session_date"].tolist() == [days[41]] and rows["group"].tolist() == ["qm_surf"]
     assert rows["signal_date"].tolist() == [hit] and rows["surf_ma"].tolist() == [10]
     assert pockets["strategy"].tolist() == ["pocket_pivot"]
+
+
+def test_ep_entries_inside_saxos_extended_hours():
+    from trading_os import intraday_entries as ie
+    from trading_os.intraday_study import params
+
+    p = params(CFG)
+    m = np.array([-460, -440, 400, 430, 570, 571])  # 16:20, 16:40 the evening before; 06:40, 07:10
+    c = np.array([11.0, 11.2, 11.5, 11.6, 11.8, 11.9])
+    v = np.array([40_000, 20_000, 60_000, 30_000, 100_000, 100_000], dtype=float)
+    b = ie.Bars(m, c.copy(), c + 0.05, c - 0.05, c, v, c)
+    rows = ie.gap(b, {"prev_close": 10.0, "adr_usd": 0.5}, p)
+    ah = next(r for r in rows if r["entry"] == "ah_1645")
+    assert ah["price"] == pytest.approx(11.2)  # +12 % on 60K shares by 16:45
+    pm = next(r for r in rows if r["entry"] == "pm_0705" and r["stop_rule"] == "lod")
+    assert pm["price"] == pytest.approx(11.5)  # the 06:40 bar: +15 %, 60K pre-market shares

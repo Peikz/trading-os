@@ -53,7 +53,7 @@ COSTS: dict[str, Any] = {
     "borrow_easy_price": 10.0,
 }
 OPEN_ENTRIES = {"open", "orh_5m", "next_open", "next_orb_5m"}
-OFFHOURS_ENTRIES = {"ah_1800", "pm_0800", "pm_0915"}
+OFFHOURS_ENTRIES = {"ah_1645", "ah_1800", "pm_0705", "pm_0800", "pm_0915"}
 STOP_ENTRIES = {
     "orh_5m",
     "orh_15m",

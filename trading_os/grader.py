@@ -42,7 +42,7 @@ from typing import Any
 
 GRADES = ("A+", "A", "B", "C")
 OPEN_ENTRIES = {"open", "orh_5m", "next_open", "next_orb_5m"}
-OFFHOURS_ENTRIES = {"ah_1800", "pm_0800", "pm_0915"}
+OFFHOURS_ENTRIES = {"ah_1645", "ah_1800", "pm_0705", "pm_0800", "pm_0915"}
 
 
 @dataclass(frozen=True)

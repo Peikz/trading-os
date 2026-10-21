@@ -588,7 +588,7 @@ def study_month(
     return trades.drop(columns=["start", "exit0", "stopped0"])
 
 
-OFF_SESSION = ("ah_1800", "pm_0800", "pm_0915")
+OFF_SESSION = ("ah_1645", "ah_1800", "pm_0705", "pm_0800", "pm_0915")
 MISMATCH = 0.03  # 3 % outside the day's daily range: the minute and daily data disagree
 
 

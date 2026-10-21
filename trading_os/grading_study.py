@@ -338,17 +338,21 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cands", type=Path, help="candidates_10y.parquet, when present")
     parser.add_argument("--regime", type=Path, help="regime_daily.parquet")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--groups", default="", help="only these candidate groups (comma list)")
+    parser.add_argument("--suffix", default="", help="added to the output name, e.g. _ep")
     args = parser.parse_args(argv)
     cfg = load_config()
     cands = None
     if args.cands and args.cands.exists():
         cands = pd.read_parquet(args.cands)
         cands["session_date"] = pd.to_datetime(cands["session_date"]).dt.date
+    if cands is not None and args.groups:
+        cands = cands[cands["group"].isin(args.groups.split(","))]
     regime = pd.read_parquet(args.regime) if args.regime and args.regime.exists() else None
     funds = regime_study.non_stocks(args.data_dir)
     trades = run_year(cfg, args.year, args.bars, args.hits, args.minutes, cands, funds, regime)
     args.out.mkdir(parents=True, exist_ok=True)
-    trades.to_parquet(args.out / f"grading_{args.year}.parquet", **PARQUET_OPTIONS)
+    trades.to_parquet(args.out / f"grading_{args.year}{args.suffix}.parquet", **PARQUET_OPTIONS)
     counts = trades.groupby("strategy").size().to_dict() if len(trades) else {}
     status(f"Grading {args.year}: {len(trades)} trades, {len(trades.columns)} columns {counts}")
     return 0

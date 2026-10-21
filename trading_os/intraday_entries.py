@@ -8,7 +8,8 @@ bar that started before 10:30.
 
 | strategy              | entries                                    | rule at entry time      |
 |-----------------------|--------------------------------------------|-------------------------|
-| ep (gap stocks)       | 18:00 the evening before, 08:00, 09:15     | EP-AH / EP-PM move      |
+| ep (gap stocks)       | 16:45/18:00 the evening before, 07:05,     | EP-AH / EP-PM move      |
+|                       | 08:00, 09:15                               |                         |
 |                       | the open, 5/15/30/60-min range high,       | opening gap >= 10 %     |
 |                       | 10:30, 12:00, the close                    |                         |
 | ep9m                  | 10:15, 12:00, the close                    | +4 %, on pace for 9M    |
@@ -152,17 +153,21 @@ def gap(b: Bars, row: Mapping[str, Any], p: Mapping[str, Any]) -> list[dict]:
     """EP entries on a gap stock (strategy "ep")."""
     book, prev = Book(row["adr_usd"], p), row["prev_close"]
     s0, s1 = b.session()
-    # After hours the evening before (EP-AH rule at 18:00).
+    # After hours the evening before (EP-AH rule at 18:00; and at 16:45, inside Saxo's
+    # extended hours, which end at 17:00 New York).
     a0 = b.first(-480)
-    i = _at(b, -360, a0)
-    if i is not None and a0 < b.first(-360):
+    for name, minute in (("ah_1645", -435), ("ah_1800", -360)):
+        i = _at(b, minute, a0)
+        if i is None or not a0 < b.first(minute):
+            continue
         price = float(b.c[i])
         ah_volume = b.v[a0 : i + 1].sum()
-        if (price / prev - 1) * 100 >= p["ah_change_min_pct"] and ah_volume >= p["ah_volume_min"]:
-            book.add("ep", "ah_1800", 1, i + 1, price, {}, ah_change_pct=(price / prev - 1) * 100)
-    # Pre-market (EP-PM rule at 08:00 and 09:15).
+        change = (price / prev - 1) * 100
+        if change >= p["ah_change_min_pct"] and ah_volume >= p["ah_volume_min"]:
+            book.add("ep", name, 1, i + 1, price, {}, ah_change_pct=change)
+    # Pre-market (EP-PM rule at 07:05, as Saxo's pre-market opens, 08:00 and 09:15).
     p0 = b.first(240)
-    for name, minute in (("pm_0800", 480), ("pm_0915", 555)):
+    for name, minute in (("pm_0705", 425), ("pm_0800", 480), ("pm_0915", 555)):
         i = _at(b, minute, p0)
         if i is None:
             continue

@@ -11,6 +11,12 @@ on:
       years:
         description: "JSON list of years"
         default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+      groups:
+        description: "only these candidate groups, comma list (empty: all)"
+        default: ""
+      suffix:
+        description: "added to the file names, e.g. _ep (empty: the main files)"
+        default: ""
 
 permissions:
   contents: read
@@ -62,7 +68,7 @@ jobs:
           echo "bars $(ls bars | wc -l), histories $(ls hist | wc -l), minute files $(ls minutes | wc -l), cached candidates $(ls cands | wc -l)"
 
       - name: Run the year
-        run: uv run --frozen --no-dev python -m trading_os.grading_study --year ${{ matrix.year }} --data-dir data-repo --bars bars --hits hist --minutes minutes --cands cands/candidates_10y_v2.parquet --regime regime/regime_daily.parquet --out out
+        run: uv run --frozen --no-dev python -m trading_os.grading_study --year ${{ matrix.year }} --data-dir data-repo --bars bars --hits hist --minutes minutes --cands cands/candidates_10y_v2.parquet --regime regime/regime_daily.parquet --out out --groups "${{ inputs.groups }}" --suffix "${{ inputs.suffix }}"
 
       - name: Upload
         env:
@@ -70,4 +76,4 @@ jobs:
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
           gh release view grading-10y -R "$REPO" >/dev/null 2>&1 || gh release create grading-10y -R "$REPO" --title "Grading study, 10 years" --notes "Stock trades only, each with its point-in-time features and every exit: one file per year." >/dev/null 2>&1 || true
-          gh release upload grading-10y out/grading_${{ matrix.year }}.parquet -R "$REPO" --clobber
+          gh release upload grading-10y out/grading_${{ matrix.year }}${{ inputs.suffix }}.parquet -R "$REPO" --clobber
