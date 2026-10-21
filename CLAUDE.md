@@ -26,6 +26,18 @@ You are building Trading OS for Emil. `SPEC.md` is the source of truth. `BACKLOG
 - **No automated trading.** Nothing places orders.
 - **Respect rate limits:** TradingView screener — a few requests per run, never loops; Massive free tier — max 5 calls/minute.
 
+## Research and backtests (learned 20–21 Oct 2026)
+The results live only in the private data repo (`docs/research/`, start with `how-we-test.md`); this file holds the rules. Each one below once made a result look better than it was, and those numbers had to be withdrawn.
+- **Entries use only what was known at that minute, and so does the candidate set.** A set built from a later fact (e.g. "the next open gapped 3 %+") silently drops the losers of earlier entries. Check whether every trade shares a condition known only after its entry.
+- **Pick on 2016–2021, score frozen on 2022–2026.** A threshold or rule read off all years is not a test.
+- **Account simulations take trades in real arrival order** (`portfolio_sim`'s own sort), never best-grade-first across the day.
+- **One simulated path is noise.** Report the median and 80 % range of ~100 runs with the same-minute order shuffled.
+- **Use uncapped R** (`net_uncapped`, `r_cap` off) so exits agree with the closes positions are marked at.
+- **Judge clustered setups per signal day and in the account**, not by their per-trade average.
+- **Costs in R:** stops at least 1 % and 0.25 ADR away; ETFs and funds left out.
+- **Reproduce a reported number exactly before building on it.**
+- **Emil trades setups only:** indexes appear only as a labelled yardstick, never as a plan. Results are facts about past rules, not advice.
+
 ## Code conventions
 - Python 3.12, `pyproject.toml`, `ruff` for lint/format, `pytest` for tests.
 - Layout: `trading_os/` (package), `config/scans.yaml`, `scripts/` (job entry points), `tests/`, `data/`, `docs/`.
