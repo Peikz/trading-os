@@ -77,16 +77,26 @@ once:
 2. On GitHub: **Settings → Developer settings → Fine-grained tokens → Generate new token**.
    Repository access: *Only select repositories* → `trading-os`. Permissions: *Actions: Read and
    write* (nothing else). Expiry: up to a year; note the date.
-3. In a terminal in the Trading-OS folder: `uv run python scripts/timer_setup.py`, and paste the
-   two keys at its prompts (they aren't shown or saved on the PC; the GitHub token ends up only
-   in the cron-job.org jobs).
-4. Check: `uv run python scripts/timer_setup.py --list` shows 14 jobs. The next trading day,
-   System health → *Load the latest runs from GitHub* should say ✅ on time.
+3. Store both keys as secrets of the code repo, in a terminal in the Trading-OS folder (paste
+   each at the prompt; it isn't shown):
+   `gh secret set CRONJOB_API_KEY -R Peikz/trading-os` and
+   `gh secret set TIMER_GITHUB_TOKEN -R Peikz/trading-os`.
+4. Start the **Timer sync** workflow once (Actions → Timer sync → Run workflow, or
+   `gh workflow run timer-sync.yml -R Peikz/trading-os`). Its log lists the 14 jobs at
+   cron-job.org. The next trading day, System health → *Load the latest runs from GitHub*
+   should say ✅ on time.
+
+From then on the sync is automatic (since 21 Oct 2026): whenever `trading_os/timer.py` changes on
+main, the Timer sync workflow updates the jobs at cron-job.org by itself, and a failed sync sends
+a push. Running `uv run python scripts/timer_setup.py` on the PC still works too (it asks for
+the two keys).
 
 The token can do nothing but start, cancel and re-run jobs in the public code repo; it can't
 read the data repo or any secret. When it expires, every call fails: cron-job.org emails you,
 System health shows every job ❌ missed, and GitHub's own (late) schedule carries on. Make a new
-token and run step 3 again. After changing a start time in `timer.py`, run step 3 again too.
+token, put it in the secret TIMER_GITHUB_TOKEN (step 3) and start Timer sync (step 4). If the
+cron-job.org API key is limited to certain IP addresses, the sync from GitHub is refused: leave
+the key unrestricted.
 
 ## 3. Data: where it comes from and where it lives
 

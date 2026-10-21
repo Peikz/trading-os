@@ -101,3 +101,34 @@ def test_timer_runs_count_as_scheduled(monkeypatch):
     monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
     monkeypatch.delenv("RUN_TRIGGER")
     assert job.run_kind() == "scheduled"
+
+
+def _setup_script():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "timer_setup", Path(__file__).resolve().parents[1] / "scripts" / "timer_setup.py"
+    )
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    return script
+
+
+def test_the_sync_takes_both_keys_from_the_environment_and_never_prompts(monkeypatch):
+    script = _setup_script()
+
+    def no_prompt(*_):
+        raise AssertionError("asked for a key in CI")
+
+    calls = []
+    monkeypatch.setattr(script.getpass, "getpass", no_prompt)
+    monkeypatch.setattr(script, "_github_ok", lambda token: token == "gh-test")
+    monkeypatch.setattr(script, "sync", lambda key, token: calls.append(("sync", key, token)))
+    monkeypatch.setattr(script, "list_jobs", lambda key: calls.append(("list", key)))
+    monkeypatch.delenv("CRONJOB_API_KEY", raising=False)
+    monkeypatch.delenv("TIMER_GITHUB_TOKEN", raising=False)
+    assert script.main(["--no-prompt"]) == 1 and not calls  # no secrets: nothing changes
+    monkeypatch.setenv("CRONJOB_API_KEY", "cj-test")
+    monkeypatch.setenv("TIMER_GITHUB_TOKEN", "gh-test")
+    assert script.main(["--no-prompt"]) == 0
+    assert calls == [("sync", "cj-test", "gh-test"), ("list", "cj-test")]

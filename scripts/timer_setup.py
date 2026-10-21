@@ -3,17 +3,21 @@
 uv run python scripts/timer_setup.py           # asks for the two keys, then syncs the jobs
 uv run python scripts/timer_setup.py --list    # our jobs at cron-job.org: last result, next start
 
-Type the keys at the prompts (they are not shown, stored or printed):
+The keys (never shown or printed):
 - cron-job.org API key: Console -> Settings -> API.
 - GitHub token: a fine-grained token for Peikz/trading-os only, permission Actions: read and
-  write. It is stored in the cron-job.org jobs' request header, nowhere else.
-Run it again after changing timer.JOBS, or with a new GitHub token when the old one expires.
+  write. It goes into the cron-job.org jobs' request header.
+Taken from the environment when set (CRONJOB_API_KEY, TIMER_GITHUB_TOKEN), else asked for.
+The `timer-sync.yml` workflow (Emil, 21 Oct 2026) runs this with both keys from the repo's
+secrets whenever `trading_os/timer.py` changes on main, so nobody has to re-run it by hand.
+With a new GitHub token: update the secret TIMER_GITHUB_TOKEN and start that workflow.
 """
 
 from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import time
 
 import requests
@@ -67,19 +71,38 @@ def sync(key: str, token: str) -> None:
     print(f"Timer: {len(create)} created, {len(update)} updated, {len(delete)} deleted")
 
 
-def main() -> int:
+def _secret(name: str, prompt: str, ask: bool) -> str:
+    """The key from the environment, else typed at a prompt (never in CI: `ask` is False)."""
+    value = os.environ.get(name, "").strip()
+    if value or not ask:
+        return value
+    return getpass.getpass(prompt).strip()
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--list", action="store_true", help="show our jobs at cron-job.org")
-    args = parser.parse_args()
-    key = getpass.getpass("cron-job.org API key: ").strip()
+    parser.add_argument(
+        "--no-prompt", action="store_true", help="take both keys from the environment only (CI)"
+    )
+    args = parser.parse_args(argv)
+    ask = not args.no_prompt
+    key = _secret("CRONJOB_API_KEY", "cron-job.org API key: ", ask)
+    if not key:
+        print("Timer: no cron-job.org API key (secret CRONJOB_API_KEY); nothing changed.")
+        return 1
     if args.list:
         list_jobs(key)
         return 0
-    token = getpass.getpass("GitHub token (Actions read/write on trading-os): ").strip()
+    token = _secret("TIMER_GITHUB_TOKEN", "GitHub token (Actions read/write on trading-os): ", ask)
+    if not token:
+        print("Timer: no GitHub token (secret TIMER_GITHUB_TOKEN); nothing changed.")
+        return 1
     if not _github_ok(token):
         print("GitHub didn't accept that token for this repo; nothing changed.")
         return 1
     sync(key, token)
+    list_jobs(key)
     return 0
 
 

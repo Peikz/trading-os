@@ -1,0 +1,50 @@
+# Timer sync (Emil, 21 Oct 2026): keeps the cron-job.org jobs that start the timed workflows
+# in step with trading_os/timer.py. Runs by itself when timer.py changes on main, or by hand
+# (e.g. after a new GitHub token went into the secret TIMER_GITHUB_TOKEN).
+# Secrets: CRONJOB_API_KEY (cron-job.org API key), TIMER_GITHUB_TOKEN (fine-grained token,
+# Actions read/write on this repo; it goes into the jobs' request header).
+# This repo is public and so are these logs: they print job names, times and counts only.
+
+name: Timer sync
+
+on:
+  push:
+    branches: [main]
+    paths: ["trading_os/timer.py"]
+  workflow_dispatch:
+
+concurrency:
+  group: timer-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Sync cron-job.org
+        env:
+          CRONJOB_API_KEY: ${{ secrets.CRONJOB_API_KEY }}
+          TIMER_GITHUB_TOKEN: ${{ secrets.TIMER_GITHUB_TOKEN }}
+        run: uv run --frozen --no-dev python scripts/timer_setup.py --no-prompt
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Timer sync failed", message: "The cron-job.org jobs were not updated. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/
