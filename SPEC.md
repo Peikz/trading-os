@@ -371,8 +371,17 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    an earnings release, 1–2 months sideways, a market that isn't hot, revenue growth accelerating,
    EPS up year on year, within 20% of the 52-week high; 5–6 = A+, 4 = B) in place of its close
    scorecard, with two entries: EP 10:30 (bought ~10:30 on the gap day) and EP-AH (bought at
-   16:45–17:00 ET the evening of an after-close earnings release). `quality_enabled: [ep]`; EP9M and
-   the Luk flush keep their scorecards until Emil switches theirs on. The 15:45 EP close check is off.
+   16:45–17:00 ET the evening of an after-close earnings release). The 15:45 EP close check is off.
+   Quality grades for every graded setup (Emil, 21 Oct 2026: "switch to quality grades";
+   `quality_enabled: true`): EP9M by the same six points with "earnings in the last 10 sessions"
+   (5–6 = A+, 4 = B, bought after the 10:15 check), the Luk flush A when the market isn't hot and the
+   5-day range is tight (bought the next session ~10:30). An EP 10:30 gap that the 16:50 check pushed
+   the evening before shows "flagged last evening" instead of a second buy (one position per stock).
+   Each grade shows its own entry's 2016–26 history (`grade_stats.json`, `quality`). Caveats, stated
+   with the grades: the points were partly chosen with 2022–26 in view; rules picked blind on 2016–21
+   score lower; in the 2022–26 portfolio runs (100 shuffled same-minute orders, 1 % / 0.75 % risk) the
+   quality package made a median 8–15 % a year depending on the EP entry, and the blind version −7 to
+   +6 % (data repo `docs/research/2026-10-21-portfolio-research.md` §11–12).
 
 ## 12. References
 

@@ -398,12 +398,18 @@ def _grade_line_rows(partial, shown, name, slot) -> list[Line]:
     when = ENTRY_TEXT.get(str(partial.iloc[0].get("grade_entry_rule")), "")
     out = [Line("note", "B: " + (when or "see the report") + ":")]
     for row in partial.to_dict("records"):
-        seen = shown.get(row["ticker"])
+        seen = shown.get(row["ticker"]) or _earlier(row)
         score = row.get("grade_score")
         tail = "" if score is None or pd.isna(score) else f" · B {score:+.2f}R"
         seen_text = f"  ↑ {seen}" if seen else ""
         out.append(Line("hit", f"▸ {_first_line(row, name, slot)}{tail}{seen_text}"))
     return out
+
+
+def _earlier(row: Mapping[str, Any]) -> str | None:
+    """`seen_earlier`: a note that replaces the hit's block (e.g. flagged last evening)."""
+    note = row.get("seen_earlier")
+    return note if isinstance(note, str) and note else None
 
 
 def _partial_lines(name, partial, hits, scan, shown, slot) -> list[Line]:
@@ -478,6 +484,9 @@ def build_message(
             if ticker in shown:
                 first = _first_line(row, name, ctx.slot).split("  ")[:2]
                 block = [Line("hit", f"▸ {'  '.join(first)}  ↑ see {shown[ticker]}")]
+            elif _earlier(row):
+                first = _first_line(row, name, ctx.slot).split("  ")[:2]
+                block = [Line("hit", f"▸ {'  '.join(first)}  ↑ {_earlier(row)}")]
             else:
                 shown[ticker] = label
                 block = _block(row, name, ctx.slot)

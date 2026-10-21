@@ -231,6 +231,23 @@ expected hold, the history behind the grade, and the size (your risk x 2 / 1.5 /
 B). B: one line. C: saved and counted in the closing line. The Luk AVWAP flush is a live EOD scan
 since the same day. Rules: config `grading:`; code: `grader.py`, `grade_live.py`.
 
+**Quality grades** (since 21 Oct 2026, in place of the scorecards above): a grade is the number
+of yes/no points a setup has. EP and EP9M: an earnings release (EP9M: in the last 10 sessions),
+1–2 months sideways, a market that isn't hot (fewer than 45 stocks up 50 % in a quarter),
+revenue growth accelerating, EPS up year on year, within 20 % of the 52-week high; 5–6 points =
+A+, 4 = B. Luk flush: a market that isn't hot and a tight 5-day range = A. The push says
+"N of M quality points" and shows the history of that grade at that entry:
+
+| Push | When to buy |
+|---|---|
+| 🌙 EP-AH (16:50 New York check) | after hours now, before 17:00 New York (23:00 Copenhagen) |
+| ⚡ EP 10:30 (10:17 check) | around 10:30 New York (16:30 Copenhagen); "flagged last evening" if the 16:50 check already sent it |
+| ⏱️ EP9M pace (10:17 check) | after the 10:15 check (16:15 Copenhagen) |
+| 🌊 Luk flush (EOD) | the next session around 10:30 New York (16:30 Copenhagen) |
+
+The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked
+blind on 2016–21 do worse (research report §9, portfolio report §11–12).
+
 ## 8. Position size, facts and watchlists
 
 **Size**: every pushed EP and breakout gets entry, stop, shares, position and risk in USD,

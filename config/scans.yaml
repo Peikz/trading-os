@@ -408,9 +408,9 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   push: {"A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
   ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard
   # Quality counts (variable search, 21 Oct 2026; report section 9). quality_enabled: true
-  # (all), false, or the strategies switched on in place of their scorecards. EP is on (Emil,
-  # 21 Oct 2026: EP moved to 10:30 and after hours); EP9M and the Luk flush stay (proposed).
-  quality_enabled: [ep]
+  # (all), false, or a list of the strategies switched on in place of their scorecards. On for
+  # all three (Emil, 21 Oct 2026: "switch to quality grades"; SPEC §11.17).
+  quality_enabled: true
   conditions:                               # yes/no, thresholds fixed before the search
     earnings: {feature: is_earnings_reaction_day, equals: true}
     earnings_recent: {feature: sessions_since_earnings, max: 10}

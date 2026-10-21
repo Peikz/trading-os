@@ -155,6 +155,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
+    if slot == "am":
+        results = _flagged_last_evening(results, args.data_dir, cfg, session)
     selected = notify.select_for_push(results, cfg)
     if slot == "mid":
         selected = _not_pushed_earlier(selected, args.data_dir, session, "am")
@@ -308,6 +310,25 @@ def _index_quotes(cfg) -> dict:
         except Exception as exc:  # noqa: BLE001 - header extra only
             status(f"{name.upper()} quote: FAILED ({type(exc).__name__})")
     return quotes
+
+
+EVENING_NOTE = "flagged last evening (16:50)"
+
+
+def _flagged_last_evening(results: dict, data_dir: Path, cfg, session) -> dict:
+    """EP 10:30 gaps the 16:50 after-hours check pushed the evening before get a note instead
+    of a second buy (one position per stock, as in the study's portfolio runs)."""
+    hits = results.get("ep_am")
+    if hits is None or hits.empty:
+        return results
+    previous = clock.previous_session(cfg.schedule, session)
+    evening = store.pushed_in(data_dir, previous, "ah").get("ep_ah", set())
+    flagged = hits["ticker"].isin(evening)
+    status(f"EP 10:30: {int(flagged.sum())} flagged last evening")
+    if not flagged.any():
+        return results
+    note = pd.Series(None, index=hits.index, dtype=object).mask(flagged, EVENING_NOTE)
+    return {**results, "ep_am": hits.assign(seen_earlier=note)}
 
 
 def _not_pushed_earlier(selected: dict, data_dir: Path, session, slot: str) -> dict:

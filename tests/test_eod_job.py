@@ -384,6 +384,23 @@ def test_after_hours_check_flags_earnings_movers(tmp_path, capsys, sent, monkeyp
     assert message.title.startswith("After hours 16:50 ") and f"▸ {GAPPER}  +10.0%" in message.body
 
 
+def test_1030_ep_flagged_last_evening_gets_a_note_not_a_second_buy(
+    tmp_path, capsys, sent, monkeypatch
+):
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
+    schedule, now = load_config().schedule, dt.datetime.now(dt.UTC)
+    evening = clock.previous_session(schedule, clock.session_date(schedule, "am", now))
+    ctx = store.RunContext(session=evening, slot="ah", run_ts=now, run_kind="scheduled")
+    path = store.run_paths(tmp_path, ctx)["candidates"]
+    path.parent.mkdir(parents=True)
+    pd.DataFrame({"scan": ["ep_ah"], "ticker": [GAPPER], "pushed": [True]}).to_parquet(path)
+    assert run_intraday("am", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, _ = capsys.readouterr()
+    assert "EP 10:30: 1 flagged last evening" in out
+    [message] = sent
+    assert f"▸ {GAPPER}  +18.0%  ↑ flagged last evening (16:50)" in message.body
+
+
 def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypatch):
     monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
     now = dt.datetime.now(dt.UTC)
