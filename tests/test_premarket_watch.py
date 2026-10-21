@@ -12,6 +12,7 @@ from trading_os.store import RunContext
 
 A = "".join(["S", "R", "F"])
 LATER = ("breakout_watch", "ma_surf", "parabolic_long", "parabolic_short")
+CARRIED = (*LATER, "luk_flush")  # Luk flush: pushed at EOD and again pre-market
 
 
 def hit(**kw):
@@ -50,7 +51,10 @@ def test_the_four_scans_wait_for_the_premarket_push():
         scan = cfg.scans[name]
         assert scan.slot == "eod" and scan.params["push_slot"] == "pm"
         assert not notify.pushes_now(scan, "eod") and notify.pushes_now(scan, "pm")
-    assert notify.pushes_now(cfg.scans["ep9m"], "eod")  # the others push as before
+    luk = cfg.scans["luk_flush"]
+    assert notify.pushes_now(luk, "eod") and notify.pushes_now(luk, "pm")
+    for name in ("ep_day", "ep9m", "breakout_trigger"):  # saved only since 21 Oct 2026
+        assert not notify.pushes_now(cfg.scans[name], "eod")
 
 
 def test_the_evening_push_names_what_comes_in_the_morning():
@@ -83,7 +87,7 @@ def test_the_premarket_run_carries_last_closes_hits(tmp_path: Path):
     ).to_parquet(folder / f"{last}_eod.parquet")
     uni = pd.DataFrame({"ticker": [A], "pm_price": [10.3], "pm_change_pct": [3.0]})
     out = job._from_last_close(tmp_path, cfg, dt.date(2026, 10, 22), uni)
-    assert set(out) == set(LATER)
+    assert set(out) == set(CARRIED)
     assert out["ma_surf"].iloc[0]["pm_price"] == 10.3  # today's, not the stored column
     assert out["parabolic_long"].iloc[0]["pm_price"] == 10.3
     assert out["breakout_watch"].empty

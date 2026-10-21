@@ -90,8 +90,9 @@ scans:
     {enabled: true, phase: 1, slot: ah, action: push, push_tier: alert,
      ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000,
      earnings_only: true}
-  ep9m:                                     # EP scan: alert tier pushes (SPEC §11.7)
-    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
+  ep9m:                                     # saved only since 21 Oct 2026 (Emil): its buys are
+                                            # the 10:17 / 12:03 EP9M pace checks                                     # EP scan: alert tier pushes (SPEC §11.7)
+    {enabled: true, phase: 1, slot: eod, action: log, push_tier: alert,
      volume_min: 9_000_000, chg_min_pct: 4}
 
   # --- During the session (SPEC §6.1b, Emil 19 Oct 2026) ---
@@ -129,7 +130,8 @@ scans:
      month_move_pct: 25, month_big_move_pct: 50, mid_move_pct: 13}
   luk_flush:                                # Martin Luk's AVWAP flush, live (Emil, 20 Oct 2026):
                                             # rules in `luk:`, bought the next session (grading)
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
+     push_slot: [eod, pm]}                  # EOD, and again pre-market with its move (Emil)
   ma_surf:                                  # Qullamaggie's MA-surf, live (Emil, 21 Oct 2026:
                                             # "I will use this strategy more"): rules in
                                             # `qm_surf:`; grade C, pushed anyway (push_ungraded)
@@ -140,7 +142,7 @@ scans:
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
      push_ungraded: true}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
+    {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert,
      push_if_all: [b1, b2, b3, b4],         # Emil, 19 Oct: full blocks only for full setups
      partial_top_n: 5}                      # top B5-only triggers as one line each below them
   universe_snapshot:

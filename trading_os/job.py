@@ -249,7 +249,10 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
     names = [
         name
         for name, scan in cfg.scans.items()
-        if scan.enabled and scan.action == "push" and scan.params.get("push_slot") == "pm"
+        if scan.enabled
+        and scan.action == "push"
+        and scan.slot != "pm"
+        and "pm" in notify.push_slots(scan)
     ]
     if not names:
         return {}

@@ -14,7 +14,8 @@ def ep_day_pushing(cfg):
     from types import MappingProxyType
 
     scans = dict(cfg.scans)
-    scans["ep_day"] = dataclasses.replace(scans["ep_day"], action="push")
+    for name in ("ep_day", "ep9m", "breakout_trigger"):  # saved only since 21 Oct 2026
+        scans[name] = dataclasses.replace(scans[name], action="push")
     return dataclasses.replace(cfg, scans=MappingProxyType(scans))
 
 

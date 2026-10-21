@@ -349,7 +349,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "up_count_rule",
     },
     "breakout_watch": {"push_tier", "push_slot", "push_ungraded"},
-    "luk_flush": {"push_tier"},
+    "luk_flush": {"push_tier", "push_slot"},
     "ma_surf": {"push_tier", "push_ungraded", "push_slot"},
     "breakout_trigger": {"push_tier", "push_if_all", "partial_top_n"},
     "universe_snapshot": set(),

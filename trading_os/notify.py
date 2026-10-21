@@ -173,13 +173,19 @@ class Line:
     text: str
 
 
-def pushes_now(scan, slot: str | None) -> bool:
-    """A scan pushes in its own run, or in the run its `push_slot` names (BO-Watch, MA-surf
-    and the parabolics: found at the close, pushed the next morning pre-market)."""
-    if scan.action != "push":
-        return False
+def push_slots(scan) -> tuple[str, ...]:
+    """The runs a scan's hits are pushed in: the runs it scans in, or `push_slot` (one slot
+    or a list). BO-Watch, MA-surf and the parabolics: the next pre-market; Luk flush: EOD and
+    again pre-market."""
     later = scan.params.get("push_slot")
-    return slot is None or later is None or later == slot
+    if later is None:
+        return tuple(scan.slots) or (scan.slot,)
+    return (later,) if isinstance(later, str) else tuple(later)
+
+
+def pushes_now(scan, slot: str | None) -> bool:
+    """Whether `scan` pushes in the run of `slot` (None: any)."""
+    return scan.action == "push" and (slot is None or slot in push_slots(scan))
 
 
 def select_for_push(
@@ -276,6 +282,8 @@ def later_counts(results: Mapping[str, pd.DataFrame], cfg: Config, slot: str) ->
         scan = cfg.scans[name]
         if scan.action != "push" or pushes_now(scan, slot) or hits.empty:
             continue
+        if "pm" not in push_slots(scan):
+            continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         if len(eligible):
             out.append(f"{SCAN_LABELS.get(name, name)} {len(eligible)}")
@@ -290,6 +298,8 @@ def c_counts(
     for name, hits in results.items():
         scan = cfg.scans[name]
         if not pushes_now(scan, slot) or hits.empty or not graded(cfg, hits):
+            continue
+        if "carried_from" in hits:  # last close's hits: counted in that run already
             continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         n = int((push_modes(cfg, eligible, scan) == "count").sum())
