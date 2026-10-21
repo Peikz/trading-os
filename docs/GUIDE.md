@@ -235,7 +235,8 @@ since the same day. Rules: config `grading:`; code: `grader.py`, `grade_live.py`
 of yes/no points a setup has. EP and EP9M: an earnings release (EP9M: in the last 10 sessions),
 1–2 months sideways, a market that isn't hot (fewer than 45 stocks up 50 % in a quarter),
 revenue growth accelerating, EPS up year on year, within 20 % of the 52-week high; 5–6 points =
-A+, 4 = B. Luk flush: a market that isn't hot and a tight 5-day range = A. The push says
+A+. EP9M with 4 points = B; an EP with 4 is C (saved, not pushed as a trade: about break-even in
+the study). Luk flush: a market that isn't hot and a tight 5-day range = A. The push says
 "N of M quality points" and shows the history of that grade at that entry:
 
 | Push | When to buy |

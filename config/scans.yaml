@@ -423,8 +423,9 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   quality:                                  # points at least -> grade; the plan per live scan
     ep:
       parts: [earnings, sideways_1_2m, market_cool_lt45, revenue_accel, eps_yoy_pos, near_52w_high]
-      grades: [[5, "A+"], [4, "B"]]         # 5-6, earnings days: +0.51R at 10:30, +0.63R at
-      live_scans: [ep_am, ep_ah]            # 16:45 (2016-26, held 21 sessions)
+      grades: [[5, "A+"]]                   # 5-6: +0.51R at 10:30, +0.63R at 16:45 (2016-26,
+      live_scans: [ep_am, ep_ah]            # held 21 sessions); 4 is C (Emil, 21 Oct 2026):
+                                            # +0.12R, ~0R per signal day
       entries: {ep_am: t_1030, ep_ah: ah_1645}
       stop_adr: 1.0
       hold_sessions: 21

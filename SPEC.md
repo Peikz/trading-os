@@ -369,7 +369,8 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    entry and Emil's OK. Report: data repo `docs/research/2026-10-20-grading-research.md`.
    EP quality count (Emil, 21 Oct 2026): EP is graded by its six yes/no points (`grading.quality.ep`:
    an earnings release, 1–2 months sideways, a market that isn't hot, revenue growth accelerating,
-   EPS up year on year, within 20% of the 52-week high; 5–6 = A+, 4 = B) in place of its close
+   EPS up year on year, within 20% of the 52-week high; 5–6 = A+, fewer = C: 4 points made +0.12R a
+   trade and about 0R per signal day, so Emil made it C on 21 Oct 2026) in place of its close
    scorecard, with two entries: EP 10:30 (bought ~10:30 on the gap day) and EP-AH (bought at
    16:45–17:00 ET the evening of an after-close earnings release). The 15:45 EP close check is off.
    Quality grades for every graded setup (Emil, 21 Oct 2026: "switch to quality grades";

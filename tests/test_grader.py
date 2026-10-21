@@ -136,6 +136,14 @@ def test_the_quality_counts_grade_every_live_setup():
     for name, rule in rules["quality"].items():
         assert set(rule["parts"]) <= set(rules["conditions"]), name
     assert grader.grade("ep_am", {}, rules).plan["entry"] == "t_1030"
+    four = {
+        "is_earnings_reaction_day": True,
+        "d_neglect_months": 1,
+        "mkt_scan_count": 30,
+        "revenue_growth_accel": 2.0,
+    }
+    assert grader.grade("ep_am", four, rules).grade == "C"  # 4 points: C (Emil, 21 Oct 2026)
+    assert grader.grade("ep_am", four | {"eps_yoy_pct": 5.0}, rules).grade == "A+"
     assert grader.grade("ep_ah", {}, rules).plan["entry"] == "ah_1645"
     assert grader.quality_for("ep9m_pace", rules) == "ep9m"
     assert grader.quality_for("luk_flush", rules) == "luk_avwap_flush"
