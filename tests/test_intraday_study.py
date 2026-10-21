@@ -234,6 +234,32 @@ def test_long_candidates_come_year_by_year_from_the_yearly_files(tmp_path):
     assert sessions[0] < dt.date(2019, 1, 2) and sessions[-1] == gap_day
 
 
+def test_adding_earnings_days_keeps_every_other_candidate_row(tmp_path):
+    from trading_os import clock
+
+    days = clock.sessions_after(CFG.schedule, dt.date(2018, 6, 1), 400, dt.date(2019, 6, 28))
+    bars = pd.concat([flat_bars(days, A), flat_bars(days, B)], ignore_index=True)
+    bars["vwap"], bars["source"] = bars["close"], "alpaca"
+    for year in (2018, 2019):
+        bars[pd.to_datetime(bars["session_date"]).dt.year == year].to_parquet(
+            tmp_path / f"{year}.parquet"
+        )
+    day = dt.date(2019, 3, 15)
+    cands = pd.DataFrame(
+        {
+            "group": ["gap", "next_day", "next_day"],
+            "session_date": [day] * 3,
+            "ticker": [A, A, A],
+            "strategy": [None, "mb_up", "pocket_pivot"],  # one stock-day, two strategies
+        }
+    )
+    earn = pd.DataFrame({"session_date": [day, day], "ticker": [A, B]})
+    out = s.add_earnings(cands, CFG, tmp_path, earn, 2019, 2019)
+    assert len(out[out["group"] == "next_day"]) == 2
+    gap = out[out["group"] == "gap"]
+    assert sorted(gap["ticker"]) == [A, B]  # A was already there, B is added once
+
+
 def test_aggregate_pools_the_years_and_keeps_a_per_year_view(tmp_path):
     for year, r in ((2019, [1.0, -1.0]), (2020, [3.0, -1.0])):
         pd.DataFrame(

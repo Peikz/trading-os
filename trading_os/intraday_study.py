@@ -795,10 +795,13 @@ def earnings_candidates(g, tickers, sessions, cfg, days: pd.DataFrame) -> pd.Dat
 
 
 def add_earnings(cands, cfg, bars_dir, days: pd.DataFrame, first: int, last: int) -> pd.DataFrame:
-    """`cands` plus `earnings_candidates` for the years first..last (one year at a time)."""
+    """`cands` plus `earnings_candidates` for the years first..last (one year at a time).
+    Only gap rows are matched: other groups can hold one stock-day per strategy."""
     from trading_os import long_history
     from trading_os.logsafe import status
 
+    gap = cands[cands["group"] == "gap"]
+    known = set(zip(gap["session_date"], gap["ticker"], strict=True))
     frames = [cands]
     for year in range(first, last + 1):
         bars = long_history.load_years(bars_dir, year - 1, year)
@@ -810,10 +813,12 @@ def add_earnings(cands, cfg, bars_dir, days: pd.DataFrame, first: int, last: int
         g, tickers = daily(bars[bars["session_date"].isin(set(sessions))], sessions)
         part = days[days["session_date"].isin(set(inside))]
         found = earnings_candidates(g, tickers, sessions, cfg, part)
+        found = found[
+            [k not in known for k in zip(found["session_date"], found["ticker"], strict=True)]
+        ]
         frames.append(found)
         status(f"Intraday study {year}: {len(found)} earnings stock-days added to the gap group")
     out = pd.concat(frames, ignore_index=True)
-    out = out.drop_duplicates(["group", "session_date", "ticker"], keep="first")
     return out.sort_values(["group", "session_date", "ticker"]).reset_index(drop=True)
 
 
