@@ -746,6 +746,77 @@ def long_candidates(cfg, bars_dir, hits_dir, first: int, last: int) -> pd.DataFr
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+RELEASE_TIMINGS = ("after-close", "pre-market")  # releases an evening/pre-market entry could trade
+
+
+def earnings_days(sec_dir, first: int, last: int) -> pd.DataFrame:
+    """(session_date, ticker): the reaction session of every earnings release made after the
+    close or before the open (SEC acceptance times, release `sec-10y`), years first..last,
+    by the ticker each CIK traded under on that day."""
+    from pathlib import Path
+
+    sec_dir = Path(sec_dir)
+    ev = pd.read_parquet(
+        sec_dir / "earnings_events.parquet", columns=["cik", "reaction_session", "timing"]
+    )
+    ev = ev[ev["timing"].isin(RELEASE_TIMINGS)].dropna(subset=["cik", "reaction_session"])
+    ev["day"] = pd.to_datetime(ev["reaction_session"])
+    ev = ev[ev["day"].dt.year.between(first, last)]
+    tc = pd.read_parquet(
+        sec_dir / "ticker_cik.parquet", columns=["ticker", "cik", "valid_from", "valid_to"]
+    )
+    m = ev.astype({"cik": "int64"}).merge(
+        tc.dropna(subset=["cik"]).astype({"cik": "int64"}), on="cik"
+    )
+    start, end = pd.to_datetime(m["valid_from"]), pd.to_datetime(m["valid_to"])
+    m = m[(start.isna() | (m["day"] >= start)) & (end.isna() | (m["day"] <= end))]
+    out = pd.DataFrame({"session_date": m["day"].dt.date, "ticker": m["ticker"].astype(str)})
+    return out.drop_duplicates().reset_index(drop=True)
+
+
+def earnings_candidates(g, tickers, sessions, cfg, days: pd.DataFrame) -> pd.DataFrame:
+    """Gap-group rows for the earnings reaction days the gap filter left out (opened under
+    `gap_superset_pct`), so the after-hours and pre-market EP entries are measured on every
+    earnings move, not only on the ones that still gapped up the next morning. Those rows
+    open under the EP gap rule, so they add after-hours and pre-market entries only."""
+    index = {d: i for i, d in enumerate(sessions)}
+    col = {t: j for j, t in enumerate(tickers)}
+    t = days["session_date"].map(index)
+    j = days["ticker"].map(col)
+    known = t.notna() & j.notna()
+    t, j = t[known].to_numpy(dtype=int), j[known].to_numpy(dtype=int)
+    facts = prior_facts(g, cfg.universe["alert"])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gap = (g["open"][t, j] / facts["prev_close"][t, j] - 1) * 100
+        keep = facts["ok"][t, j] & np.isfinite(gap) & (gap < cfg.intraday_study["gap_superset_pct"])
+    out = _rows(t[keep], j[keep], sessions, tickers, facts, "gap").assign(gap_pct=gap[keep])
+    out["earnings_day"] = True
+    return out.drop_duplicates(["session_date", "ticker"]).reset_index(drop=True)
+
+
+def add_earnings(cands, cfg, bars_dir, days: pd.DataFrame, first: int, last: int) -> pd.DataFrame:
+    """`cands` plus `earnings_candidates` for the years first..last (one year at a time)."""
+    from trading_os import long_history
+    from trading_os.logsafe import status
+
+    frames = [cands]
+    for year in range(first, last + 1):
+        bars = long_history.load_years(bars_dir, year - 1, year)
+        if bars.empty:
+            continue
+        sessions, inside = long_history.window(cfg.schedule, year, bars["session_date"].max())
+        have = set(bars["session_date"])
+        sessions = [s for s in sessions if s in have]
+        g, tickers = daily(bars[bars["session_date"].isin(set(sessions))], sessions)
+        part = days[days["session_date"].isin(set(inside))]
+        found = earnings_candidates(g, tickers, sessions, cfg, part)
+        frames.append(found)
+        status(f"Intraday study {year}: {len(found)} earnings stock-days added to the gap group")
+    out = pd.concat(frames, ignore_index=True)
+    out = out.drop_duplicates(["group", "session_date", "ticker"], keep="first")
+    return out.sort_values(["group", "session_date", "ticker"]).reset_index(drop=True)
+
+
 def calendar_sessions(cfg, first: int, last_day) -> list:
     """Every session from the year before `first` to `last_day` (fetch windows need the
     session before each candidate day)."""
@@ -831,6 +902,9 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--long-hits", type=Path, help="history-10y files (next-day signals)")
     parser.add_argument("--years", default="2016-2026", help="FIRST-LAST with --long-bars")
     parser.add_argument("--cands", type=Path, help="candidates file: reuse when it exists")
+    parser.add_argument(
+        "--earnings", type=Path, help="sec-10y tables: add every earnings day to the gap group"
+    )
     parser.add_argument("--run-year", type=int, help="10-year set: run the study for one year")
     parser.add_argument("--aggregate", type=Path, help="folder of intraday_<year>.parquet")
     parser.add_argument("--out", type=Path, help="output folder for --run-year/--aggregate")
@@ -863,6 +937,11 @@ def _main(argv: list[str] | None = None) -> int:
             cands["session_date"] = pd.to_datetime(cands["session_date"]).dt.date
         else:
             cands = long_candidates(cfg, args.long_bars, args.long_hits, first, last)
+            if args.cands:
+                cands.to_parquet(args.cands, index=False)
+        if args.earnings and "earnings_day" not in cands:
+            days = earnings_days(args.earnings, first, last)
+            cands = add_earnings(cands, cfg, args.long_bars, days, first, last)
             if args.cands:
                 cands.to_parquet(args.cands, index=False)
         sessions = calendar_sessions(cfg, first, max(cands["session_date"]))

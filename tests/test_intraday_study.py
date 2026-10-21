@@ -63,6 +63,49 @@ def test_gap_group_keeps_liquid_gaps_from_the_superset_up():
     assert round(float(gap["gap_pct"].iloc[0]), 1) == 4.0 and gap["prev_close"].iloc[0] == 10.0
 
 
+def test_earnings_days_map_off_hours_releases_to_the_ticker_of_the_day(tmp_path):
+    day = pd.Timestamp("2025-02-03")
+    pd.DataFrame(
+        {
+            "cik": [1, 1, 2, 3],
+            "reaction_session": [day, day + pd.Timedelta(days=1), day, day],
+            "timing": ["after-close", "intraday", "pre-market", "after-close"],
+        }
+    ).to_parquet(tmp_path / "earnings_events.parquet")
+    pd.DataFrame(
+        {
+            "ticker": [A, B, C],
+            "cik": [1, 2, 2],
+            "valid_from": [pd.NaT, pd.Timestamp("2020-01-01"), pd.Timestamp("2025-06-01")],
+            "valid_to": [pd.NaT, pd.Timestamp("2025-05-31"), pd.NaT],
+        }
+    ).to_parquet(tmp_path / "ticker_cik.parquet")
+    days = s.earnings_days(tmp_path, 2025, 2025)
+    # cik 1's intraday release is left out, cik 2 traded as B then, cik 3 has no ticker
+    assert sorted(days["ticker"]) == [A, B] and set(days["session_date"]) == {day.date()}
+
+
+def test_earnings_days_that_opened_flat_join_the_gap_group():
+    days = sessions(30)
+    bars = pd.concat(
+        [flat_bars(days, A), flat_bars(days, B), flat_bars(days, C, price=0.5)], ignore_index=True
+    )
+    last = bars["session_date"] == days[-1]
+    bars.loc[last & (bars["ticker"] == A), ["open", "high"]] = [10.4, 10.6]  # +4 %: already in
+    bars.loc[last & (bars["ticker"] == B), ["open", "high"]] = [10.1, 10.3]  # +1 %: added
+    g, tickers = s.daily(bars, days)
+    earn = pd.DataFrame({"session_date": [days[-1]] * 3, "ticker": [A, B, C]})
+    found = s.earnings_candidates(g, tickers, days, CFG, earn)
+    assert found["ticker"].tolist() == [B] and found["group"].tolist() == ["gap"]  # C under $1
+    assert bool(found["earnings_day"].iloc[0]) and round(float(found["gap_pct"].iloc[0]), 1) == 1.0
+    merged = pd.concat([s.from_grids(g, tickers, days, CFG), found], ignore_index=True)
+    gap = merged[merged["group"] == "gap"]
+    assert sorted(gap["ticker"]) == [A, B]
+    windows = s.fetch_windows(merged, days)
+    evening = windows[windows["kind"] == "evening"]
+    assert evening["tickers"].iloc[0] == sorted([A, B])  # their evening and pre-market minutes
+
+
 def test_pivot_group_finds_the_day_that_reaches_the_prior_base_high():
     days = sessions(140)
     rise = np.linspace(10, 20, 80)
