@@ -29,6 +29,7 @@ SLOT_LABELS = {
     "mid": "Intraday 12:00",
     "close": "Close 15:45",
     "eod": "EOD",
+    "ah": "After hours 16:50",
     "weekly": "Weekly",
 }
 SCAN_LABELS = {
@@ -37,6 +38,7 @@ SCAN_LABELS = {
     "watchlist_gappers": "Watchlist gappers",
     "ep_day": "EP-Day",
     "ep_close": "EP close",
+    "ep_am": "EP 10:30",
     "ep_ah": "EP-AH",
     "ep9m": "EP9M",
     "ep9m_pace": "EP9M pace",
@@ -57,6 +59,8 @@ SCAN_LABELS = {
 SECTION_ICONS = {
     "ep_day": "⚡",
     "ep_close": "⚡",
+    "ep_am": "⚡",
+    "ep_ah": "🌙",
     "luk_flush": "🌊",
     "ep9m": "📊",
     "ep9m_pace": "⏱️",
@@ -92,6 +96,7 @@ PCT_COLUMNS = {
     "watchlist_gappers": "pm_gap_used",
     "ep_day": "gap_pct",
     "ep_close": "gap_pct",
+    "ep_am": "gap_pct",
     "ep_ah": "ah_change_pct",
     "ep9m": "chg_pct",
 }
@@ -104,6 +109,8 @@ ENTRY_TEXT = {
     "pm_0915": "buy pre-market ~09:15 NY (15:15 CPH)",
     "ah_1800": "buy after hours ~18:00 NY (00:00 CPH)",
     "t_1015": "buy after the 10:15 check (16:15 CPH)",
+    "t_1030": "buy ~10:30 NY (16:30 CPH)",
+    "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
 }
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 

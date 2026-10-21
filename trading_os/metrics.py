@@ -134,6 +134,15 @@ def earnings_flag(
     return release_day.isin([session, previous_session]).fillna(False).astype(bool)
 
 
+def earnings_today(
+    earnings_date_last: pd.Series, earnings_date_next: pd.Series, session: dt.date
+) -> pd.Series:
+    """True when an earnings release falls on `session` itself: the after-hours check, where
+    a release after today's close is TradingView's last date, or still its next one."""
+    days = [d.dt.tz_convert(NEW_YORK).dt.date for d in (earnings_date_last, earnings_date_next)]
+    return ((days[0] == session) | (days[1] == session)).fillna(False).astype(bool)
+
+
 # SPEC §11.6: TradingView proxies apply "until Massive history exists". Once a row has the
 # full-history value (history_metrics, joined as hist_*), that value replaces the proxy.
 # Groups switch together so a row never mixes bases (e.g. ADR % from history, ADR $ from TV).

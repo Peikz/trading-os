@@ -1,4 +1,6 @@
-# Intraday checks (SPEC §6.1b): EP9M pace at 10:15 and 12:00 New York, EP close at 15:45.
+# Intraday checks (SPEC §6.1b): EP9M pace and the EP gap at 10:15, EP9M pace at 12:00, EP after
+# hours at 16:50 New York. The 15:45 EP close check (`close`) is off since 21 Oct 2026; it can
+# still be started by hand.
 # Two crons per check, one per US DST state; scripts/intraday.py picks the check whose New
 # York window contains the run (10:10-11:30, 11:55-13:30) on a trading day, and skips a
 # check that is already saved. A cron that lands in the other window finds it done.
@@ -12,8 +14,8 @@ on:
     - cron: "17 15 * * 1-5"   # 10:17 EST
     - cron: "3 16 * * 1-5"    # 12:03 EDT
     - cron: "3 17 * * 1-5"    # 12:03 EST
-    - cron: "45 19 * * 1-5"   # 15:45 EDT, the EP close check (Emil, 20 Oct 2026)
-    - cron: "45 20 * * 1-5"   # 15:45 EST
+    - cron: "50 20 * * 1-5"   # 16:50 EDT, EP after hours (Emil, 21 Oct 2026)
+    - cron: "50 21 * * 1-5"   # 16:50 EST
   workflow_dispatch:
     inputs:
       timer:
@@ -21,9 +23,9 @@ on:
         type: boolean
         default: false
       slot:
-        description: "Which check (am = 10:15, mid = 12:00, close = 15:45)"
+        description: "Which check (am = 10:15, mid = 12:00, close = 15:45, ah = 16:50)"
         type: choice
-        options: [am, mid, close]
+        options: [am, mid, close, ah]
         default: am
       force:
         description: "Skip the time guard (output goes to data/manual/, never counts as the session run)"

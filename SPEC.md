@@ -56,9 +56,10 @@ non-trading days, because EU and US daylight-saving changes happen on different 
 | Job | Target time | New York time | Contents |
 |---|---|---|---|
 | `premarket` | 13:30 CET | 07:30 ET | EP-PM, EP9M early warning, watchlist gappers |
-| `intraday` (Emil, 19 Oct 2026) | 16:15 and 18:00 CET | 10:15 and 12:00 ET | EP9M pace (§6.1b); candidates only, no universe snapshot |
-| `intraday` close check (Emil, 20 Oct 2026) | 21:45 CET | 15:45 ET | EP close (§6.1b): the EP-Day rule before the close, graded (§11.17) |
+| `intraday` (Emil, 19 Oct 2026) | 16:15 and 18:00 CET | 10:15 and 12:00 ET | EP9M pace, EP 10:30 at the 10:15 check (§6.1b); candidates only, no universe snapshot |
+| `intraday` close check (Emil, 20 Oct 2026; off since 21 Oct) | 21:45 CET | 15:45 ET | EP close (§6.1b). Not scheduled since 21 Oct 2026; runs by hand only |
 | `eod` | 22:20 CET | 16:20 ET | All end-of-day scans, universe snapshot, breadth |
+| `intraday` after-hours check (Emil, 21 Oct 2026) | 22:50 CET | 16:50 ET | EP-AH (§6.1b): earnings movers after the close, graded (§11.17), bought before Saxo's extended hours end at 17:00 ET |
 | `weekly` | Sunday 18:00 CET | — | Qullamaggie 1/3/6M gainers, growth buckets, tight bases, official Market Light count |
 | `outcomes` | daily after `eod` | — | Fill outcome horizons for past signals (Phase 3) |
 
@@ -129,7 +130,9 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
 | EP9M pace (Emil, 19 Oct 2026; rule proposed) | EP9M's rule (§6.2) on the day's projected volume: change ≥ +4% and volume so far or pace ≥ 9M shares. Pace = TradingView's relative volume at this time of day (5-minute bars) × normal daily volume (today excluded), never below the volume so far. A name pushes once per session: the 12:00 check skips names sent at 10:15 | 1 | Push |
-| EP close (Emil, 20 Oct 2026) | EP-Day's rule (§6.2) on the live data at 15:45 New York (TradingView sees about 15:30). The grading study's A plan buys the gap at the close, which the EOD push comes too late for. Pushed with its study grade (§11.17) | 1 | Push |
+| EP close (Emil, 20 Oct 2026; off since 21 Oct) | EP-Day's rule (§6.2) on the live data at 15:45 New York (TradingView sees about 15:30). Switched off on 21 Oct 2026: in the 2022–26 portfolio runs the close was the weakest EP entry, so the EP buy moved to 10:30 and after hours | 1 | Off |
+| EP 10:30 (Emil, 21 Oct 2026) | At the 10:15 check (TradingView sees about 10:00): opening gap ≥ 10%, price ≥ $1, mcap ≥ $50M, alert tier. The grading study's 10:30 entry needs only the opening gap. Graded by the EP quality count (§11.17); bought around 10:30 | 1 | Push |
+| EP-AH (yours; live since 21 Oct 2026) | At 16:50 New York (TradingView sees about 16:35): post-market change ≥ 8%, post-market volume ≥ 50K, price ≥ $1, mcap ≥ $50M, and an earnings release that day (TradingView's last or next earnings date). Graded by the EP quality count (§11.17); entry at the post-market price before 17:00 ET, when Saxo's extended hours end. The study measured this entry at 16:45 on after-close earnings releases only. TradingView may not have the new quarter's revenue and EPS yet at 16:50, so those two points can still be the previous quarter's | 1 | Push |
 | BO pivot (Emil, 19 Oct 2026; rule proposed) | Active BO-Watch names at or above their pivot, or at most 1% below it, during the session. Pivot and order stop from the name's latest EOD BO-Watch row (§6.4). Over the pivot: entry at the last price; under it: buy-stop at the pivot | 2 | Push |
 
 ### 6.2 End of day (22:20 CET)
@@ -137,7 +140,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
 | EP-Day (yours) | Gap ≥ 10%, RVOL ≥ 3, volume ≥ 300K, price ≥ $1, mcap ≥ $50M | 1 | Push |
-| EP-AH (yours, toggle, default OFF) | Post-market change ≥ 8%, price ≥ $1, mcap ≥ $50M, post-market volume ≥ 50K | 1 | Push |
+| EP-AH | Moved to the 16:50 after-hours check on 21 Oct 2026 (§6.1b) | 1 | — |
 | EP9M (Stockbee) | Volume ≥ 9M shares, change ≥ +4%. No MA filter (MA position stored as columns) | 1 | Push |
 | Momentum Burst up (Stockbee) | Change ≥ +4%, volume > prior day, volume ≥ 100K, close location ≥ 0.70 | 1 | Log |
 | Momentum Burst down (Stockbee) | Change ≤ −4%, volume > prior day, volume ≥ 100K | 1 | Log |
@@ -364,6 +367,12 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    grade C ("no edge after costs"). New study-only setups for the research: Qullamaggie's MA-surf
    breakout (`qm_setups.py`), high tight flag and pocket pivot (`patterns.py`); live only with a SPEC
    entry and Emil's OK. Report: data repo `docs/research/2026-10-20-grading-research.md`.
+   EP quality count (Emil, 21 Oct 2026): EP is graded by its six yes/no points (`grading.quality.ep`:
+   an earnings release, 1–2 months sideways, a market that isn't hot, revenue growth accelerating,
+   EPS up year on year, within 20% of the 52-week high; 5–6 = A+, 4 = B) in place of its close
+   scorecard, with two entries: EP 10:30 (bought ~10:30 on the gap day) and EP-AH (bought at
+   16:45–17:00 ET the evening of an after-close earnings release). `quality_enabled: [ep]`; EP9M and
+   the Luk flush keep their scorecards until Emil switches theirs on. The 15:45 EP close check is off.
 
 ## 12. References
 

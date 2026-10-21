@@ -10,6 +10,8 @@ Entry and stop per scan (config `sizing:`):
   below entry (proposed).
 - EP-PM, EP9M early warning, watchlist gappers: entry at the pre-market price, stop
   `pm_stop_adr` × ADR $ below until the open sets a day low (proposed).
+- EP after hours: entry at the post-market price, stop `pm_stop_adr` × ADR $ below.
+- EP 10:30 (ep_am): as EP-Day, at the last price.
 - Breakout trigger: entry at the close (B5 is checked at the close), stop = order stop (§6.4).
 - BO-Watch: buy-stop at the pivot, stop = order stop (§6.4).
 - BO pivot (intraday): over the pivot, entry at the last price; below it, buy-stop at the
@@ -36,8 +38,9 @@ PLAN_COLUMNS = [
     "plan_risk_usd",
     "plan_capped",
 ]
-EP_CLOSE = ("ep_day", "ep_close", "ep9m", "ep9m_pace")  # intraday: the last price
+EP_CLOSE = ("ep_day", "ep_close", "ep_am", "ep9m", "ep9m_pace")  # intraday: the last price
 EP_PREMARKET = ("ep_pm", "ep9m_early", "watchlist_gappers")
+EP_AFTERHOURS = ("ep_ah",)
 BREAKOUT_RULES = ("breakout_trigger", "breakout_watch", "pivot_watch")
 
 
@@ -87,6 +90,11 @@ def plan(row: Mapping[str, Any], scan: str, rules: Mapping[str, Any]) -> tuple[f
         if not pd.isna(ceiling) and low > ceiling:  # closed near the low: keep a minimum distance
             return entry, ceiling, f"{rules['min_stop_adr']:g} ADR min"
         return entry, low, "day low"
+    if scan in EP_AFTERHOURS:
+        entry = row.get("ah_price", nan)
+        if pd.isna(entry):
+            entry = row.get("close", nan) * (1 + row.get("ah_change_pct", nan) / 100)
+        return entry, entry - rules["pm_stop_adr"] * adr, f"{rules['pm_stop_adr']:g} ADR"
     if scan in EP_PREMARKET:
         entry = row.get("pm_price", nan)
         return (
@@ -139,7 +147,7 @@ def add_plans(
     risk_usd, account_usd = account.risk_usd(usd_rate), account.size_usd(usd_rate)
     out = {}
     for scan, hits in results.items():
-        if scan not in (*EP_CLOSE, *EP_PREMARKET, *BREAKOUT_RULES):
+        if scan not in (*EP_CLOSE, *EP_PREMARKET, *EP_AFTERHOURS, *BREAKOUT_RULES):
             out[scan] = hits
             continue
         rows = []

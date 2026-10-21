@@ -25,6 +25,19 @@ def run_eod(argv):
     return job.main("eod", "EOD", "test", argv)
 
 
+def scans_off(monkeypatch, *names):
+    """Switch scans off for one test, so it pins one section of the push."""
+    import dataclasses
+    from types import MappingProxyType
+
+    cfg = job.load_config()
+    scans = {
+        n: dataclasses.replace(s, enabled=False) if n in names else s for n, s in cfg.scans.items()
+    }
+    cfg = dataclasses.replace(cfg, scans=MappingProxyType(scans))
+    monkeypatch.setattr(job, "load_config", lambda *a, **k: cfg)
+
+
 GAPPER = "".join(["GP", "QX"])  # built at runtime, like real data
 QUIET = "".join(["QT", "ZZ"])
 
@@ -320,6 +333,7 @@ def intraday_universe():
 def test_intraday_check_pushes_pace_without_a_universe_snapshot(
     tmp_path, capsys, sent, monkeypatch
 ):
+    scans_off(monkeypatch, "ep_am")  # its own test below
     monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
     assert run_intraday("am", ["--data-dir", str(tmp_path), "--force"]) == 0
     out, err = capsys.readouterr()
@@ -333,6 +347,41 @@ def test_intraday_check_pushes_pace_without_a_universe_snapshot(
     [message] = sent
     assert message.title.startswith("Intraday 10:15 ") and "EP9M pace 1" in message.title
     assert f"▸ {GAPPER}  +20.0%  3.0M → pace 12M" in message.body
+
+
+def test_1017_check_flags_the_ep_gap_for_a_1030_buy(tmp_path, capsys, sent, monkeypatch):
+    monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: intraday_universe())
+    assert run_intraday("am", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert "EP 10:30: 1 hits (1 alert), saved" in out and GAPPER not in out + err
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    cands = pd.read_parquet(run_dir / "candidates.parquet")
+    assert cands.loc[cands["scan"] == "ep_am", "ticker"].tolist() == [GAPPER]
+    [message] = sent
+    assert "EP 10:30 1" in message.title and f"▸ {GAPPER}  +18.0%" in message.body
+
+
+def test_after_hours_check_flags_earnings_movers(tmp_path, capsys, sent, monkeypatch):
+    session = clock.session_date(load_config().schedule, "ah", dt.datetime.now(dt.UTC))
+    release = pd.Timestamp(f"{session} 20:05", tz="UTC")  # after the close, New York
+
+    def universe(u, with_history=False):
+        df = synthetic_universe()
+        df["ah_change_pct"], df["ah_volume"], df["ah_price"] = 10.0, 200_000.0, 12.65
+        df.loc[df["ticker"] == GAPPER, "earnings_date_last"] = release
+        return df  # QUIET moves as much after hours, but without a report
+
+    monkeypatch.setattr(job.tv, "fetch_universe", universe)
+    assert run_intraday("ah", ["--data-dir", str(tmp_path), "--force"]) == 0
+    out, err = capsys.readouterr()
+    assert "EP-AH: 1 hits (1 alert), saved" in out and GAPPER not in out + err
+    [run_dir] = (tmp_path / "data" / "manual").iterdir()
+    assert "_ah_" in run_dir.name and not (run_dir / "universe.parquet").exists()
+    cands = pd.read_parquet(run_dir / "candidates.parquet")
+    assert cands["scan"].tolist() == ["ep_ah"] and cands["ticker"].tolist() == [GAPPER]
+    assert cands["ah_price"].tolist() == [12.65]
+    [message] = sent
+    assert message.title.startswith("After hours 16:50 ") and f"▸ {GAPPER}  +10.0%" in message.body
 
 
 def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypatch):
@@ -367,6 +416,7 @@ def test_intraday_script_picks_the_check_by_time(monkeypatch):
 
 
 def test_intraday_pivot_alert_uses_the_latest_eod_levels(tmp_path, capsys, sent, monkeypatch):
+    scans_off(monkeypatch, "ep_am")
     universe = intraday_universe()
     universe.loc[universe["ticker"] == GAPPER, "rvol_at_time_tv"] = 2.0  # 2M pace: no EP9M
     monkeypatch.setattr(job.tv, "fetch_universe", lambda u, with_history=False: universe)

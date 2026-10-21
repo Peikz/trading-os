@@ -113,7 +113,11 @@ def _one(cand, horizon, by_key, window_sessions, computed_ts):
         span = by_key.loc[[(ticker, s) for s in window]]
     except KeyError:
         return None  # a bar is missing; maybe later
-    if slot in INTRADAY_SLOTS:  # bought during the session: entry at the price the run saw
+    if slot == "ah":  # bought after hours: the post-market price the run saw
+        price = cand.get("ah_price")
+        entry_basis = "after hours"
+        entry = np.nan if price is None or pd.isna(price) else float(price)
+    elif slot in INTRADAY_SLOTS:  # bought during the session: entry at the price the run saw
         entry_basis, entry = "signal", float(cand.get("close", np.nan))
     else:
         entry_basis = "open" if slot == "pm" else "close"

@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from trading_os.config import load_config
-from trading_os.scans.ep import ep9m, ep9m_early, ep9m_pace, ep_ah, ep_pm
+from trading_os.scans.ep import ep9m, ep9m_early, ep9m_pace, ep_ah, ep_am, ep_pm
 from trading_os.scans.momentum import mb_down, mb_up
 
 
@@ -88,17 +88,27 @@ def test_mb_down(scans):
 
 def ah_row(ticker, **kw):
     base = {"ticker": ticker, "ah_change_pct": 8.0, "close": 1.0, "market_cap": 50_000_000}
-    return base | {"ah_volume": 50_000} | kw
+    return base | {"ah_volume": 50_000, "earnings_flag": True} | kw
 
 
 def test_ep_ah(scans):
     s = scans["ep_ah"]
-    assert s.enabled is False
+    assert s.enabled is True
     assert run(ep_ah, s, ah_row("EDGE")) == ["EDGE"]
+    assert run(ep_ah, s, ah_row("NOREPORT", earnings_flag=False)) == []  # earnings only
     assert run(ep_ah, s, ah_row("SMALL", ah_change_pct=7.99)) == []
     assert run(ep_ah, s, ah_row("THIN", ah_volume=49_999)) == []
     assert run(ep_ah, s, ah_row("SUB1", close=0.99)) == []
     assert run(ep_ah, s, ah_row("TINY", market_cap=49_999_999)) == []
+
+
+def test_ep_am_takes_the_opening_gap_only(scans):
+    s = scans["ep_am"]
+    row = {"ticker": "EDGE", "gap_pct": 10.0, "close": 1.0, "market_cap": 50_000_000}
+    assert run(ep_am, s, row) == ["EDGE"]
+    assert run(ep_am, s, row | {"ticker": "SMALL", "gap_pct": 9.99}) == []
+    assert run(ep_am, s, row | {"ticker": "SUB1", "close": 0.99}) == []
+    assert run(ep_am, s, row | {"ticker": "TINY", "market_cap": 49_999_999}) == []
 
 
 def pm_row(ticker, **kw):

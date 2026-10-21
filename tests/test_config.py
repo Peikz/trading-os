@@ -37,8 +37,19 @@ def test_underscored_numbers_parse_as_ints():
     assert isinstance(cfg.universe["logged"]["market_cap_min"], int)
 
 
-def test_ep_ah_is_off_by_default():
-    assert load_config().scans["ep_ah"].enabled is False
+def test_ep_moved_from_the_close_to_1030_and_after_hours():
+    scans = load_config().scans
+    assert scans["ep_close"].enabled is False
+    assert scans["ep_am"].enabled and scans["ep_am"].runs_in("am")
+    ah = scans["ep_ah"]
+    assert ah.enabled and ah.runs_in("ah") and ah["earnings_only"] is True
+
+
+def test_quality_enabled_is_a_switch_or_a_list_of_quality_strategies(raw):
+    bad = copy.deepcopy(raw)
+    bad["grading"]["quality_enabled"] = ["no_such_setup"]
+    with pytest.raises(ConfigError, match="quality_enabled"):
+        parse_config(bad)
 
 
 def test_unknown_scan_key_raises(raw):

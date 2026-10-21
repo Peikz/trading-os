@@ -17,9 +17,9 @@ import yaml
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "scans.yaml"
 
-SLOTS = frozenset({"pm", "am", "mid", "close", "eod", "weekly"})
+SLOTS = frozenset({"pm", "am", "mid", "close", "eod", "ah", "weekly"})
 # During the session: 10:15 and 12:00 New York (Emil, 19 Oct 2026).
-INTRADAY_SLOTS = ("am", "mid", "close")  # close: 15:45 (Emil, 20 Oct 2026)
+INTRADAY_SLOTS = ("am", "mid", "close", "ah")  # close: 15:45 (20 Oct), ah: 16:50 (21 Oct 2026)
 ACTIONS = frozenset({"push", "log", "watchlist"})
 TIERS = frozenset({"alert", "log"})
 # Pre-market "gap": TradingView field -> canonical column (docs/fields.md).
@@ -305,7 +305,15 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
         "price_min",
         "market_cap_min",
     },
-    "ep_ah": {"push_tier", "ah_change_min_pct", "price_min", "market_cap_min", "ah_volume_min"},
+    "ep_ah": {
+        "push_tier",
+        "ah_change_min_pct",
+        "price_min",
+        "market_cap_min",
+        "ah_volume_min",
+        "earnings_only",
+    },
+    "ep_am": {"push_tier", "gap_min_pct", "price_min", "market_cap_min"},
     "ep9m": {"push_tier", "volume_min", "chg_min_pct"},
     "ep9m_pace": {"push_tier", "volume_min", "chg_min_pct"},
     "pivot_watch": {"push_tier", "near_pivot_pct"},
@@ -540,6 +548,11 @@ def _check_grading(raw: Any) -> None:
     for name, spec in raw["conditions"].items():
         if "feature" not in spec or not set(spec) - {"feature"} <= CONDITION_TESTS:
             raise ConfigError(f"grading.conditions.{name}: a feature and {sorted(CONDITION_TESTS)}")
+    enabled = raw["quality_enabled"]
+    if not isinstance(enabled, bool) and not (
+        isinstance(enabled, list) and set(enabled) <= set(raw["quality"])
+    ):
+        raise ConfigError("grading.quality_enabled: true, false or a list of quality strategies")
     for name, rule in raw["quality"].items():
         _check_keys(f"grading.quality.{name}", rule, GRADING_QUALITY_KEYS)
         unknown = set(rule["parts"]) - set(raw["conditions"])

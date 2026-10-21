@@ -12,6 +12,7 @@ from trading_os.scans.ep import (
     ep9m_early,
     ep9m_pace,
     ep_ah,
+    ep_am,
     ep_day,
     ep_pm,
     watchlist_gappers,
@@ -37,6 +38,7 @@ REGISTRY: dict[str, ScanFn] = {
     "ep_day": ep_day,
     "ep_close": ep_day,  # the EP-Day rule on the live data 15 minutes before the close
     "ep_ah": ep_ah,
+    "ep_am": ep_am,
     "ep9m": ep9m,
     "ep9m_pace": ep9m_pace,
     "pivot_watch": pivot_watch,

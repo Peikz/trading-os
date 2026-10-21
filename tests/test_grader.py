@@ -130,8 +130,12 @@ def test_a_quality_count_grades_by_points_and_carries_the_scan_entry():
     assert grader.grade("ep_pm", feats, off).grade == "C"  # the scorecards don't cover ep_pm
 
 
-def test_the_proposed_quality_config_loads_and_is_off():
+def test_the_quality_count_grades_ep_only():
     rules = load_config().grading
-    assert rules["quality_enabled"] is False
+    assert tuple(rules["quality_enabled"]) == ("ep",)  # Emil, 21 Oct 2026
     for name, rule in rules["quality"].items():
         assert set(rule["parts"]) <= set(rules["conditions"]), name
+    assert grader.grade("ep_am", {}, rules).plan["entry"] == "t_1030"
+    assert grader.grade("ep_ah", {}, rules).plan["entry"] == "ah_1645"
+    assert grader.quality_for("ep9m_pace", rules) is None  # EP9M keeps its scorecard
+    assert grader.quality_for("ep9m_pace", rules | {"quality_enabled": True}) == "ep9m"

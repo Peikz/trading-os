@@ -171,6 +171,37 @@ def test_earnings_facts_count_sessions_since_the_last_report():
     assert "sessions_since_earnings" not in grade_live.earnings_facts({}, CFG.schedule, SESSION)
 
 
+def test_after_hours_grades_from_todays_close_and_the_post_market_price():
+    assert grade_live.asof_session(CFG, SESSION, "ah") == SESSION
+    assert grade_live.asof_session(CFG, SESSION, "am") == clock.previous_session(
+        CFG.schedule, SESSION
+    )
+    rec = {"close": 20.0, "ah_price": 22.0, "ah_change_pct": 10.0}
+    assert grade_live.entry_price(rec, "ep_ah") == 22.0
+    assert grade_live.entry_price(rec | {"ah_price": None}, "ep_ah") == pytest.approx(22.0)
+    assert grade_live.entry_price(rec, "ep_am") == 20.0
+
+
+def test_quality_grades_show_their_own_entrys_history():
+    stats = {
+        "ep": {
+            "grades": {"B": {"trades": 1335, "mean_r": 0.28}},
+            "quality": {"t_1030": {"B": {"trades": 1256, "mean_r": 0.12}}},
+        }
+    }
+    hits = pd.DataFrame(
+        {
+            "grade_strategy": ["ep", "ep", None],
+            "grade": ["B", "B", "C"],
+            "grade_entry_rule": ["t_1030", "close", None],
+            "grade_basis": ["quality", "scorecard", None],
+        }
+    )
+    out = grade_live.with_stats(hits, stats)
+    assert out["grade_stat_trades"].iloc[:2].tolist() == [1256, 1335]
+    assert pd.isna(out["grade_stat_trades"].iloc[2])
+
+
 def test_push_shows_quality_points_not_r():
     row = hit(A) | {
         "grade": "A+",

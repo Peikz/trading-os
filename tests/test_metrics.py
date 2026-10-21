@@ -99,6 +99,13 @@ def test_earnings_flag_uses_new_york_dates():
     assert flags.tolist() == [True, True, True, False, False]
 
 
+def test_earnings_today_reads_the_last_or_the_next_release_date():
+    last = pd.Series(pd.to_datetime(["2026-10-16 20:05", "2026-07-16 20:05", None], utc=True))
+    upcoming = pd.Series(pd.to_datetime(["2027-01-20 20:05", "2026-10-16 20:05", None], utc=True))
+    flags = metrics.earnings_today(last, upcoming, dt.date(2026, 10, 16))
+    assert flags.tolist() == [True, True, False]  # updated / not yet updated / no dates
+
+
 def test_yoy_growth_from_latest_first_history():
     revenue = [130, 120, 110, 100, 100, 80, 90, 95]
     assert metrics.yoy_growth(revenue, 0, abs_base=False) == pytest.approx(30.0)  # 130 vs 100

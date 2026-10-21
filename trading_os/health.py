@@ -17,8 +17,8 @@ import pandas as pd
 from trading_os import clock, dashboard
 from trading_os.metrics import NEW_YORK
 
-SLOTS = ("pm", "am", "mid", "close", "eod")
-NEWER_SLOTS = {"close"}  # added 20 Oct 2026: sessions before its first run show "—"
+SLOTS = ("pm", "am", "mid", "eod", "ah")  # the 15:45 close check is off since 21 Oct 2026
+NEWER_SLOTS = {"ah"}  # added 21 Oct 2026: sessions before its first run show "—"
 MARKS = {"scheduled": "✅", "manual": "🟡 manual", "missing": "❌", "pending": "⏳", "none": "—"}
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

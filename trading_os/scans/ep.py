@@ -88,9 +88,9 @@ def ep9m_pace(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
 
 
 def ep_ah(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
-    """EP-AH: post-market move at the EOD run (toggle, default off).
-
-    Ranked by post-market change.
+    """EP-AH: post-market move and volume at the 16:50 check (Emil, 21 Oct 2026), with
+    `earnings_only` on a release that day (the job sets `earnings_flag` to that in the ah
+    slot). Ranked by post-market change.
     """
     hit = (
         (df["ah_change_pct"] >= scan["ah_change_min_pct"])
@@ -98,4 +98,17 @@ def ep_ah(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
         & (df["market_cap"] >= scan["market_cap_min"])
         & (df["ah_volume"] >= scan["ah_volume_min"])
     )
+    if scan.params.get("earnings_only", False):
+        hit &= df["earnings_flag"].fillna(False).astype(bool)
     return ranked(df, hit, "ah_change_pct")
+
+
+def ep_am(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """EP gap at the 10:17 check, for a ~10:30 buy (Emil, 21 Oct 2026): the opening gap with
+    price and market-cap floors, as the grading study's 10:30 entry. Ranked by gap."""
+    hit = (
+        (df["gap_pct"] >= scan["gap_min_pct"])
+        & (df["close"] >= scan["price_min"])
+        & (df["market_cap"] >= scan["market_cap_min"])
+    )
+    return ranked(df, hit, "gap_pct")

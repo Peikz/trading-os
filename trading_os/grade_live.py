@@ -48,8 +48,26 @@ STAT_KEYS = ("trades", "win_pct", "mean_r", "median_r", "years_pos", "years", "d
 
 
 def asof_session(cfg, session: dt.date, slot: str) -> dt.date:
-    """The close the features come from: the run's own session at EOD, else the one before."""
-    return session if slot == "eod" else clock.previous_session(cfg.schedule, session)
+    """The close the features come from: the run's own session after the close (EOD, after
+    hours), else the one before."""
+    if slot in ("eod", "ah"):
+        return session
+    return clock.previous_session(cfg.schedule, session)
+
+
+def entry_price(rec: Mapping[str, Any], scan: str) -> float | None:
+    """The live price a hit would be bought at: after hours the post-market price (from the
+    post-market change when TradingView has no price), else the last price."""
+    if scan == "ep_ah":
+        price = rec.get("ah_price")
+        if price is None or pd.isna(price):
+            close, change = rec.get("close"), rec.get("ah_change_pct")
+            if close is None or change is None or pd.isna(close) or pd.isna(change):
+                return None
+            price = close * (1 + change / 100)
+        return float(price)
+    price = rec.get("close")
+    return None if price is None or pd.isna(price) else float(price)
 
 
 def market_features(row: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -163,7 +181,7 @@ def grade_hits(
             feats.update(extra.loc[ticker].dropna().to_dict())
         if "base_days" in rec:
             feats["sig_base_days"] = rec.get("base_days")
-        entry = rec.get("close")
+        entry = entry_price(rec, scan)
         adr_usd = rec.get("adr20_usd")
         adr_pct = rec.get("adr20_pct")
         stop = stop_for(entry, adr_usd, rule["stop_adr"], cfg.intraday_study["min_stop_pct"])
@@ -171,7 +189,7 @@ def grade_hits(
             scan,
             feats,
             grading,
-            price=entry if entry and not pd.isna(entry) else None,
+            price=entry,
             stop=stop if not pd.isna(stop) else None,
             dvol20=rec.get("avg_dollar_volume_20d"),
             adr_pct=adr_pct,
@@ -187,10 +205,23 @@ def grade_hits(
                 "grade_hold_sessions": rule["hold_sessions"],
                 "grade_risk_mult": g.risk_mult,
                 "grade_stop": stop,
+                "grade_entry": entry,
+                "grade_basis": "quality" if "parts" in rule else "scorecard",
             }
         )
     frame = pd.DataFrame(rows, index=hits.index)
     return hits.drop(columns=[c for c in frame.columns if c in hits]).join(frame)
+
+
+def _stat(stats: Mapping[str, Any], strategy, grade, entry, basis, key: str):
+    """One history figure: a quality count's from its entry (`quality.<entry>.<grade>`), a
+    scorecard's from `grades.<grade>`."""
+    if not isinstance(strategy, str):
+        return None
+    block = stats.get(strategy, {})
+    if basis == "quality":
+        return block.get("quality", {}).get(entry, {}).get(grade, {}).get(key)
+    return block.get("grades", {}).get(grade, {}).get(key)
 
 
 def with_stats(hits: pd.DataFrame, stats: Mapping[str, Any]) -> pd.DataFrame:
@@ -198,10 +229,13 @@ def with_stats(hits: pd.DataFrame, stats: Mapping[str, Any]) -> pd.DataFrame:
     if hits.empty or "grade_strategy" not in hits:
         return hits
     out = hits.copy()
+    none = pd.Series(None, index=out.index, dtype=object)
+    entries = out.get("grade_entry_rule", none)
+    bases = out.get("grade_basis", none)
     for key in STAT_KEYS:
         out[f"grade_stat_{key}"] = [
-            stats.get(s, {}).get("grades", {}).get(g, {}).get(key) if isinstance(s, str) else None
-            for s, g in zip(out["grade_strategy"], out["grade"], strict=True)
+            _stat(stats, s, g, e, b, key)
+            for s, g, e, b in zip(out["grade_strategy"], out["grade"], entries, bases, strict=True)
         ]
     return out
 
@@ -219,8 +253,9 @@ def resize(hits: pd.DataFrame, account, usd_rate: float) -> pd.DataFrame:
         mult = rec.get("grade_risk_mult")
         if rec.get("grade_strategy") is None or pd.isna(mult) or not mult > 0:
             continue
+        entry = rec.get("grade_entry")
         sized = sizing.size(
-            rec.get("close"),
+            rec.get("close") if entry is None or pd.isna(entry) else entry,
             rec.get("grade_stop"),
             risk_usd * mult,
             account_usd,

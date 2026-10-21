@@ -54,10 +54,12 @@ JOBS = (
     TimerJob("am", "intraday.yml", "Intraday", "10:40", WEEKDAYS, {"slot": "am"}, True),
     TimerJob("mid", "intraday.yml", "Intraday", "12:03", WEEKDAYS, {"slot": "mid"}),
     TimerJob("mid", "intraday.yml", "Intraday", "12:30", WEEKDAYS, {"slot": "mid"}, True),
-    TimerJob("close", "intraday.yml", "Intraday", "15:43", WEEKDAYS, {"slot": "close"}),
-    TimerJob("close", "intraday.yml", "Intraday", "15:50", WEEKDAYS, {"slot": "close"}, True),
+    # The 15:45 EP close check is off since 21 Oct 2026 (EP moved to 10:30 and after hours);
+    # its slot stays for manual runs (`--slot close`).
     TimerJob("eod", "eod.yml", "EOD", "16:17", WEEKDAYS),
     TimerJob("eod", "eod.yml", "EOD", "17:00", WEEKDAYS, retry=True),
+    TimerJob("ah", "intraday.yml", "Intraday", "16:50", WEEKDAYS, {"slot": "ah"}),
+    TimerJob("ah", "intraday.yml", "Intraday", "16:56", WEEKDAYS, {"slot": "ah"}, True),
     TimerJob("outcomes", "outcomes.yml", "Outcomes", "18:00", WEEKDAYS),
     TimerJob("weekly", "weekly.yml", "Weekly", "12:00", (0,)),
 )

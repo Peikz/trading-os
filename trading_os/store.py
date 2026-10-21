@@ -62,6 +62,7 @@ AUDIT_COLUMNS = [
     "pm_dollar_volume",
     "ah_change_pct",
     "ah_volume",
+    "ah_price",
     "above_ma10",
     "above_ma20",
     "above_ma50",

@@ -48,6 +48,9 @@ schedule:                                   # SPEC §3
     eod: ["16:15", "23:59"]                 # until midnight (Emil, 20 Oct 2026): GitHub's
                                             # scheduler ran 5 h late on 19 Oct; the closing
                                             # data is the same at 23:00 as at 16:20
+    ah: ["16:40", "17:10"]                  # EP after hours at 16:50 (Emil, 21 Oct 2026): sees
+                                            # ~16:35 (TradingView is 15 min delayed); Saxo's
+                                            # extended hours end at 17:00
   weekly_day: Sunday                        # New York date; the job reports the week's last session
 
 scans:
@@ -69,13 +72,22 @@ scans:
     {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
      gap_min_pct: 10, rvol_min: 3, volume_min: 300_000, price_min: 1.00, market_cap_min: 50_000_000}
   ep_close:                                 # EP-Day's rule 15 minutes before the close (Emil,
-                                            # 20 Oct 2026): the grading study's A plan buys the
-                                            # gap at the close; the EOD push comes too late
-    {enabled: true, phase: 1, slot: close, action: push, push_tier: alert,
+                                            # 20 Oct 2026). Off since 21 Oct: the EP buy moved to
+                                            # 10:30 and after hours (ep_am, ep_ah); the close was
+                                            # the weakest EP entry in the 2022-26 portfolio runs
+    {enabled: false, phase: 1, slot: close, action: push, push_tier: alert,
      gap_min_pct: 10, rvol_min: 3, volume_min: 300_000, price_min: 1.00, market_cap_min: 50_000_000}
-  ep_ah:                                    # toggle, default OFF
-    {enabled: false, phase: 1, slot: eod, action: push, push_tier: alert,
-     ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000}
+  ep_am:                                    # EP gap at the 10:17 check, bought ~10:30 (Emil,
+                                            # 21 Oct 2026): the study's 10:30 entry, which needs
+                                            # only the opening gap (graded by the EP quality count)
+    {enabled: true, phase: 1, slot: am, action: push, push_tier: alert,
+     gap_min_pct: 10, price_min: 1.00, market_cap_min: 50_000_000}
+  ep_ah:                                    # EP after hours at 16:50, bought before Saxo's 17:00
+                                            # close (Emil, 21 Oct 2026): the study's 16:45 entry,
+                                            # measured on after-close earnings releases only
+    {enabled: true, phase: 1, slot: ah, action: push, push_tier: alert,
+     ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000,
+     earnings_only: true}
   ep9m:                                     # EP scan: alert tier pushes (SPEC §11.7)
     {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert,
      volume_min: 9_000_000, chg_min_pct: 4}
@@ -395,9 +407,10 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   risk_mult: {"A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
   push: {"A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
   ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard
-  # Quality counts (variable search, 21 Oct 2026; report section 9). Every value (proposed)
-  # until Emil confirms; quality_enabled switches them on in place of the scorecards above.
-  quality_enabled: false
+  # Quality counts (variable search, 21 Oct 2026; report section 9). quality_enabled: true
+  # (all), false, or the strategies switched on in place of their scorecards. EP is on (Emil,
+  # 21 Oct 2026: EP moved to 10:30 and after hours); EP9M and the Luk flush stay (proposed).
+  quality_enabled: [ep]
   conditions:                               # yes/no, thresholds fixed before the search
     earnings: {feature: is_earnings_reaction_day, equals: true}
     earnings_recent: {feature: sessions_since_earnings, max: 10}
@@ -410,9 +423,9 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   quality:                                  # points at least -> grade; the plan per live scan
     ep:
       parts: [earnings, sideways_1_2m, market_cool_lt45, revenue_accel, eps_yoy_pos, near_52w_high]
-      grades: [[5, "A+"], [4, "B"]]         # 5-6: +0.53R at the close (pre-market: biased, out)
-      live_scans: [ep_close]
-      entries: {ep_close: close}
+      grades: [[5, "A+"], [4, "B"]]         # 5-6, earnings days: +0.51R at 10:30, +0.63R at
+      live_scans: [ep_am, ep_ah]            # 16:45 (2016-26, held 21 sessions)
+      entries: {ep_am: t_1030, ep_ah: ah_1645}
       stop_adr: 1.0
       hold_sessions: 21
     ep9m:

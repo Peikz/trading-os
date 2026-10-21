@@ -48,6 +48,13 @@ def test_premarket_and_breakout_rules(rules):
     assert sizing.plan({"close": 1.0}, "mb_up", rules)[2] == ""
 
 
+def test_after_hours_entry_is_the_post_market_price(rules):
+    ah = sizing.plan({"ah_price": 22.0, "close": 20.0, "adr20_usd": 1.0}, "ep_ah", rules)
+    assert ah[:2] == (22.0, 21.0)
+    no_price = {"ah_price": float("nan"), "close": 20.0, "ah_change_pct": 10.0, "adr20_usd": 1.0}
+    assert sizing.plan(no_price, "ep_ah", rules)[0] == pytest.approx(22.0)
+
+
 def test_position_cap_and_bad_stops():
     # A 1-cent stop on a $5 stock would mean 37,498 shares ($187k): capped at the account.
     sized = sizing.size(5.0, 4.99, RISK_USD, ACCOUNT.size_usd(RATE), 100)

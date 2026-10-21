@@ -1,5 +1,5 @@
-"""Intraday checks: EP9M pace at 10:15 and 12:00 New York (Emil, 19 Oct 2026), EP close at 15:45
-(Emil, 20 Oct 2026): 16:15, 18:00 and 21:45 CET.
+"""Intraday checks: EP9M pace and the EP gap at 10:15, EP9M pace at 12:00, EP after hours at 16:50
+New York (Emil, 19-21 Oct 2026); the 15:45 EP close check runs by hand only.
 
 uv run python scripts/intraday.py --data-dir ../trading-os-data      # scheduled: slot by time
 uv run python scripts/intraday.py --data-dir ../trading-os-data --slot mid --force --no-push

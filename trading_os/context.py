@@ -33,7 +33,7 @@ DETAIL_FIELDS = {
     "earnings_per_share_diluted_fq_h": "ctx_eps_hist",
 }
 PREMARKET_SCANS = ("ep_pm", "ep9m_early", "watchlist_gappers")
-EP_SCANS = ("ep_day", "ep_close", "ep9m", "ep9m_pace", *PREMARKET_SCANS)
+EP_SCANS = ("ep_day", "ep_close", "ep_am", "ep_ah", "ep9m", "ep9m_pace", *PREMARKET_SCANS)
 BREAKOUT_SCANS = ("breakout_trigger", "breakout_watch", "pivot_watch", "luk_flush")
 CONTEXT_COLUMNS = [
     "ctx_eps_surprise_pct",

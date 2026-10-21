@@ -51,9 +51,9 @@ the extra starts are harmless.
 | Backfill | starts 05:30 Tue–Sat | Adds the previous session's daily bars (Massive) |
 | Bars pack | starts 06:15 Tue–Sat | Packs the last 2 years of daily bars into the dashboard's compact files |
 | Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
-| Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; BO-Watch names at their pivot |
-| Close check | 15:40–15:58 (starts 15:43, again 15:50) | EP close: the EP-Day rule before the close, with its study grade |
+| Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; EP gaps to buy around 10:30 (10:17 check only); BO-Watch names at their pivot |
 | EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report, push |
+| After-hours check | 16:40–17:10 (starts 16:50, again 16:56) | EP-AH: earnings movers after the close, to buy before 17:00 (Saxo's extended hours end) |
 | Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
 | Weekly | Sunday, starts 12:00 (18:00 Copenhagen) | QM gainers, growth buckets, tight bases, the Sunday scan count |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |
@@ -141,7 +141,6 @@ ETFs or ETNs). Two tiers:
 | Scan | Rule | Pushed |
 |---|---|---|
 | **EP-Day** (episodic pivot) | Opening gap ≥ 10 %, RVOL ≥ 3, volume ≥ 300K, price ≥ $1, market cap ≥ $50M | yes |
-| EP-AH | After-hours move ≥ 8 % (switched off) | — |
 | **EP9M** | Volume ≥ 9M shares and up ≥ 4 % | yes |
 | Momentum Burst up | Up ≥ 4 % on more volume than the day before, ≥ 100K shares, close in the top 30 % of the range | logged |
 | Momentum Burst down | Down ≥ 4 % on more volume than the day before, ≥ 100K shares | logged |
@@ -150,12 +149,16 @@ ETFs or ETNs). Two tiers:
 | **BO-Watch** | A base that passes B1–B4 (below) | yes |
 | **BO trigger** | B5 at the close over the pivot of the base that ended the day before | full setups yes |
 
-### Intraday (10:15 and 12:00)
+### Intraday (10:15, 12:00 and 16:50)
 
 - **EP9M pace**: up ≥ 4 % and 9M shares traded or on pace for it (TradingView's relative
   volume at that time of day × the stock's normal daily volume).
-- **EP close** (15:45): the EP-Day rule on the live data, so a graded gap can still be bought
-  at the close (the grading study's A plan).
+- **EP 10:30** (10:15 check): an opening gap ≥ 10 %, price ≥ $1, market cap ≥ $50M. Graded
+  by the EP quality count; the plan buys around 10:30 New York (16:30 Copenhagen).
+- **EP-AH** (16:50 New York, 22:50 Copenhagen): up ≥ 8 % after hours on ≥ 50K shares, on an
+  earnings release that day. Graded by the EP quality count; the plan buys at the after-hours
+  price before Saxo's extended hours end at 17:00 New York. The 15:45 EP close check is off
+  since 21 Oct 2026: the close was the weakest EP entry in the study.
 - **BO pivot**: BO-Watch names within 1 % of their pivot or over it. A name pushes once a
   session.
 

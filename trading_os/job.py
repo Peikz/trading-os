@@ -118,6 +118,10 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"History: {covered} of {LOOKBACK_SESSIONS} sessions; exact RVOL on {exact} rows")
     previous = clock.previous_session(cfg.schedule, session)
     df["earnings_flag"] = metrics.earnings_flag(df["earnings_date_last"], session, previous)
+    if slot == "ah":  # after hours: a release today, the evening the move happens
+        df["earnings_flag"] = metrics.earnings_today(
+            df["earnings_date_last"], df["earnings_date_next"], session
+        )
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
@@ -240,7 +244,7 @@ def _with_grades(results: dict, data_dir: Path, cfg, session, slot: str, extras,
         if "breadth" in extras and len(extras["breadth"]):
             market = extras["breadth"].iloc[0].to_dict()
         account, rate = _account_and_rate(data_dir, cfg)
-        today = enrich.todays_bars(df, session) if slot == "eod" else None
+        today = enrich.todays_bars(df, session) if slot in ("eod", "ah") else None
         out = grade_live.add_grades(
             results,
             data_dir,

@@ -67,6 +67,7 @@ FIELDS: dict[str, str] = {
     "pm_price": "premarket_close",
     "ah_change_pct": "postmarket_change",
     "ah_volume": "postmarket_volume",
+    "ah_price": "postmarket_close",
 }
 # Quarterly history arrays (32 quarters, latest first), fetched by the weekly job only.
 # metrics.add_growth_metrics turns them into scalar columns; the arrays are never stored.

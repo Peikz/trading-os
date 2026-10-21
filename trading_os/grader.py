@@ -134,10 +134,14 @@ def condition_met(spec: Mapping[str, Any], value) -> bool:
 
 
 def quality_for(scan: str, grading: Mapping[str, Any]) -> str | None:
-    """The quality-count strategy that grades a live scan, when quality counts are on."""
-    if not grading.get("quality_enabled"):
+    """The quality-count strategy that grades a live scan, when its count is on
+    (`quality_enabled`: true for all, or a list of strategies)."""
+    enabled = grading.get("quality_enabled")
+    if not enabled:
         return None
     for name, rule in grading.get("quality", {}).items():
+        if enabled is not True and name not in enabled:
+            continue
         if scan == name or scan in rule.get("live_scans", ()):
             return name
     return None
