@@ -32,7 +32,7 @@ import pandas as pd
 from trading_os import clock, grader, history
 from trading_os import history_metrics as hm
 
-FEATURE_SESSIONS = 80  # the scorecards' longest window is about 60 sessions
+FEATURE_SESSIONS = 260  # the 52-week high before the signal (quality counts)
 INDEX_SESSIONS = 210  # SPY's 200-day MA
 GRADE_COLUMNS = [
     "grade",
@@ -109,6 +109,33 @@ def _why(g: grader.Grade, top: int = 3) -> str:
     return ", ".join(parts)
 
 
+def rule_for(scan: str, grading: Mapping[str, Any]) -> tuple[str | None, Mapping | None]:
+    """(strategy, its rule): a quality count when those are on, else the scorecard."""
+    name = grader.quality_for(scan, grading)
+    if name is not None:
+        return name, grading["quality"][name]
+    name = grader.strategy_for(scan, grading)
+    return name, None if name is None else grading["strategies"][name]
+
+
+def earnings_facts(rec: Mapping[str, Any], schedule, asof: dt.date | None) -> dict:
+    """`is_earnings_reaction_day` (earnings on the signal session or the evening before, the
+    live EP flag) and `sessions_since_earnings` (from TradingView's last report date)."""
+    out = {"is_earnings_reaction_day": bool(rec.get("earnings_flag", False))}
+    last = rec.get("earnings_date_last")
+    if asof is not None and last is not None and not pd.isna(last):
+        day = pd.Timestamp(last)
+        if day.tzinfo is not None:
+            day = day.tz_convert("America/New_York")
+        day = day.date()
+        if day <= asof:
+            cal = clock._calendar(schedule.calendar)
+            out["sessions_since_earnings"] = float(
+                len(cal.sessions_in_range(pd.Timestamp(day), pd.Timestamp(asof))) - 1
+            )
+    return out
+
+
 def grade_hits(
     hits: pd.DataFrame,
     scan: str,
@@ -116,18 +143,19 @@ def grade_hits(
     market: Mapping[str, Any],
     stocks: pd.DataFrame,
     extra: pd.DataFrame | None = None,
+    asof: dt.date | None = None,
 ) -> pd.DataFrame:
     """`hits` plus the grade columns and, for graded hits, the study plan's entry and stop."""
     grading = cfg.grading
-    name = grader.strategy_for(scan, grading)
+    name, rule = rule_for(scan, grading)
     rows = []
     for rec in hits.to_dict("records"):
         if name is None:
             g = grader.grade(scan, {}, grading)
             rows.append({"grade": g.grade, "grade_why": g.note})
             continue
-        rule = grading["strategies"][name]
         feats = dict(market)
+        feats.update(earnings_facts(rec, cfg.schedule, asof))
         ticker = rec["ticker"]
         if ticker in stocks.index:
             feats.update(stocks.loc[ticker].to_dict())
@@ -154,8 +182,8 @@ def grade_hits(
                 "grade_strategy": name,
                 "grade_score": g.score,
                 "grade_cost_r": g.cost_r,
-                "grade_why": _why(g),
-                "grade_entry_rule": rule["entry"],
+                "grade_why": g.note or _why(g),
+                "grade_entry_rule": g.plan.get("entry", rule.get("entry")),
                 "grade_hold_sessions": rule["hold_sessions"],
                 "grade_risk_mult": g.risk_mult,
                 "grade_stop": stop,
@@ -207,8 +235,9 @@ def resize(hits: pd.DataFrame, account, usd_rate: float) -> pd.DataFrame:
 
 
 def growth_accel(symbols: list[str], fetch_details) -> pd.DataFrame:
-    """Revenue growth acceleration (percentage points vs the quarter before), by tv_ticker,
-    from TradingView's quarterly history (the same arithmetic as the SEC study feature)."""
+    """Revenue growth acceleration (percentage points vs the quarter before) and EPS growth
+    YoY of the latest quarter, by tv_ticker, from TradingView's quarterly history (the same
+    arithmetic as the SEC study features)."""
     from trading_os import context
 
     if not symbols:
@@ -217,7 +246,23 @@ def growth_accel(symbols: list[str], fetch_details) -> pd.DataFrame:
     details = context.growth_columns(details.rename(columns=context.DETAIL_FIELDS))
     out = pd.DataFrame(index=details.index)
     out["revenue_growth_accel"] = details["ctx_rev_growth_q"] - details["ctx_rev_growth_q_prev"]
+    out["eps_yoy_pct"] = details["ctx_eps_growth_q"]
     return out
+
+
+GROWTH_FEATURES = ("revenue_growth_accel", "eps_yoy_pct")
+
+
+def uses_growth(scan: str, grading: Mapping[str, Any]) -> bool:
+    """Whether the scan's grade reads TradingView's quarterly growth (one extra request)."""
+    name, rule = rule_for(scan, grading)
+    if rule is None:
+        return False
+    if "parts" in rule:
+        feats = {grading["conditions"][p]["feature"] for p in rule["parts"]}
+    else:
+        feats = set(rule["features"])
+    return bool(feats & set(GROWTH_FEATURES))
 
 
 def add_grades(
@@ -244,9 +289,7 @@ def add_grades(
         market_row = breadth.latest_eod_row(data_dir, asof + dt.timedelta(days=1))
     market = market_features(market_row)
     graded = {
-        n
-        for n, hits in results.items()
-        if len(hits) and grader.strategy_for(n, cfg.grading) is not None
+        n for n, hits in results.items() if len(hits) and rule_for(n, cfg.grading)[0] is not None
     }
     tickers = sorted({t for n in graded for t in results[n]["ticker"]})
     stocks = pd.DataFrame()
@@ -264,19 +307,14 @@ def add_grades(
             out[name] = hits
             continue
         extra = None
-        strategy = grader.strategy_for(name, cfg.grading)
-        uses_growth = (
-            strategy is not None
-            and "revenue_growth_accel" in (cfg.grading["strategies"][strategy]["features"])
-        )
-        if uses_growth and fetch_details is not None and "tv_ticker" in hits:
+        if uses_growth(name, cfg.grading) and fetch_details is not None and "tv_ticker" in hits:
             try:
                 accel = growth_accel(sorted(hits["tv_ticker"].dropna().unique()), fetch_details)
                 extra = hits.set_index("ticker")[["tv_ticker"]].join(accel, on="tv_ticker")
                 extra = extra.drop(columns=["tv_ticker"])
             except Exception:  # noqa: BLE001 - the feature then scores as missing
                 extra = None
-        graded_hits = grade_hits(hits, name, cfg, market, stocks, extra)
+        graded_hits = grade_hits(hits, name, cfg, market, stocks, extra, asof)
         graded_hits = with_stats(graded_hits, stats)
         out[name] = resize(graded_hits, account, usd_rate)
     return out

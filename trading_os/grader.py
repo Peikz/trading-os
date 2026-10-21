@@ -24,6 +24,12 @@ Rules live in config `grading:` (all proposed until Emil confirms them):
   `revenue_growth_accel`: revenue growth change in % points vs the quarter before (SEC);
 - `costs`: Saxo's commission and the slippage model; cost in R = cost % / stop distance %.
 
+Quality counts (variable search, 21 Oct 2026; on with `quality_enabled`): a strategy listed
+under `quality` is graded by how many of its yes/no `conditions` hold (equal weights, nothing
+fitted), e.g. EP: an earnings release, 1-2 months sideways, a market that isn't hot, revenue
+growth accelerating, EPS up, near the 52-week high; `grades` maps points to A+/A/B. A missing
+value counts as a no. Its plan (entry per live scan, stop, hold) comes with it.
+
 Scans without a scorecard grade C with `ungraded` as the reason.
 """
 
@@ -108,6 +114,70 @@ def cost_r(
     return total / stop_pct
 
 
+def condition_met(spec: Mapping[str, Any], value) -> bool:
+    """One yes/no condition: `equals`, `min`/`max` (inclusive), `above`/`below` (strict). A
+    missing value is a no."""
+    if _missing(value):
+        return False
+    if "equals" in spec:
+        want = spec["equals"]
+        if isinstance(want, bool):
+            return bool(value) == want
+        return _category(value) == _category(want)
+    v = float(value)
+    return (
+        ("min" not in spec or v >= float(spec["min"]))
+        and ("max" not in spec or v <= float(spec["max"]))
+        and ("above" not in spec or v > float(spec["above"]))
+        and ("below" not in spec or v < float(spec["below"]))
+    )
+
+
+def quality_for(scan: str, grading: Mapping[str, Any]) -> str | None:
+    """The quality-count strategy that grades a live scan, when quality counts are on."""
+    if not grading.get("quality_enabled"):
+        return None
+    for name, rule in grading.get("quality", {}).items():
+        if scan == name or scan in rule.get("live_scans", ()):
+            return name
+    return None
+
+
+def quality_grade(scan: str, features: Mapping[str, Any], grading: Mapping[str, Any]) -> Grade:
+    """Grade by the number of the strategy's conditions that hold."""
+    name = quality_for(scan, grading)
+    rule = grading["quality"][name]
+    conditions = grading["conditions"]
+    reasons = []
+    for part in rule["parts"]:
+        spec = conditions[part]
+        met = condition_met(spec, features.get(spec["feature"]))
+        reasons.append((part, features.get(spec["feature"]), 1.0 if met else 0.0))
+    points = sum(r[2] for r in reasons)
+    label = "C"
+    for floor, grade_label in rule["grades"]:
+        if points >= float(floor):
+            label = grade_label
+            break
+    entries = rule.get("entries", {})
+    plan = {
+        "entry": entries.get(scan, rule.get("entry")),
+        "stop_adr": rule["stop_adr"],
+        "hold_sessions": rule["hold_sessions"],
+    }
+    return Grade(
+        scan,
+        name,
+        label,
+        float(points),
+        None,
+        tuple(sorted(reasons, key=lambda r: -r[2])),
+        plan,
+        float(grading["risk_mult"].get(label, 0.0)),
+        note=f"{int(points)} of {len(rule['parts'])} quality points",
+    )
+
+
 def strategy_for(scan: str, grading: Mapping[str, Any]) -> str | None:
     """The study strategy whose scorecard grades a live scan (config `live_scans`), or the
     scan itself when it has one."""
@@ -133,6 +203,8 @@ def grade(
     """The study grade of one setup. `features`: the scorecard's feature values (missing ones
     score their `na` points); `price` / `stop`: the planned entry and stop, for the cost."""
     risk = grading["risk_mult"]
+    if quality_for(scan, grading) is not None:
+        return quality_grade(scan, features, grading)
     name = strategy_for(scan, grading)
     if name is None:
         return Grade(

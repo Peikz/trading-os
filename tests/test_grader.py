@@ -80,3 +80,58 @@ def test_the_proposed_config_grades_every_rule_set():
         g = grader.grade(name, {}, rules)
         assert g.grade in grader.GRADES and g.strategy == name
         assert len(rule["bands"]) >= 1
+
+
+def quality_rules():
+    rules = dict(RULES)
+    rules["quality_enabled"] = True
+    rules["conditions"] = {
+        "earnings": {"feature": "is_earnings_reaction_day", "equals": True},
+        "sideways_1_2m": {"feature": "d_neglect_months", "min": 1, "max": 2},
+        "market_cool": {"feature": "mkt_scan_count", "below": 45},
+        "revenue_accel": {"feature": "revenue_growth_accel", "above": 0},
+    }
+    rules["quality"] = {
+        "ep": {
+            "parts": ["earnings", "sideways_1_2m", "market_cool", "revenue_accel"],
+            "grades": [[4, "A+"], [3, "B"]],
+            "live_scans": ["ep_pm", "ep_close"],
+            "entries": {"ep_pm": "pm_0915", "ep_close": "close"},
+            "stop_adr": 1.0,
+            "hold_sessions": 21,
+        }
+    }
+    return rules
+
+
+def test_conditions_are_inclusive_ranges_strict_bounds_and_equality():
+    assert grader.condition_met({"feature": "x", "min": 1, "max": 2}, 2)
+    assert not grader.condition_met({"feature": "x", "min": 1, "max": 2}, 3)
+    assert not grader.condition_met({"feature": "x", "below": 45}, 45)
+    assert grader.condition_met({"feature": "x", "equals": True}, True)
+    assert not grader.condition_met({"feature": "x", "above": 0}, None)  # missing = no
+
+
+def test_a_quality_count_grades_by_points_and_carries_the_scan_entry():
+    rules = quality_rules()
+    feats = {
+        "is_earnings_reaction_day": True,
+        "d_neglect_months": 1,
+        "mkt_scan_count": 30,
+        "revenue_growth_accel": 5.0,
+    }
+    g = grader.grade("ep_pm", feats, rules)
+    assert g.grade == "A+" and g.score == 4 and g.plan["entry"] == "pm_0915"
+    assert g.note == "4 of 4 quality points" and g.risk_mult == 2.0
+    g3 = grader.grade("ep_close", feats | {"mkt_scan_count": 80}, rules)
+    assert g3.grade == "B" and g3.plan["entry"] == "close"
+    assert grader.grade("ep_close", {}, rules).grade == "C"
+    off = rules | {"quality_enabled": False}
+    assert grader.grade("ep_pm", feats, off).grade == "C"  # the scorecards don't cover ep_pm
+
+
+def test_the_proposed_quality_config_loads_and_is_off():
+    rules = load_config().grading
+    assert rules["quality_enabled"] is False
+    for name, rule in rules["quality"].items():
+        assert set(rule["parts"]) <= set(rules["conditions"]), name

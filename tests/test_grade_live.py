@@ -160,3 +160,25 @@ def test_luk_flush_takes_the_flagged_rows():
     out = luk_flush(df, CFG.scans["luk_flush"])
     assert out["ticker"].tolist() == [A] and out["rank"].tolist() == [1]
     assert luk_flush(df.drop(columns="luk_flush"), CFG.scans["luk_flush"]).empty
+
+
+def test_earnings_facts_count_sessions_since_the_last_report():
+    import datetime as dt
+
+    rec = {"earnings_flag": True, "earnings_date_last": pd.Timestamp("2026-10-12", tz="UTC")}
+    out = grade_live.earnings_facts(rec, CFG.schedule, dt.date(2026, 10, 16))
+    assert out["is_earnings_reaction_day"] is True and out["sessions_since_earnings"] == 4
+    assert "sessions_since_earnings" not in grade_live.earnings_facts({}, CFG.schedule, SESSION)
+
+
+def test_push_shows_quality_points_not_r():
+    row = hit(A) | {
+        "grade": "A+",
+        "grade_score": 5.0,
+        "grade_why": "5 of 6 quality points",
+        "grade_entry_rule": "pm_0915",
+        "grade_hold_sessions": 21,
+    }
+    lines = notify.grade_lines(row)
+    assert lines[0].endswith("Study A+ · 5 of 6 quality points")
+    assert "pre-market ~09:15 NY" in " ".join(lines)

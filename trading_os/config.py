@@ -251,7 +251,20 @@ SEC_BULK_KEYS = {
     "header_minutes",
 }
 
-GRADING_KEYS = {"enabled", "stats_file", "risk_mult", "push", "ungraded", "costs", "strategies"}
+GRADING_KEYS = {
+    "enabled",
+    "stats_file",
+    "risk_mult",
+    "push",
+    "ungraded",
+    "quality_enabled",
+    "conditions",
+    "quality",
+    "costs",
+    "strategies",
+}
+GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
+CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
 GRADING_COST_KEYS = {
     "commission_pct",
     "slip_by_dvol",
@@ -524,6 +537,14 @@ def _check_grading(raw: Any) -> None:
     feature points that match their bucket edges (one more point than edges)."""
     _check_keys("grading", raw, GRADING_KEYS)
     _check_keys("grading.costs", raw["costs"], GRADING_COST_KEYS)
+    for name, spec in raw["conditions"].items():
+        if "feature" not in spec or not set(spec) - {"feature"} <= CONDITION_TESTS:
+            raise ConfigError(f"grading.conditions.{name}: a feature and {sorted(CONDITION_TESTS)}")
+    for name, rule in raw["quality"].items():
+        _check_keys(f"grading.quality.{name}", rule, GRADING_QUALITY_KEYS)
+        unknown = set(rule["parts"]) - set(raw["conditions"])
+        if unknown:
+            raise ConfigError(f"grading.quality.{name}: unknown conditions {sorted(unknown)}")
     for name, rule in raw["strategies"].items():
         _check_keys(f"grading.strategies.{name}", rule, GRADING_STRATEGY_KEYS)
         for feature, spec in rule["features"].items():

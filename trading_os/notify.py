@@ -101,6 +101,9 @@ ENTRY_TEXT = {
     "close": "buy 15:45-15:58 NY (21:45 CPH)",
     "t_1200": "buy after the 12:00 check (18:00 CPH)",
     "next_1030": "buy next session ~10:30 NY (16:30 CPH)",
+    "pm_0915": "buy pre-market ~09:15 NY (15:15 CPH)",
+    "ah_1800": "buy after hours ~18:00 NY (00:00 CPH)",
+    "t_1015": "buy after the 10:15 check (16:15 CPH)",
 }
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 
@@ -174,7 +177,12 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
     if grade is None or pd.isna(grade) or grade == "C":
         return []
     score = row.get("grade_score")
-    head = f"🅰 Study {grade}" + ("" if score is None or pd.isna(score) else f" · {score:+.2f}R")
+    why = str(row.get("grade_why") or "")
+    if "quality points" in why:  # a quality count: show the points, not R
+        head = f"🅰 Study {grade} · {why}"
+    else:
+        tail = "" if score is None or pd.isna(score) else f" · {score:+.2f}R"
+        head = f"🅰 Study {grade}" + tail
     out = [head]
     when = ENTRY_TEXT.get(str(row.get("grade_entry_rule")), "")
     hold = row.get("grade_hold_sessions")
