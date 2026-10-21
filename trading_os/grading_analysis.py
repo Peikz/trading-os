@@ -393,6 +393,7 @@ def walk_forward_scores(
     min_train_years: int = 3,
     select: Mapping[str, Any] | None = None,
     chosen: dict | None = None,
+    force: Sequence[str] = (),
     **fit_args,
 ) -> pd.Series:
     """Out-of-sample predicted R: every year from `first_test` scored by a scorecard fitted
@@ -409,6 +410,9 @@ def walk_forward_scores(
         use = list(names)
         if select is not None:
             use = stable_features(df[past], target[past], names, **select)["name"].tolist()
+            # Features named up front (an owner's rule, a shape rank correlation can't see,
+            # like a peak in the middle) always take part; ridge still sets their points.
+            use += [f for f in force if f not in use]
             if chosen is not None:
                 chosen[y] = use
         card = fit_scorecard(df[past], target[past], use, **fit_args)
