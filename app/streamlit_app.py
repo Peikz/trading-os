@@ -1571,7 +1571,16 @@ elif page == "How it was tested":
     if rules_now.empty:
         st.caption("No quality grades in config.")
     else:
-        st.dataframe(rules_now, hide_index=True, width="stretch")
+        for row in rules_now.to_dict("records"):
+            points = row["Points (one each)"].split("; ")
+            lines = [
+                f"**{row['Setup']}** · {row['Grade by points']}",
+                "- **Points:** " + " · ".join(points),
+                f"- **Buy:** {row['When to buy']}",
+                f"- **Stop:** {row['Stop']}",
+                f"- **Exit:** {row['Exit']}",
+            ]
+            st.markdown("\n".join(lines))
         live = bool(CFG.grading.get("quality_enabled"))
         st.caption(
             ("Live: the pushes grade with these points. " if live else "Not live yet ")
@@ -1583,7 +1592,8 @@ elif page == "How it was tested":
             )
             + "Size per grade: "
             + ", ".join(
-                f"{g} {m:g}x your risk per trade" for g, m in CFG.grading["risk_mult"].items()
+                f"{g} not traded" if m == 0 else f"{g} {m:g}x your risk per trade"
+                for g, m in CFG.grading["risk_mult"].items()
             )
             + ". Read straight from config, so it stays right when the rules change."
         )
