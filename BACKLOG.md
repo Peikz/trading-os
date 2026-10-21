@@ -163,3 +163,4 @@ Still open (no default possible):
 - 2026-10-21: Notes per stock on the Chart page (Emil): write a note on any day, edit or delete it; append-only log in the data repo (`data/journal/stock_notes/`), so every note stays findable years later; pushed with "Save & push".
 - 2026-10-21 (later): Next-morning watch (Emil): BO-Watch, MA-surf and both parabolics are still found at the close but pushed in the next pre-market push (`push_slot: pm`) with the pre-market price, the move against the pivot and a warning past 1 ADR; the parabolics are pushed for the first time. The evening push says what is held back.
 - 2026-10-21 (later): Push titles, report headers and the dashboard run list show New York and Copenhagen time (Emil); the run list now also shows the after-hours (16:50) and close (15:45) runs, which it had missed.
+- 2026-10-21 (later): EP-Day saved only (Emil): no longer in the evening push; it still runs, feeds EP-Watch and the EP history.

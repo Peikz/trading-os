@@ -3,8 +3,25 @@ import datetime as dt
 import pandas as pd
 
 from trading_os import notify
-from trading_os.config import load_config
+from trading_os.config import load_config as _load_config
 from trading_os.store import RunContext
+
+
+def ep_day_pushing(cfg):
+    """`cfg` with EP-Day pushing again: these tests use it as their example pushing scan
+    (the real config only saves it since 21 Oct 2026)."""
+    import dataclasses
+    from types import MappingProxyType
+
+    scans = dict(cfg.scans)
+    scans["ep_day"] = dataclasses.replace(scans["ep_day"], action="push")
+    return dataclasses.replace(cfg, scans=MappingProxyType(scans))
+
+
+def load_config():
+    """EP-Day pushing: these tests pin the push layout with it as the example scan."""
+    return ep_day_pushing(_load_config())
+
 
 CTX = RunContext(
     session=dt.date(2026, 10, 19),

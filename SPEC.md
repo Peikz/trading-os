@@ -140,7 +140,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
-| EP-Day (yours) | Gap ≥ 10%, RVOL ≥ 3, volume ≥ 300K, price ≥ $1, mcap ≥ $50M | 1 | Push |
+| EP-Day (yours) | Gap ≥ 10%, RVOL ≥ 3, volume ≥ 300K, price ≥ $1, mcap ≥ $50M | 1 | Log since 21 Oct 2026 (Emil): its buys are EP 10:30 and EP-AH; still feeds EP-Watch and the EP history |
 | EP-AH | Moved to the 16:50 after-hours check on 21 Oct 2026 (§6.1b) | 1 | — |
 | EP9M (Stockbee) | Volume ≥ 9M shares, change ≥ +4%. No MA filter (MA position stored as columns) | 1 | Push |
 | Momentum Burst up (Stockbee) | Change ≥ +4%, volume > prior day, volume ≥ 100K, close location ≥ 0.70 | 1 | Log |

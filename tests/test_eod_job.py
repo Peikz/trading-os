@@ -9,6 +9,17 @@ from trading_os import clock, history, job, notify, store, tv
 from trading_os.config import load_config
 
 
+def ep_day_pushing(cfg):
+    """`cfg` with EP-Day pushing again: these tests use it as their example pushing scan
+    (the real config only saves it since 21 Oct 2026)."""
+    import dataclasses
+    from types import MappingProxyType
+
+    scans = dict(cfg.scans)
+    scans["ep_day"] = dataclasses.replace(scans["ep_day"], action="push")
+    return dataclasses.replace(cfg, scans=MappingProxyType(scans))
+
+
 @pytest.fixture(autouse=True)
 def _grades_off(monkeypatch):
     """These tests pin the push layout without study grades (tests/test_grade_live.py has
@@ -16,7 +27,7 @@ def _grades_off(monkeypatch):
     import dataclasses
     from types import MappingProxyType
 
-    cfg = load_config()
+    cfg = ep_day_pushing(load_config())  # EP-Day is the example pushing scan here
     off = dataclasses.replace(cfg, grading=MappingProxyType({**cfg.grading, "enabled": False}))
     monkeypatch.setattr(job, "load_config", lambda *a, **k: off)
 

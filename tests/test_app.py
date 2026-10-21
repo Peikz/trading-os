@@ -124,6 +124,7 @@ def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkey
 
     path = data_repo / "data" / "candidates" / "2026" / "2026-10-19_eod.parquet"
     graded = pd.read_parquet(path).assign(
+        scan="ep9m",  # a scan that pushes (EP-Day is saved only since 21 Oct 2026)
         grade="A",
         grade_score=0.42,
         grade_why="few scan hits (+0.71)",

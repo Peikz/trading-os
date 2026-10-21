@@ -22,7 +22,7 @@ def test_default_config_loads():
 
 def test_ep_day_thresholds_match_spec():
     ep = load_config().scans["ep_day"]
-    assert ep.enabled and ep.slot == "eod" and ep.action == "push"
+    assert ep.enabled and ep.slot == "eod" and ep.action == "log"  # saved only (21 Oct 2026)
     assert ep["gap_min_pct"] == 10
     assert ep["rvol_min"] == 3
     assert ep["volume_min"] == 300_000
