@@ -296,7 +296,8 @@ def exchanges_of(universe_path: str) -> dict[str, str]:
 def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> None:
     """The same columns and number formats as the Markdown report, plus a TradingView link."""
     columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text")]
-    columns += [("Study grade", "grade", "text"), ("Pred. R", "grade_score", "+.2f")]
+    columns += [("Study grade", "grade", "text"), ("Why", "grade_why", "text")]
+    columns += [("Pred. R", "grade_score", "+.2f")]
     columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
     view = hits.copy()
