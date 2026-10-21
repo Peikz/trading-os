@@ -44,6 +44,8 @@ class Rules:
     start_equity: float = 100_000.0
     r_cap: float = 50.0  # R per leg (data errors); real winners stay under it
     by_grade_extra: Mapping[str, float] = field(default_factory=dict)
+    # at most this many open positions of a grade, leaving room for the better ones
+    max_by_grade: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -58,6 +60,7 @@ class Position:
     orig_shares: float
     exit_cost: float
     pnl: float = 0.0
+    grade: str = ""
 
 
 def _legs(row: Mapping, t: int) -> list:
@@ -102,6 +105,9 @@ def simulate(
             risk_pct = rules.risk_pct.get(row["grade"], 0.0)
             if risk_pct <= 0 or row["ticker"] in held:
                 continue
+            cap = rules.max_by_grade.get(row["grade"])
+            if cap is not None and sum(p.grade == row["grade"] for p in open_pos) >= cap:
+                continue
             price, stop = float(row["price"]), float(row["stop"])
             risk_ps = abs(price - stop)
             if not risk_ps > 0 or not price > 0:
@@ -132,6 +138,7 @@ def simulate(
                 orig_shares=shares,
                 exit_cost=cost / 2,
                 pnl=-cost / 2,
+                grade=row["grade"],
             )
             open_pos.append(pos)
             held.add(pos.ticker)
