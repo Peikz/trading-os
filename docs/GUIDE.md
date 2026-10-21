@@ -250,6 +250,20 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked
 blind on 2016–21 do worse (research report §9, portfolio report §11–12).
 
+**Market heat** (since 21 Oct 2026): the market lines of the pre-market, EOD and Sunday pushes
+end with today's heat band, from the latest Sunday scan count: cool under 18, mild 18–44, warm
+45–80, hot over 80. Heat is the one market variable that held up when tested blind. Three lines:
+
+- `🌡 Warm market (count 60, 45-80) · net R a trade 2016-21/2022-26:`
+- `A:` the graded setups at this heat, net R a trade in each period and the number of trades.
+- `Held here too (C):` the setups without a grade that made money per trade and per signal day
+  in both periods at this heat, with 30+ trades in each. "No other setup held" when none did.
+
+These are facts about past rules, not grades. A C setup that held is still C: in the account,
+adding the cool-market C setups lowered the return every way it was tried. The Market page has
+the full table for every heat. Rebuild it after the grading study changes:
+`uv run python scripts/heat_stats.py --data-dir ../trading-os-data`.
+
 ## 8. Position size, facts and watchlists
 
 **Size**: every pushed EP and breakout gets entry, stop, shares, position and risk in USD,
@@ -321,7 +335,7 @@ watchlists to the private repo).
 | **Chart** | Any stock, interactive (drag to pan, scroll or pinch to zoom): daily or weekly candles with volume, 2 or 10 years, MA 10/20/50/200 and EMA 9/21, the scans' past hits (amber triangles, hover for the scan), your buys and sells, today's pivot and stops; anchored VWAPs (from the highest high, the lowest low, the year start, the latest scan hit, or any day you save); trend lines, saved per stock in the data repo as you draw them on the daily bars (the line tool, top right; drag a line or its ends to move it, click it and use the eraser to delete it; a line drawn past the last bar keeps extending each day; or type one in through two points); and an intraday view of any day with minute bars (1/5/15-minute candles, VWAP from the open, pre-/post-market shaded) |
 | **Watchlists** | Your own lists (add by typing or a TradingView export; each ticker with close, change, RVOL, ADR, RS, distance to the high and pivot, earnings, today's scans) and the scans' EP-Watch and BO-Watch |
 | **Journal** | Tabs: *Open positions* (open P&L, open R, money at risk to the stops), *Log a trade*, *Plans*, *Closed trades* (stats, R curve, MFE/MAE, review chart, grading), *Real vs study* |
-| **Market** | Breadth history: the 5- and 10-day ratios over time |
+| **Market** | Today's market heat and every setup at that heat (or any other heat): net R a trade on 2016–21 and 2022–26, trades, years up, held / lost / mixed. Then the breadth history: the 5- and 10-day ratios over time |
 | **Research** | The history of your rules, one section at a time, each saying what its numbers measure. *How it was tested*: the grade rules in config in words (points, grade per count, when to buy, stop, exit), then the write-up from the data repo (`docs/research/how-we-test.md`): the method, the best time of day, which market each setup likes, and why famous traders win with setups that test flat. *Grades* (net of costs, out of sample: the numbers to decide on): the grading rules per strategy (entry, stop, exit, the score bands, the points per feature, the trading costs), the size and push per grade, the history behind each grade, and the research report. *History* (the graded section net of costs, the tables gross): every strategy's history (2 or 10 years): win rate and median move after 1/5/21/63 sessions, R, the exits compared, splits by year/market/price (EP-Day adds its own filters), the events and their charts. *Entries & exits* (gross): the minute study: the best entry, stop and exit per strategy; every combination with any exit; splits; the trades (2 years) or the summaries and a by-year table (10 years). *Market regime*: how often each light occurred per year, and for any strategy every filter's effect on trades kept, mean R and win rate, overall and per year |
 | **Live results** | The live signals since launch. *Grades live vs study*: each live A+ / A signal played out by its study plan (the plan's price, its stop checked from the next session, out at the close after the plan's sessions, net of the study's cost), per strategy, entry time and grade next to the history that grade carried, and your journal trades next to the plan of the signal they came from. The verdict says "too few trades yet" until 20 trades have closed, and "below the study" only when both the mean R and the win rate are clearly under it. The same tables arrive as a monthly report (`docs/live-tracking/` in the data repo) and one push on the 1st. *All signals*: outcome statistics of the live signals per scan. *Signals you graded*: the signals you graded, with what happened after |
 | **System health** | *Jobs and data*: which scheduled job ran for which session, data freshness, failure logs, whether each timed job started on time (timer vs GitHub), and how late GitHub started each run. *Validation against TradingView*: compare a run with a TradingView screener export and record it in `docs/validation.md` |

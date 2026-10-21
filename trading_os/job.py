@@ -23,6 +23,7 @@ from trading_os import (
     context,
     enrich,
     epstudy,
+    heat,
     history,
     industries,
     metrics,
@@ -469,13 +470,15 @@ def _with_sizing(results: dict, data_dir: Path, cfg) -> dict:
 
 def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):
     """EOD: today's breadth row and push lines. Pre-market: the light for today, last close's
-    breadth and the pre-market movers. Weekly: the Sunday scan count."""
+    breadth and the pre-market movers. Weekly: the Sunday scan count. Each ends with the
+    market heat lines: how the setups did at this count (`heat`)."""
+    stats = heat.load(data_dir)
     if slot == "weekly":
         count = breadth.scan_count(uni, cfg)
         field = cfg.market_light["scan_count"]["avg_volume_field"]
         status("Market Light scan count: saved")
         frame = pd.DataFrame([{"scan_count": count, "avg_volume_field": field}])
-        return {"market_light_count": frame}, []
+        return {"market_light_count": frame}, heat.push_lines(stats, count)
     if slot not in ("eod", "pm") or not cfg.scans["breadth"].enabled:
         return {}, []
     qqq = once_more(
@@ -488,11 +491,15 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
         last = breadth.latest_eod_row(data_dir, session)
         pm_row = {**breadth.premarket_row(uni, qqq, cfg, session, last), **indexes}
         status("Pre-market breadth: saved")
-        return {"breadth_pm": pd.DataFrame([pm_row])}, breadth.premarket_lines(pm_row, last)
+        lines = breadth.premarket_lines(pm_row, last)
+        return {"breadth_pm": pd.DataFrame([pm_row])}, lines + heat.push_lines(
+            stats, pm_row.get("scan_count")
+        )
     row = {**breadth.breadth_row(uni, qqq, cfg, data_dir, session), **indexes}
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
-    return {"breadth": pd.DataFrame([row])}, breadth.push_lines(row)
+    lines = breadth.push_lines(row) + heat.push_lines(stats, row.get("scan_count"))
+    return {"breadth": pd.DataFrame([row])}, lines
 
 
 def _epstudy(cfg, candidates: pd.DataFrame) -> None:

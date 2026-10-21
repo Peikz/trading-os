@@ -179,3 +179,44 @@ def test_the_grade_rules_read_from_config_in_words():
     first = table.iloc[0]
     assert "1." in first["Points (one each)"] and "= C" in first["Grade by points"]
     assert "ADR" in first["Stop"] and "sessions" in first["Exit"]
+
+
+def test_the_market_page_shows_the_setups_at_todays_heat(data_repo, monkeypatch):
+    import json
+
+    path = data_repo / "data" / "breadth" / "2026" / "2026-10-19_eod.parquet"
+    path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        [{"session_date": pd.Timestamp("2026-10-19"), "light": "STOP", "qqq_trend": "down",
+          "breadth_state": "weak", "scan_count": 60, "up4": 100, "down4": 200,
+          "ratio_5d": 0.7, "ratio_10d": 0.73, "up25q": 10, "down25q": 20}]
+    ).to_parquet(path)  # fmt: skip
+    one = {"trades": 40, "signal_days": 30, "mean_r": 0.5, "day_mean_r": 0.4, "win_pct": 30.0,
+           "years_up": 3, "years": 4}  # fmt: skip
+    stats = {
+        "built": "2026-10-21",
+        "bands": [[18, "cool"], [45, "mild"], [81, "warm"], [None, "hot"]],
+        "band_labels": {"cool": "under 18", "mild": "18-44", "warm": "45-80", "hot": "over 80"},
+        "min_trades": 30,
+        "setups": [
+            {
+                "key": "surf",
+                "label": "MA-surf",
+                "short": "MA-surf",
+                "kind": "C",
+                "side": "long",
+                "plan": "10:00 over the pivot",
+            }
+        ],  # fmt: skip
+        "rows": [
+            {"setup": "surf", "heat": "warm", "period": p, **one} for p in ("2016-21", "2022-26")
+        ],
+    }
+    (data_repo / "data" / "grading").mkdir(parents=True)
+    (data_repo / "data" / "grading" / "heat_stats.json").write_text(json.dumps(stats))
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Market").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Warm market: scan count 60" in s.value for s in at.subheader)
+    assert any("held" in str(df.value) for df in at.dataframe)

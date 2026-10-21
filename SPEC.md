@@ -261,6 +261,11 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
   the market lines come first, then one section per scan with a short block per stock (alert line,
   entry/stop, size, facts wrapped to ~40 characters). A stock shown above gets one line; scans
   without alerts share one closing line; tapping opens the run's report in the data repo.
+- Market heat (Emil, 21 Oct 2026): the market lines of the pre-market, EOD and weekly pushes end with the
+  heat band of the latest Sunday scan count (cool < 18, mild 18-44, warm 45-80, hot > 80), how the graded
+  A setups did at that heat, and the C setups that held there in both 2016-21 and 2022-26 (net R a trade
+  after costs; held = up per trade and per signal day in both, 30+ trades each). Built from the grading
+  study by `scripts/heat_stats.py` into `data/grading/heat_stats.json`; read by `heat.py`. Facts, not grades.
 - If a job fails, push a short failure message with a link to the Actions run.
 
 ---

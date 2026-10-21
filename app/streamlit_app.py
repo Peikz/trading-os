@@ -32,6 +32,7 @@ from trading_os import (
     dashboard,
     exits,
     health,
+    heat,
     history,
     intraday_study,
     journal,
@@ -1765,6 +1766,44 @@ elif page == "Market":
     if history.empty:
         st.info("Breadth rows start with the first scheduled EOD run.")
         st.stop()
+    heat_stats = heat.load(data_dir)
+    counts = history["scan_count"].dropna() if "scan_count" in history else pd.Series()
+    if heat_stats and len(counts):
+        bands = [name for _, name in heat_stats["bands"]]
+        now = heat.band(counts.iloc[-1], heat_stats["bands"])
+        st.subheader(
+            f"{now.capitalize()} market: scan count {int(counts.iloc[-1])} "
+            f"({heat_stats['band_labels'][now]})"
+        )
+        pick = st.radio(
+            "Setups at this heat",
+            bands,
+            index=bands.index(now),
+            horizontal=True,
+            format_func=lambda b: f"{b} ({heat_stats['band_labels'][b]})",
+            key="heat_band",
+        )
+        shown = heat.table(heat_stats, pick).drop(columns=["short"])
+        shown["verdict"] = shown["verdict"].map(lambda v: f"{heat.VERDICT_ICONS[v]} {v}")
+        st.dataframe(
+            shown.rename(columns=lambda c: c.replace("_", " ").replace("2016-21", "2016–21"))
+            .rename(columns=lambda c: c.replace("2022-26", "2022–26"))
+            .round(2),
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(
+            "Each setup's study plan on the signal days at this heat (the Sunday scan count, "
+            "the one market variable that held up when tested blind): net R a trade after "
+            "costs, capped at 20R, separately on 2016–2021 and 2022–2026. 'day r' averages "
+            "each signal day first, so a day with many hits counts once. **Held**: made money "
+            f"per trade and per signal day in both periods, with {heat_stats['min_trades']}+ "
+            "trades in each. **Lost**: lost per trade in both. A = a live grade; C = no grade. "
+            "In the account, adding the C setups that held in a cool market lowered the "
+            "return every way it was tried (data repo docs/research/how-we-test.md). Facts "
+            f"about past rules, not advice. Built {heat_stats['built']}."
+        )
+    st.subheader("Breadth and the Market Light")
     st.dataframe(
         history[
             [
