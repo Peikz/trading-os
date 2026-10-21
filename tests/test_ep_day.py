@@ -83,6 +83,7 @@ def test_run_scans_picks_enabled_scans_per_slot():
         "parabolic_short",
         "parabolic_long",
         "luk_flush",
+        "ma_surf",
         "breakout_watch",
         "breakout_trigger",
     ]
