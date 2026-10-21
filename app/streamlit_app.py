@@ -79,6 +79,11 @@ PAGES = [
 # Research and Live results gather the history pages. One section runs at a time: tabs would
 # run every section's code (and its downloads) on each click.
 RESEARCH = {
+    "How it was tested": (
+        "How it was tested",
+        "How every setup was tested on 10 years of data, the best time to buy, where the stop "
+        "goes, and what makes a trade A+, A, B or C.",
+    ),
     "Grades": (
         "Study grades",
         "Net of costs and out of sample (2019-2026): the grade rules you confirmed and what each "
@@ -326,6 +331,68 @@ def feature_points(features) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+FEATURE_TEXT = {  # the quality conditions' features, in words
+    "is_earnings_reaction_day": "the gap is an earnings reaction",
+    "sessions_since_earnings": "sessions since the last earnings report",
+    "d_neglect_months": "months moving sideways before",
+    "mkt_scan_count": "Sunday scan count (stocks up 50 % in a quarter)",
+    "revenue_growth_accel": "revenue growth acceleration",
+    "eps_yoy_pct": "EPS growth year on year, %",
+    "d_from_52w_high": "distance from the 52-week high, %",
+    "d_tight5_adr": "5-day range, in ADR",
+}
+
+
+def condition_text(cond) -> str:
+    """One quality condition from config, in words: `months moving sideways before 1 to 2`."""
+    what = FEATURE_TEXT.get(cond["feature"], cond["feature"])
+    if "equals" in cond:
+        return what if cond["equals"] is True else f"{what}: {cond['equals']}"
+    if "min" in cond and "max" in cond:
+        return f"{what}: {cond['min']:g} to {cond['max']:g}"
+    for key, word in (
+        ("max", "at most"),
+        ("min", "at least"),
+        ("above", "above"),
+        ("below", "under"),
+    ):
+        if key in cond:
+            return f"{what}: {word} {cond[key]:g}"
+    return what
+
+
+def quality_rules(grading) -> pd.DataFrame:
+    """The quality grades as config has them: per setup, its points, the grade per count, and
+    the plan (when to buy, stop, exit)."""
+    rows = []
+    for rule in (grading.get("quality") or {}).values():
+        parts = list(rule["parts"])
+        points = "; ".join(
+            f"{i}. {condition_text(grading['conditions'][part])}" for i, part in enumerate(parts, 1)
+        )
+        bands, top = [], len(parts)
+        for floor, grade in rule["grades"]:
+            span = f"{floor}" if floor == top else f"{floor}-{top}"
+            bands.append(f"{span} = {grade}")
+            top = floor - 1
+        bands.append(f"0-{top} = C" if top > 0 else "0 = C")
+        buys = "; ".join(
+            f"{report.SCAN_LABELS.get(scan, scan)}: {notify.ENTRY_TEXT.get(entry, entry)}"
+            for scan, entry in rule["entries"].items()
+        )
+        rows.append(
+            {
+                "Setup": " / ".join(report.SCAN_LABELS.get(s, s) for s in rule["live_scans"]),
+                "Points (one each)": points,
+                "Grade by points": " · ".join(bands),
+                "When to buy": buys,
+                "Stop": f"{rule['stop_adr']:g} ADR under the entry (at least 1 %)",
+                "Exit": f"at the close {rule['hold_sessions']} sessions after the entry",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def grade_blocks(hits: pd.DataFrame) -> None:
     """The A+, A and B hits as their push shows them: the study grade, when to buy, the exit,
     the history behind the grade, why, and the plan (C hits are saved, not shown)."""
@@ -525,6 +592,8 @@ def history_cached(folder: str, period: str = "2y") -> pd.DataFrame:
         hist = strategy_cached(folder)
         built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
         ep = read_parquet(str(built[-1])) if built else pd.DataFrame()
+    if hist.empty:  # nothing downloaded (offline, or the release not reachable): the page says so
+        return hist
     if ep.empty:
         hist = hist[~hist["ticker"].isin(funds_cached(folder))]
         return hist.assign(year=pd.to_datetime(hist["session_date"]).dt.year)
@@ -1496,6 +1565,37 @@ elif page == "System health":
                 "that starts after its window closes exits without scanning."
             )
 
+elif page == "How it was tested":
+    st.subheader("The grade rules in config now")
+    rules_now = quality_rules(CFG.grading)
+    if rules_now.empty:
+        st.caption("No quality grades in config.")
+    else:
+        st.dataframe(rules_now, hide_index=True, width="stretch")
+        live = bool(CFG.grading.get("quality_enabled"))
+        st.caption(
+            ("Live: the pushes grade with these points. " if live else "Not live yet ")
+            + (
+                ""
+                if live
+                else "(config `grading.quality_enabled` is off; the pushes still use the "
+                "scorecards under Grades). "
+            )
+            + "Size per grade: "
+            + ", ".join(
+                f"{g} {m:g}x your risk per trade" for g, m in CFG.grading["risk_mult"].items()
+            )
+            + ". Read straight from config, so it stays right when the rules change."
+        )
+    write_up = data_dir / "docs" / "research" / "how-we-test.md"
+    if write_up.is_file():
+        st.markdown(write_up.read_text(encoding="utf-8"))
+    else:
+        st.info(
+            "The write-up with the results lives in the private data repo "
+            "(docs/research/how-we-test.md): Pull latest (sidebar) to get it."
+        )
+
 elif page == "Study grades":
     st.subheader("Study grades")
     rules = CFG.grading
@@ -1652,8 +1752,9 @@ elif page == "History":
     hist = history_cached(str(data_dir), period)
     if hist.empty:
         st.info(
-            "No history yet. Build it with `scripts/strategy_history.py` and "
-            "`scripts/ep_history.py`."
+            "No history here yet. 10 years: the files come from GitHub (is the `gh` CLI signed "
+            "in, and is there a connection?). 2 years: build it with "
+            "`scripts/strategy_history.py` and `scripts/ep_history.py`."
         )
         st.stop()
     st.caption(
