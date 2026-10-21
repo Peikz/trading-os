@@ -182,6 +182,15 @@ def test_after_hours_grades_from_todays_close_and_the_post_market_price():
     assert grade_live.entry_price(rec, "ep_am") == 20.0
 
 
+def test_ep9m_names_found_at_noon_take_the_noon_plan():
+    hits = pd.DataFrame([hit(A)])
+    morning = grade_live.grade_hits(hits, "ep9m_pace", CFG, {}, pd.DataFrame(), slot="am")
+    noon = grade_live.grade_hits(hits, "ep9m_pace", CFG, {}, pd.DataFrame(), slot="mid")
+    assert morning["grade_entry_rule"].iloc[0] == "t_1015"
+    assert noon["grade_entry_rule"].iloc[0] == "t_1200"
+    assert noon["grade_basis"].iloc[0] == "quality"
+
+
 def test_quality_grades_show_their_own_entrys_history():
     stats = {
         "ep": {

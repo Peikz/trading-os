@@ -162,8 +162,11 @@ def grade_hits(
     stocks: pd.DataFrame,
     extra: pd.DataFrame | None = None,
     asof: dt.date | None = None,
+    slot: str | None = None,
 ) -> pd.DataFrame:
-    """`hits` plus the grade columns and, for graded hits, the study plan's entry and stop."""
+    """`hits` plus the grade columns and, for graded hits, the study plan's entry and stop. A
+    quality rule's `entries` may name a plan per check (`<scan>@<slot>`), e.g. EP9M names first
+    found at the 12:00 check take the 12:00 plan."""
     grading = cfg.grading
     name, rule = rule_for(scan, grading)
     rows = []
@@ -201,7 +204,9 @@ def grade_hits(
                 "grade_score": g.score,
                 "grade_cost_r": g.cost_r,
                 "grade_why": g.note or _why(g),
-                "grade_entry_rule": g.plan.get("entry", rule.get("entry")),
+                "grade_entry_rule": rule.get("entries", {}).get(
+                    f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
+                ),
                 "grade_hold_sessions": rule["hold_sessions"],
                 "grade_risk_mult": g.risk_mult,
                 "grade_stop": stop,
@@ -349,7 +354,7 @@ def add_grades(
                 extra = extra.drop(columns=["tv_ticker"])
             except Exception:  # noqa: BLE001 - the feature then scores as missing
                 extra = None
-        graded_hits = grade_hits(hits, name, cfg, market, stocks, extra, asof)
+        graded_hits = grade_hits(hits, name, cfg, market, stocks, extra, asof, slot)
         graded_hits = with_stats(graded_hits, stats)
         out[name] = resize(graded_hits, account, usd_rate)
     return out
