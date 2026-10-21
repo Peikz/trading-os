@@ -256,6 +256,7 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 | ⚡ EP 10:30 (10:17 check) | around 10:30 New York (16:30 Copenhagen); "flagged last evening" if the 16:50 check already sent it |
 | ⏱️ EP9M pace (10:17 check) | after the 10:15 check (16:15 Copenhagen) |
 | 🌊 Luk flush (EOD) | the next session around 10:30 New York (16:30 Copenhagen) |
+| 🎯 BO-Watch, 🏄 MA-surf, 🪂 Parabolic long, 🎢 Parabolic short (found at the close, pushed the next pre-market at 07:17 New York / 13:17 Copenhagen, grade C; since 21 Oct 2026) | each line shows the pre-market price and move, the move against the pivot, and ⚠️ when it is already up more than 1 ADR. The study plan sits under each section header. Parabolic long: buy at the open, stop 1 ADR under, out after 21 sessions. Parabolic short: short around 10:30, stop over the signal day's high, cover on a close over the 20-day MA |
 | 🏄 MA-surf (EOD, grade C, pushed on your request since 21 Oct 2026) | the next session from 10:00 New York (16:00 Copenhagen): over the pivot buy, under it a buy-stop at the pivot; stop under the base's right side; sell on a close under the 20-day MA |
 
 The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked

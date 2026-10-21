@@ -160,10 +160,15 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
-    selected = notify.select_for_push(results, cfg)
+    selected = notify.select_for_push(results, cfg, slot)
+    carried = _from_last_close(args.data_dir, cfg, session, uni) if slot == "pm" else {}
+    if carried:
+        selected.update(notify.select_for_push(carried, cfg, slot))
     if slot == "mid":
         selected = _not_pushed_earlier(selected, args.data_dir, session, "am")
-    results, selected = _with_context(results, selected, cfg, session)
+    # Last close's hits go into the message and report only; this run saves its own.
+    shown, selected = _with_context({**results, **carried}, selected, cfg, session)
+    results = {name: shown[name] for name in results}
     pushed: dict[str, set[str]] = {}
     push_error: requests.RequestException | None = None
     if args.no_push:
@@ -171,7 +176,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     else:
         report_path = store.run_outputs(args.data_dir, ctx)["report"]
         link = notify.report_url(cfg, report_path.relative_to(args.data_dir).as_posix())
-        message = notify.build_message(ctx, results, selected, cfg, header, click=link)
+        message = notify.build_message(ctx, shown, selected, cfg, header, click=link)
         try:
             once_more(
                 lambda: notify.send(cfg.notify["server"], topic, message),
@@ -194,7 +199,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     drawn = {}
     if slot in ("eod", "pm", *INTRADAY_SLOTS) and any(len(h) for h in selected.values()):
         drawn = _charts(outputs["charts"], args.data_dir, cfg, session, slot, selected, df)
-    _report(ctx, cfg, results, selected, header, drawn, outputs["report"])
+    _report(ctx, cfg, shown, selected, header, drawn, outputs["report"])
     if slot == "weekly":
         _stats(args.data_dir, cfg, session, outputs["stats"])
     if slot == "eod" and not ctx.forced:
@@ -235,6 +240,38 @@ def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
         return uni
+
+
+def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
+    """Pre-market: the last close's hits of the scans that push now (`push_slot: pm`: BO-Watch,
+    MA-surf, the parabolics; Emil, 21 Oct 2026), with today's pre-market price and move, so
+    they arrive before the open. Auxiliary: a problem leaves them out, never fails the run."""
+    names = [
+        name
+        for name, scan in cfg.scans.items()
+        if scan.enabled and scan.action == "push" and scan.params.get("push_slot") == "pm"
+    ]
+    if not names:
+        return {}
+    try:
+        last = clock.previous_session(cfg.schedule, session)
+        path = Path(data_dir) / "data" / "candidates" / str(last.year) / f"{last}_eod.parquet"
+        if not path.exists():
+            status("Last close's watch: no EOD run to carry over")
+            return {}
+        cands = pd.read_parquet(path)
+        fields = [c for c in ("pm_price", "pm_change_pct", "pm_volume") if c in uni]
+        pm = uni.drop_duplicates("ticker").set_index("ticker")[fields]
+        out = {}
+        for name in names:
+            rows = cands[cands["scan"] == name]
+            rows = rows.drop(columns=fields, errors="ignore").join(pm, on="ticker")
+            out[name] = rows.assign(carried_from="eod").reset_index(drop=True)
+        status("Last close's watch: " + ", ".join(f"{n} {len(h)}" for n, h in out.items()))
+        return out
+    except Exception as exc:  # noqa: BLE001 - extra lines in the push; the run goes on
+        status(f"Last close's watch: FAILED ({type(exc).__name__}), left out")
+        return {}
 
 
 def _with_surf(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:

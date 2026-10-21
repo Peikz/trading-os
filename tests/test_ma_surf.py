@@ -49,8 +49,9 @@ def test_c_hits_are_pushed_in_full_with_the_study_plan():
     assert notify.c_counts({"ma_surf": hits}, cfg) == []  # not counted as saved-only
     text = [line.text for line in notify._block(chosen.iloc[0].to_dict(), "ma_surf", "eod")]
     assert text[0] == f"▸ {A}  MA10 14d  base 9d"
-    assert any("buy-stop at the pivot" in t for t in text)
-    assert any("close under the 20-day MA" in t for t in text)
+    plan = notify.UNGRADED_PLANS["ma_surf"]  # once under the section header
+    assert any("buy-stop at the pivot" in t for t in plan)
+    assert any("close under the 20-day MA" in t for t in plan)
 
 
 def test_the_plan_buys_at_the_pivot_with_the_order_stop():

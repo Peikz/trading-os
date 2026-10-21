@@ -145,8 +145,8 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | EP9M (Stockbee) | Volume ≥ 9M shares, change ≥ +4%. No MA filter (MA position stored as columns) | 1 | Push |
 | Momentum Burst up (Stockbee) | Change ≥ +4%, volume > prior day, volume ≥ 100K, close location ≥ 0.70 | 1 | Log |
 | Momentum Burst down (Stockbee) | Change ≤ −4%, volume > prior day, volume ≥ 100K | 1 | Log |
-| Parabolic Short (Kullamägi) | ≥ 50% gain in ≤ 10 days (mcap ≥ $1B) or ≥ 200% (mcap < $1B); ≥ 3 consecutive up days; distance from MA10 in ADR stored | 1 | Log |
-| Parabolic Long (Kullamägi) | ≥ 30% drop in ≤ 10 days; ≥ 3 consecutive down days; distance below MA10 in ADR stored | 1 | Log |
+| Parabolic Short (Kullamägi) | ≥ 50% gain in ≤ 10 days (mcap ≥ $1B) or ≥ 200% (mcap < $1B); ≥ 3 consecutive up days; distance from MA10 in ADR stored | 1 | Push next pre-market (Emil, 21 Oct 2026) |
+| Parabolic Long (Kullamägi) | ≥ 30% drop in ≤ 10 days; ≥ 3 consecutive down days; distance below MA10 in ADR stored | 1 | Push next pre-market (Emil, 21 Oct 2026) |
 | Luk AVWAP flush (Emil, 20 Oct 2026) | Martin Luk's AVWAP flush (§11.16, rules in config `luk:`), alert tier, from 300 sessions of daily bars. Graded (§11.17); the plan buys the next session around 10:30 | 2 | Push |
 | MA-surf (Emil, 21 Oct 2026) | Qullamaggie's breakout from a base surfing the rising 10- or 20-day MA (rules in config `qm_surf:`, all proposed, unchanged from the study), alert tier, from 160 sessions of daily bars. Grade C (no edge of its own in the 2016-26 study), pushed anyway (`push_ungraded`) because Emil trades it: the study plan for the next session (from 10:00 ET over the pivot buy, under it a buy-stop at the pivot; the order stop under the base's right side; out on a close under the 20-day MA), sized at the account's risk like the breakouts | 2 | Push |
 | Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K. Extended 19 Oct 2026 (Emil) with the rest of Stockbee's Market Monitor: up/down ≥ 25% and ≥ 50% in a month (22 sessions), up/down ≥ 13% in 34 sessions (needs daily history); plus SPY and VIX next to QQQ; 20 Oct 2026 (Emil): QQQ shown like SPY (change, MA position), and the QQQ trend's SMA20 from 5 sessions ago taken from the daily bars until EOD runs have stored it | 1 | Push (top lines) |
@@ -267,6 +267,11 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
   A setups did at that heat, and the C setups that held there in both 2016-21 and 2022-26 (net R a trade
   after costs; held = up per trade and per signal day in both, 30+ trades each). Built from the grading
   study by `scripts/heat_stats.py` into `data/grading/heat_stats.json`; read by `heat.py`. Facts, not grades.
+- Next-morning watch (Emil, 21 Oct 2026): BO-Watch, MA-surf and the parabolics are found at the close
+  but pushed in the next pre-market push (`push_slot: pm`), each with its pre-market price and move,
+  the move against the pivot, and a warning when it is up more than 1 ADR pre-market; the study plan
+  sits once under each section (all grade C, `push_ungraded`). The EOD push names what is held back
+  ("In the pre-market push: ..."). Only the push moves: the hits are saved with the EOD run.
 - If a job fails, push a short failure message with a link to the Actions run.
 
 ---

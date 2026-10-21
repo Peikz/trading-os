@@ -105,13 +105,15 @@ scans:
   mb_down:
     {enabled: true, phase: 1, slot: eod, action: log,
      chg_max_pct: -4, volume_min: 100_000, volume_gt_prior: true}
+  # BO-Watch, MA-surf and the parabolics are found at the close and pushed the next morning
+  # in the pre-market push with their pre-market move (push_slot: pm; Emil, 21 Oct 2026).
   parabolic_short:
-    {enabled: true, phase: 1, slot: eod, action: log,
-     lookback_days_max: 10, large_cap_min: 1_000_000_000,
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true, lookback_days_max: 10, large_cap_min: 1_000_000_000,
      gain_min_pct_large_cap: 50, gain_min_pct_small_cap: 200, consec_up_min: 3}
   parabolic_long:
-    {enabled: true, phase: 1, slot: eod, action: log,
-     lookback_days_max: 10, drop_min_pct: 30, consec_down_min: 3}
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true, lookback_days_max: 10, drop_min_pct: 30, consec_down_min: 3}
   # Breadth: one line in the EOD push. Up/down use the Momentum Burst thresholds above.
   # up_count_rule (proposed, pending Emil): stockbee_4pct = change >= 4 % on volume above
   # the prior day (Stockbee Market Monitor); mb_up = also close location >= 0.70 (MB up).
@@ -130,9 +132,11 @@ scans:
                                             # "I will use this strategy more"): rules in
                                             # `qm_surf:`; grade C, pushed anyway (push_ungraded)
                                             # with the study plan for the next session
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_ungraded: true}
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_ungraded: true,
+     push_slot: pm}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
      push_if_all: [b1, b2, b3, b4],         # Emil, 19 Oct: full blocks only for full setups

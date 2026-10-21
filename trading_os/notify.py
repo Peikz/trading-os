@@ -64,6 +64,8 @@ SECTION_ICONS = {
     "ep_ah": "🌙",
     "luk_flush": "🌊",
     "ma_surf": "🏄",
+    "parabolic_long": "🪂",
+    "parabolic_short": "🎢",
     "ep9m": "📊",
     "ep9m_pace": "⏱️",
     "ep_pm": "🌅",
@@ -118,11 +120,40 @@ GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 # The plan of a scan pushed without a grade (`push_ungraded`): the study's entry and exit.
 UNGRADED_PLANS = {
     "ma_surf": [
-        "C (no grade) · next session from 10:00 NY (16:00 CPH)",
+        "C (no grade) · from 10:00 NY (16:00 CPH)",
         "over the pivot: buy · under it: buy-stop at the pivot",
         "out on a close under the 20-day MA",
     ],
+    "breakout_watch": ["C (no grade) · buy-stop at the pivot"],
+    "parabolic_long": [
+        "C (no grade) · study plan: buy at the open",
+        "stop 1 ADR under · out at the close after 21 sessions",
+    ],
+    "parabolic_short": [
+        "C (no grade) · study plan: short ~10:30 NY (16:30 CPH)",
+        "stop over the signal day's high · cover on a close over the 20-day MA",
+    ],
 }
+
+
+def premarket_line(row: Mapping[str, Any]) -> str | None:
+    """`PM 15.80 +3.1% · +3.3% vs pivot`, and a warning when it is up more than 1 ADR
+    pre-market (the study's MA-surf plan doesn't buy a stock already up more than its ADR)."""
+    if row.get("carried_from") != "eod":
+        return None
+    price, change = row.get("pm_price"), row.get("pm_change_pct")
+    if price is None or pd.isna(price):
+        return "PM: no trade yet"
+    text = f"PM {price:.2f}" + ("" if change is None or pd.isna(change) else f" {change:+.1f}%")
+    pivot = row.get("pivot")
+    if pivot is not None and not pd.isna(pivot) and pivot > 0:
+        text += f" · {(price / pivot - 1) * 100:+.1f}% vs pivot"
+    close, adr = row.get("close"), row.get("adr20_usd")
+    known = close is not None and adr is not None and not pd.isna(adr) and adr > 0
+    if known and price - close > adr:
+        text += " · ⚠️ up > 1 ADR"
+    return text
+
 
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
@@ -142,13 +173,24 @@ class Line:
     text: str
 
 
-def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[str, pd.DataFrame]:
+def pushes_now(scan, slot: str | None) -> bool:
+    """A scan pushes in its own run, or in the run its `push_slot` names (BO-Watch, MA-surf
+    and the parabolics: found at the close, pushed the next morning pre-market)."""
+    if scan.action != "push":
+        return False
+    later = scan.params.get("push_slot")
+    return slot is None or later is None or later == slot
+
+
+def select_for_push(
+    results: Mapping[str, pd.DataFrame], cfg: Config, slot: str | None = None
+) -> dict[str, pd.DataFrame]:
     """Hits that go into the message: push scans only, push tier only, top N by rank."""
     limit = cfg.notify["max_tickers_per_scan"]
     selected = {}
     for name, hits in results.items():
         scan = cfg.scans[name]
-        if scan.action != "push":
+        if not pushes_now(scan, slot):
             continue
         eligible = hits
         if "push_tier" in scan.params:
@@ -227,12 +269,27 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
     return out
 
 
-def c_counts(results: Mapping[str, pd.DataFrame], cfg: Config) -> list[str]:
+def later_counts(results: Mapping[str, pd.DataFrame], cfg: Config, slot: str) -> list[str]:
+    """`BO-Watch 3 · MA-surf 1`: alert-tier hits held for the pre-market push."""
+    out = []
+    for name, hits in results.items():
+        scan = cfg.scans[name]
+        if scan.action != "push" or pushes_now(scan, slot) or hits.empty:
+            continue
+        eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
+        if len(eligible):
+            out.append(f"{SCAN_LABELS.get(name, name)} {len(eligible)}")
+    return out
+
+
+def c_counts(
+    results: Mapping[str, pd.DataFrame], cfg: Config, slot: str | None = None
+) -> list[str]:
     """`EP close 2 · Breakout 3`: alert-tier hits graded C (saved, not pushed)."""
     out = []
     for name, hits in results.items():
         scan = cfg.scans[name]
-        if scan.action != "push" or hits.empty or not graded(cfg, hits):
+        if not pushes_now(scan, slot) or hits.empty or not graded(cfg, hits):
             continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         n = int((push_modes(cfg, eligible, scan) == "count").sum())
@@ -336,6 +393,22 @@ def format_surf(row: Mapping[str, Any]) -> str:
     return "  ".join(p for p in parts if p)
 
 
+def format_parabolic(row: Mapping[str, Any], scan: str) -> str:
+    """`ABCD  -38% in 10d · 4 down · ADR 9%`: the move the scan found and its streak."""
+    long = scan == "parabolic_long"
+    move = row.get("hist_drop_max_pct" if long else "hist_gain_max_pct")
+    streak = row.get("hist_consec_down" if long else "hist_consec_up")
+    parts = [str(row["ticker"])]
+    if move is not None and not pd.isna(move):
+        parts.append(f"{-abs(move) if long else move:+.0f}% in 10d")
+    if streak is not None and not pd.isna(streak):
+        parts.append(f"{int(streak)} {'down' if long else 'up'}")
+    adr = row.get("adr20_pct")
+    if adr is not None and not pd.isna(adr):
+        parts.append(f"ADR {adr:.0f}%")
+    return "  ".join(parts[:2]) + "".join(f" · {p}" for p in parts[2:])
+
+
 def format_weekly(row: Mapping[str, Any], scan: str) -> str:
     """Weekly list lines: the numbers each list is about."""
     t = row["ticker"]
@@ -351,12 +424,16 @@ def format_weekly(row: Mapping[str, Any], scan: str) -> str:
 
 
 def _first_line(row: Mapping[str, Any], scan: str, slot: str) -> str:
+    if row.get("carried_from") == "eod":  # found at last night's close: its own numbers
+        slot = "eod"
     if slot == "weekly":
         return format_weekly(row, scan)
     if scan.startswith("breakout_"):
         return format_breakout(row, scan)
     if scan == "ma_surf":
         return format_surf(row)
+    if scan.startswith("parabolic_"):
+        return format_parabolic(row, scan)
     if scan == "ep9m_pace":
         return format_pace(row)
     if scan == "pivot_watch":
@@ -406,7 +483,9 @@ def wrap(parts: Iterable[str], width: int) -> list[str]:
 def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     out = [Line("hit", "▸ " + _first_line(row, scan, slot))]
     out += [Line("plan", INDENT + text) for text in grade_lines(row)]
-    out += [Line("plan", INDENT + text) for text in UNGRADED_PLANS.get(scan, [])]
+    pm = premarket_line(row)
+    if pm:
+        out.append(Line("plan", INDENT + pm))
     out += [Line("plan", INDENT + text) for text in plan_lines(row)]
     if context.has_context(row):
         out += [
@@ -507,6 +586,7 @@ def build_message(
         lines += [Line("gap", ""), Line("section", header)]
         if name in FLAG_LEGENDS:
             lines.append(Line("note", FLAG_LEGENDS[name]))
+        lines += [Line("note", text) for text in UNGRADED_PLANS.get(name, [])]
         for row in chosen.to_dict("records"):
             ticker = row["ticker"]
             if ticker in shown:
@@ -530,9 +610,12 @@ def build_message(
             lines += _partial_lines(name, partial, results[name], cfg.scans[name], shown, ctx.slot)
     if quiet:
         lines += [Line("gap", ""), Line("note", "Nothing new: " + " · ".join(quiet))]
-    saved = c_counts(results, cfg)
+    saved = c_counts(results, cfg, ctx.slot)
     if saved:
         lines += [Line("note", "Study C, saved: " + " · ".join(saved))]
+    later = later_counts(results, cfg, ctx.slot)
+    if later:
+        lines += [Line("note", "In the pre-market push: " + " · ".join(later))]
     if click:
         lines.append(Line("note", "Tap for the full report with charts."))
     first = (header_lines or [""])[0][:1]
