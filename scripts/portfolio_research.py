@@ -6,7 +6,9 @@ uv run python -m trading_os.portfolio_study --data-dir ../trading-os-data --out 
 uv run python scripts/portfolio_research.py --data-dir ../trading-os-data --bench <private folder>
 
 The trades are the grading study's out-of-sample trades 2019-2026 (`grading-10y` release,
-portfolio_trades_oos_v1.parquet), graded with the confirmed bands in config `grading:`.
+portfolio_trades_oos.parquet), graded with the confirmed bands in config `grading:`. Each
+trade's R is uncapped (`net_uncapped`) and so is the exit, so a position's exit agrees with
+the closes it was marked at.
 """
 
 from __future__ import annotations
@@ -24,10 +26,12 @@ from trading_os import remote_data
 from trading_os.config import load_config
 
 QM_BASE = {"A+": 1.0, "A": 0.75, "B": 0.5}
-TRADES = "portfolio_trades_oos_v1.parquet"
+TRADES = "portfolio_trades_oos.parquet"
+R_COLUMN = "net_uncapped"
+NO_CAP = 1e9  # R per leg: exits as large as the marks
 
 
-def graded_trades(path: Path, cfg) -> pd.DataFrame:
+def graded_trades(path: Path, cfg, r_column: str = R_COLUMN) -> pd.DataFrame:
     """The out-of-sample trades with the confirmed grades, ready for portfolio_sim."""
     bands = {s: rule["bands"] for s, rule in cfg.grading["strategies"].items()}
     t = pd.read_parquet(path)
@@ -41,6 +45,7 @@ def graded_trades(path: Path, cfg) -> pd.DataFrame:
     t["session_date"] = pd.to_datetime(t["session_date"]).dt.date
     t = t.reset_index(drop=True)
     t["trade_id"], t["priority"], t["side"] = np.arange(len(t)), t["pred"], t["side"].astype(int)
+    t["net"] = t[r_column]
     t["frac_1"], t["days_1"], t["r_1"] = 1.0, t["days"].fillna(0).astype(int), t["net"]
     t["cost_pct"] = 0.0  # the costs are inside the net R
     return t
@@ -117,7 +122,7 @@ def main() -> int:
 
     rows, curves = [], {}
     for name, (part, extra) in variants(t).items():
-        rules = sim.Rules(**{"risk_pct": QM_BASE} | extra)
+        rules = sim.Rules(**{"risk_pct": QM_BASE, "r_cap": NO_CAP} | extra)
         curve, taken = sim.simulate(part, cl, sessions, tickers, rules)
         m = sim.summary(curve, taken)
         rows.append(
