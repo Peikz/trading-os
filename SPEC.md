@@ -62,6 +62,7 @@ non-trading days, because EU and US daylight-saving changes happen on different 
 | `intraday` after-hours check (Emil, 21 Oct 2026) | 22:50 CET | 16:50 ET | EP-AH (§6.1b): earnings movers after the close, graded (§11.17), bought before Saxo's extended hours end at 17:00 ET |
 | `weekly` | Sunday 18:00 CET | — | Qullamaggie 1/3/6M gainers, growth buckets, tight bases, official Market Light count |
 | `outcomes` | daily after `eod` | — | Fill outcome horizons for past signals (Phase 3) |
+| `live-check` (Emil, 21 Oct 2026) | 1st of the month, 15:00 CET | — | Live A+ / A signals played out by their study plan against the history each grade carried, and Emil's trades against the plan (`docs/live-tracking/` in the data repo, one push) |
 
 Implementation: schedule each workflow with two UTC crons (one per DST state) plus a guard in the
 script that exits unless New York time is inside the target window (premarket 07:15–07:55 ET,

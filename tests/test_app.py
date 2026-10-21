@@ -30,6 +30,7 @@ SECTIONS = [  # (page, its section picker's key, section)
     ("Research", "research_section", "History"),
     ("Research", "research_section", "Entries & exits"),
     ("Research", "research_section", "Market regime"),
+    ("Live results", "live_section", "Grades live vs study"),
     ("Live results", "live_section", "All signals"),
     ("Live results", "live_section", "Signals you graded"),
     ("System health", "health_section", "Jobs and data"),

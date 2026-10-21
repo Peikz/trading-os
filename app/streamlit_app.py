@@ -35,6 +35,7 @@ from trading_os import (
     history,
     intraday_study,
     journal,
+    live_tracking,
     long_history,
     luk,
     minervini,
@@ -104,7 +105,11 @@ RESEARCH = {
         "Whether skipping trades in a weak market would have helped.",
     ),
 }
-LIVE = {"All signals": "Stats", "Signals you graded": "Graded signals"}
+LIVE = {
+    "Grades live vs study": "Live grades",
+    "All signals": "Stats",
+    "Signals you graded": "Graded signals",
+}
 HEALTH = {"Jobs and data": "System health", "Validation against TradingView": "Validation"}
 
 
@@ -1687,6 +1692,51 @@ elif page == "Study grades":
     if stats and research.is_file():
         with st.expander("The research report"):
             st.markdown(research.read_text(encoding="utf-8"))
+
+elif page == "Live grades":
+    st.subheader("Grades live vs study")
+    cands = outcomes.load_candidates(data_dir)
+    graded_live = (
+        cands[cands["grade"].isin(live_tracking.LIVE_GRADES)] if "grade" in cands else cands
+    )
+    if graded_live.empty:
+        st.info(
+            "No live A+ / A signals yet. Each one shows here as it comes, with what its plan "
+            "made, next to the history its grade carried."
+        )
+    else:
+        tickers = sorted(set(graded_live["ticker"]))
+        live_bars = pd.concat(
+            [bars_for(str(data_dir), t, "2y").assign(ticker=t) for t in tickers],
+            ignore_index=True,
+        )
+        results = live_tracking.plan_results(graded_live, live_bars)
+        st.dataframe(live_tracking.compare(results).round(2), hide_index=True, width="stretch")
+        st.caption(
+            "Each live A+ / A signal played out by its study plan: bought at the plan's price, "
+            "out at the stop (checked from the next session) or at the close after the plan's "
+            "sessions, net of the study's cost. 'Below the study' needs "
+            f"{live_tracking.MIN_TRADES}+ closed trades and both the mean R and the win rate "
+            "clearly under the study's; until then it says 'too few trades yet'."
+        )
+        journal_trades = dashboard.latest_journal(data_dir)
+        if "r_multiple" in journal_trades:
+            journal_trades = journal_trades.dropna(subset=["r_multiple"])
+        gaps = live_tracking.execution(
+            results, journal_trades, sorted(live_bars["session_date"].unique())
+        )
+        st.markdown("**Your trades against the plan of the signal they came from**")
+        if gaps.empty:
+            st.caption(
+                "None yet: a closed journal trade bought within two sessions of a live signal."
+            )
+        else:
+            st.dataframe(gaps.round(2), hide_index=True, width="stretch")
+        with st.expander("Every live signal"):
+            st.dataframe(results.round(2), hide_index=True, width="stretch")
+    monthly = sorted((data_dir / "docs" / "live-tracking").glob("*.md"))
+    if monthly:
+        st.caption(f"Monthly reports: data repo docs/live-tracking/ (newest {monthly[-1].stem}).")
 
 elif page == "Graded signals":
     st.subheader("Signals you graded")

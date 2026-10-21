@@ -1,0 +1,81 @@
+# Monthly live check (Emil, 21 Oct 2026): the live A+ / A signals' plan results against the
+# grading study, and Emil's trades against the plan. Writes docs/live-tracking/ in the data
+# repo and pushes one summary. Not time-critical, so GitHub's own cron is enough.
+# This repo is public and so are these logs: the job prints counts and status only.
+
+name: Live check
+
+on:
+  schedule:
+    - cron: "0 13 1 * *"      # the 1st of each month
+  workflow_dispatch:
+    inputs:
+      no_push:
+        description: "Write the report without the push"
+        type: boolean
+        default: false
+
+concurrency:
+  group: data-repo            # every job that writes trading-os-data shares this group
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Live check
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NO_PUSH: ${{ inputs.no_push && '--no-push' || '' }}
+        run: uv run --frozen --no-dev python scripts/live_check.py --data-dir data-repo $NO_PUSH
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "live check $(TZ=America/New_York date +%F): report (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Live check failed", message: "Live check job failed. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/
