@@ -340,6 +340,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     },
     "breakout_watch": {"push_tier"},
     "luk_flush": {"push_tier"},
+    "ma_surf": {"push_tier", "push_ungraded"},
     "breakout_trigger": {"push_tier", "push_if_all", "partial_top_n"},
     "universe_snapshot": set(),
     "qm_gainers": {

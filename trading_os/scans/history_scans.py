@@ -108,6 +108,23 @@ def breakout_trigger(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     return _with_breakout_fields(hits, _TRIGGER)
 
 
+def ma_surf(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Qullamaggie's MA-surf (Emil, 21 Oct 2026): the rows `surf_live.attach` marked, with
+    their pivot and order stop under the names the plan and the push read. Ranked by dollar
+    volume, largest first."""
+    if "ma_surf" not in df or "surf_pivot" not in df:  # no setup today: no level columns
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    hits = ranked(df, _mask(df["ma_surf"]), "dollar_volume")
+    return hits.assign(
+        pivot=hits["surf_pivot"],
+        order_stop=hits["surf_order_stop"],
+        risk_adr=hits["surf_risk_adr"],
+        base_len=hits["surf_base_len"],
+        bo_prior_move_pct=hits["surf_prior_move_pct"],
+        bo_ma_stacked=hits["surf_ma_stacked"],
+    )
+
+
 def luk_flush(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """Martin Luk's AVWAP flush (Emil, 20 Oct 2026): the rows `luk_live.attach` marked.
     Ranked by dollar volume, largest first."""

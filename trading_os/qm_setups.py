@@ -1,6 +1,6 @@
 """Qullamaggie's breakout from a base that surfs the rising 10- or 20-day MA, for the history
-studies (Emil, 20 Oct 2026). Study only, not a live scan; a live scan needs Emil's OK on the
-rules and a SPEC entry first.
+studies (Emil, 20 Oct 2026), and since 21 Oct 2026 the live EOD scan `ma_surf` (Emil: "I will
+use this strategy more"; `surf_live.py`, SPEC §6.2) with these rules unchanged.
 
 From his streams (the qullamaggie MCP transcripts; video ids in brackets, the swing trading
 school of July 2020 states the method in full [155-158]): a momentum stock with an ADR of

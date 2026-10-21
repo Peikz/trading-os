@@ -256,6 +256,7 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 | ⚡ EP 10:30 (10:17 check) | around 10:30 New York (16:30 Copenhagen); "flagged last evening" if the 16:50 check already sent it |
 | ⏱️ EP9M pace (10:17 check) | after the 10:15 check (16:15 Copenhagen) |
 | 🌊 Luk flush (EOD) | the next session around 10:30 New York (16:30 Copenhagen) |
+| 🏄 MA-surf (EOD, grade C, pushed on your request since 21 Oct 2026) | the next session from 10:00 New York (16:00 Copenhagen): over the pivot buy, under it a buy-stop at the pivot; stop under the base's right side; sell on a close under the 20-day MA |
 
 The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked
 blind on 2016–21 do worse (research report §9, portfolio report §11–12).

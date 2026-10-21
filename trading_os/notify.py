@@ -54,6 +54,7 @@ SCAN_LABELS = {
     "growth_bucket_2": "Growth 2",
     "tight_bases": "Tight bases",
     "luk_flush": "Luk flush",
+    "ma_surf": "MA-surf",
 }
 # An icon per section, so the eye finds the setup type (no meaning beyond the type).
 SECTION_ICONS = {
@@ -62,6 +63,7 @@ SECTION_ICONS = {
     "ep_am": "⚡",
     "ep_ah": "🌙",
     "luk_flush": "🌊",
+    "ma_surf": "🏄",
     "ep9m": "📊",
     "ep9m_pace": "⏱️",
     "ep_pm": "🌅",
@@ -113,6 +115,14 @@ ENTRY_TEXT = {
     "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
 }
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
+# The plan of a scan pushed without a grade (`push_ungraded`): the study's entry and exit.
+UNGRADED_PLANS = {
+    "ma_surf": [
+        "C (no grade) · next session from 10:00 NY (16:00 CPH)",
+        "over the pivot: buy · under it: buy-stop at the pivot",
+        "out on a close under the 20-day MA",
+    ],
+}
 
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
@@ -146,7 +156,7 @@ def select_for_push(results: Mapping[str, pd.DataFrame], cfg: Config) -> dict[st
         if graded(cfg, eligible):
             # Study grades (SPEC §11.17): A+/A get a full block, B one line, C is saved and
             # counted in the closing line.
-            mode = push_modes(cfg, eligible)
+            mode = push_modes(cfg, eligible, scan)
             order = eligible.assign(_g=eligible["grade"].map(GRADE_RANK).fillna(9))
             keys = [k for k in ("_g", "grade_score", "rank") if k in order]
             order = order.sort_values(keys, ascending=[k != "grade_score" for k in keys])
@@ -172,10 +182,14 @@ def graded(cfg: Config, hits: pd.DataFrame) -> bool:
     return bool(cfg.grading["enabled"]) and "grade" in hits
 
 
-def push_modes(cfg: Config, hits: pd.DataFrame) -> pd.Series:
-    """full / line / count per hit, from its grade (config `grading.push`)."""
+def push_modes(cfg: Config, hits: pd.DataFrame, scan=None) -> pd.Series:
+    """full / line / count per hit, from its grade (config `grading.push`). A scan with
+    `push_ungraded` (Emil's MA-surf) shows its C hits in full as well."""
     modes = cfg.grading["push"]
-    return hits["grade"].fillna("C").map(lambda g: modes.get(g, "count"))
+    out = hits["grade"].fillna("C").map(lambda g: modes.get(g, "count"))
+    if scan is not None and scan.params.get("push_ungraded"):
+        out = out.replace("count", "full")
+    return out
 
 
 def grade_lines(row: Mapping[str, Any]) -> list[str]:
@@ -221,7 +235,7 @@ def c_counts(results: Mapping[str, pd.DataFrame], cfg: Config) -> list[str]:
         if scan.action != "push" or hits.empty or not graded(cfg, hits):
             continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
-        n = int((push_modes(cfg, eligible) == "count").sum())
+        n = int((push_modes(cfg, eligible, scan) == "count").sum())
         if n:
             out.append(f"{SCAN_LABELS.get(name, name)} {n}")
     return out
@@ -311,6 +325,17 @@ def format_breakout(row: Mapping[str, Any], scan: str) -> str:
     return f"{row['ticker']}  {length}{_flags(row, 4)}"
 
 
+def format_surf(row: Mapping[str, Any]) -> str:
+    """`ABCD  MA10 14d  base 9d`: the MA it surfs, for how many closes, and the base."""
+    ma, days, base = (row.get(k) for k in ("surf_ma", "surf_days", "surf_base_len"))
+    parts = [str(row["ticker"])]
+    if ma is not None and not pd.isna(ma):
+        parts.append(f"MA{int(ma)} {int(days)}d" if days is not None and not pd.isna(days) else "")
+    if base is not None and not pd.isna(base):
+        parts.append(f"base {int(base)}d")
+    return "  ".join(p for p in parts if p)
+
+
 def format_weekly(row: Mapping[str, Any], scan: str) -> str:
     """Weekly list lines: the numbers each list is about."""
     t = row["ticker"]
@@ -330,6 +355,8 @@ def _first_line(row: Mapping[str, Any], scan: str, slot: str) -> str:
         return format_weekly(row, scan)
     if scan.startswith("breakout_"):
         return format_breakout(row, scan)
+    if scan == "ma_surf":
+        return format_surf(row)
     if scan == "ep9m_pace":
         return format_pace(row)
     if scan == "pivot_watch":
@@ -379,6 +406,7 @@ def wrap(parts: Iterable[str], width: int) -> list[str]:
 def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     out = [Line("hit", "▸ " + _first_line(row, scan, slot))]
     out += [Line("plan", INDENT + text) for text in grade_lines(row)]
+    out += [Line("plan", INDENT + text) for text in UNGRADED_PLANS.get(scan, [])]
     out += [Line("plan", INDENT + text) for text in plan_lines(row)]
     if context.has_context(row):
         out += [

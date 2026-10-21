@@ -128,6 +128,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
     if slot == "eod" and cfg.scans["luk_flush"].enabled:
         uni = _with_luk(uni, args.data_dir, cfg, session)
+    if slot == "eod" and cfg.scans["ma_surf"].enabled:
+        uni = _with_surf(uni, args.data_dir, cfg, session)
 
     state = watchlists.current(watchlists.load_events(args.data_dir))
     for name in watchlists.LISTS:
@@ -232,6 +234,19 @@ def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
         return out
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
+        return uni
+
+
+def _with_surf(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
+    """Qullamaggie's MA-surf flags (EOD). A problem leaves the scan empty, never fails."""
+    from trading_os import surf_live
+
+    try:
+        out = surf_live.attach(uni, data_dir, cfg, session)
+        status(f"MA-surf: {int(out['ma_surf'].sum())} flagged")
+        return out
+    except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
+        status(f"MA-surf: FAILED ({type(exc).__name__}), scan empty")
         return uni
 
 

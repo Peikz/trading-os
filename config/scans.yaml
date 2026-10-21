@@ -126,6 +126,11 @@ scans:
   luk_flush:                                # Martin Luk's AVWAP flush, live (Emil, 20 Oct 2026):
                                             # rules in `luk:`, bought the next session (grading)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
+  ma_surf:                                  # Qullamaggie's MA-surf, live (Emil, 21 Oct 2026:
+                                            # "I will use this strategy more"): rules in
+                                            # `qm_surf:`; grade C, pushed anyway (push_ungraded)
+                                            # with the study plan for the next session
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_ungraded: true}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
@@ -335,8 +340,8 @@ minervini:                                  # Mark Minervini's Trend Template an
   stop_max_pct: 8                           # stop at most 8 % under the entry ("7-8 %")
 
 qm_surf:                                    # Qullamaggie's breakout from a base surfing the
-                                            # rising 10/20-day MA, history studies only, not a
-                                            # live scan (Emil, 20 Oct 2026). Rules from his
+                                            # rising 10/20-day MA (Emil, 20 Oct 2026); the live
+                                            # scan `ma_surf` since 21 Oct 2026. Rules from his
                                             # streams; every value (proposed)
   adr_min_pct: 4                            # ADR "four or five percent plus"
   prior_move_min_pct: 30                    # the big move up into the base ...

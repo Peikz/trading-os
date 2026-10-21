@@ -21,6 +21,7 @@ from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
     luk_flush,
+    ma_surf,
     parabolic_long,
     parabolic_short,
     tight_bases,
@@ -53,6 +54,7 @@ REGISTRY: dict[str, ScanFn] = {
     "growth_bucket_2": growth_bucket_2,
     "tight_bases": tight_bases,
     "luk_flush": luk_flush,
+    "ma_surf": ma_surf,
 }
 
 
