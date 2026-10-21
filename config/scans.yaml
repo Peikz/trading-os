@@ -410,9 +410,9 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   quality:                                  # points at least -> grade; the plan per live scan
     ep:
       parts: [earnings, sideways_1_2m, market_cool_lt45, revenue_accel, eps_yoy_pos, near_52w_high]
-      grades: [[5, "A+"], [4, "B"]]         # 5-6: +0.91R after hours, +0.53R at the close
-      live_scans: [ep_pm, ep_close]
-      entries: {ep_pm: pm_0915, ep_close: close}
+      grades: [[5, "A+"], [4, "B"]]         # 5-6: +0.53R at the close (pre-market: biased, out)
+      live_scans: [ep_close]
+      entries: {ep_close: close}
       stop_adr: 1.0
       hold_sessions: 21
     ep9m:
