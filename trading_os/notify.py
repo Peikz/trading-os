@@ -18,7 +18,7 @@ from typing import Any
 import pandas as pd
 import requests
 
-from trading_os import context
+from trading_os import clock, context
 from trading_os.breadth import LIGHT_ICONS
 from trading_os.config import Config
 from trading_os.store import RunContext
@@ -549,7 +549,7 @@ def _quiet(label: str, hits: pd.DataFrame, scan) -> str:
 
 def _title(ctx: RunContext, counts: list[str], icon: str) -> str:
     day = ctx.session
-    title = f"{SLOT_LABELS[ctx.slot]} {day:%a} {day.day} {day:%b}"
+    title = f"{SLOT_LABELS[ctx.slot]} {day:%a} {day.day} {day:%b} {clock.both_times(ctx.run_ts)}"
     title += " · " + (" · ".join(counts) if counts else "no alerts")
     if ctx.forced:
         title += " (manual run)"

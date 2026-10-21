@@ -61,7 +61,7 @@ def test_message_title_counts_and_sections():
     cfg = load_config()
     results = {"ep_day": hits(n_alert=2, n_log=1)}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.title == f"EOD Mon 19 Oct {DOT} EP 2"
+    assert msg.title == f"EOD Mon 19 Oct 16:18 NY {DOT} 22:18 CPH {DOT} EP 2"
     assert msg.body.splitlines() == [
         f"━━ ⚡ EP-Day {DOT} 2 of 3 ━━",
         "▸ T00  +30.0%  RVOL 5.1  $82M  📢",
@@ -74,7 +74,7 @@ def test_message_without_hits_and_the_market_icon():
     cfg = load_config()
     results = {"ep_day": hits(0)}
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.title == f"EOD Mon 19 Oct {DOT} no alerts"
+    assert msg.title == f"EOD Mon 19 Oct 16:18 NY {DOT} 22:18 CPH {DOT} no alerts"
     assert msg.body == "Nothing new: EP-Day"
     results = {"ep_day": hits(0, n_log=2)}
     header = ["🟡 Market Light YELLOW"]
@@ -246,7 +246,7 @@ def test_full_setups_get_blocks_and_b5_only_get_one_line_each():
     assert chosen["ticker"].tolist() == ["BO0", "BO1", "BO2", "BO3"]
     assert chosen["push_partial"].tolist() == [False, True, True, True]
     msg = notify.build_message(CTX, results, notify.select_for_push(results, cfg), cfg)
-    assert msg.title == f"EOD Mon 19 Oct {DOT} BO 1 {DOT} B5-only 3"
+    assert msg.title == f"EOD Mon 19 Oct 16:18 NY {DOT} 22:18 CPH {DOT} BO 1 {DOT} B5-only 3"
     body = msg.body.splitlines()
     assert body[0] == f"━━ 🚀 Breakout {DOT} 1 of 4 ━━"
     assert body[1] == f"B: move {DOT} base {DOT} trend {DOT} tight {DOT} trigger"

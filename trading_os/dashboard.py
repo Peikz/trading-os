@@ -17,14 +17,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from trading_os import watchlists
+from trading_os import clock, watchlists
 from trading_os.store import PARQUET_OPTIONS
 
-SLOT_ORDER = {"weekly": 0, "eod": 1, "mid": 2, "am": 3, "pm": 4}
+# Latest in the day first.
+SLOT_ORDER = {"weekly": 0, "ah": 1, "eod": 2, "close": 3, "mid": 4, "am": 5, "pm": 6}
 GRADES = ("", "A", "B", "C")
 NOTE_COLUMNS = ["kind", "ref_id", "grade", "notes", "tags", "attachments", "saved_ts"]
-_CANONICAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|am|mid|eod|weekly)$")
-_MANUAL = re.compile(r"^(\d{4}-\d{2}-\d{2})_(pm|am|mid|eod|weekly)_(\d{6})$")
+_SLOTS = "pm|am|mid|close|eod|ah|weekly"  # close and ah were missing until 21 Oct 2026
+_CANONICAL = re.compile(rf"^(\d{{4}}-\d{{2}}-\d{{2}})_({_SLOTS})$")
+_MANUAL = re.compile(rf"^(\d{{4}}-\d{{2}}-\d{{2}})_({_SLOTS})_(\d{{6}})$")
+SLOT_STARTS = {"close": "15:45"}  # New York; the rest come from the timer (`slot_start`)
 
 
 @dataclass(frozen=True)
@@ -43,8 +46,26 @@ class Run:
 
     @property
     def label(self) -> str:
-        extra = f" (manual {self.stamp})" if self.kind == "manual" else ""
-        return f"{self.session.isoformat()} · {self.slot}{extra}"
+        """`2026-10-21 · mid · 12:03 NY · 18:03 CPH`: the slot's scheduled start (manual runs:
+        their own UTC start stamp)."""
+        if self.kind == "manual":
+            return f"{self.session.isoformat()} · {self.slot} (manual {self.stamp})"
+        start = slot_start(self.slot, self.session)
+        when = f" · {clock.both_times(start)}" if start else ""
+        return f"{self.session.isoformat()} · {self.slot}{when}"
+
+
+def slot_start(slot: str, session: dt.date) -> dt.datetime | None:
+    """When the slot's run is scheduled on `session` (the timer's first start), New York time."""
+    from trading_os import timer
+
+    at = SLOT_STARTS.get(slot) or next(
+        (j.at for j in timer.JOBS if j.key == slot and not j.retry), None
+    )
+    if at is None:
+        return None
+    hour, minute = (int(x) for x in at.split(":"))
+    return dt.datetime.combine(session, dt.time(hour, minute), tzinfo=clock.NEW_YORK)
 
 
 def list_runs(data_dir: Path, include_manual: bool = True) -> list[Run]:

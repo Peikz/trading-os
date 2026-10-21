@@ -28,9 +28,9 @@ def test_list_runs_newest_first_with_manual(tmp_path):
     touch_run(tmp_path, "2026-10-16_eod", manual_stamp="203000")
     runs = dashboard.list_runs(tmp_path)
     assert [r.label for r in runs] == [
-        "2026-10-19 · eod",
-        "2026-10-19 · pm",
-        "2026-10-16 · eod",
+        "2026-10-19 · eod · 16:17 NY · 22:17 CPH",
+        "2026-10-19 · pm · 07:17 NY · 13:17 CPH",
+        "2026-10-16 · eod · 16:17 NY · 22:17 CPH",
         "2026-10-16 · eod (manual 203000)",
     ]
     assert len(dashboard.list_runs(tmp_path, include_manual=False)) == 3
@@ -86,3 +86,19 @@ def test_git_save_and_push_roundtrip(tmp_path):
     pushed = dashboard.git(remote, "ls-tree", "-r", "--name-only", "HEAD")[1]
     for folder in ("data/journal/", "data/chart_marks/", "data/my_watchlists/"):
         assert folder in pushed, folder
+
+
+def test_after_hours_and_close_runs_are_listed_with_both_clocks(tmp_path):
+    touch_run(tmp_path, "2026-10-21_ah")
+    touch_run(tmp_path, "2026-10-20_close")
+    labels = [r.label for r in dashboard.list_runs(tmp_path)]
+    assert labels == [
+        "2026-10-21 · ah · 16:50 NY · 22:50 CPH",
+        "2026-10-20 · close · 15:45 NY · 21:45 CPH",
+    ]
+    # 2 Nov 2026: New York is back on winter time a week after Copenhagen, so 6 hours apart
+    assert dashboard.Run.label.fget is not None
+    from trading_os import clock
+
+    start = dashboard.slot_start("pm", __import__("datetime").date(2026, 11, 2))
+    assert clock.both_times(start) == "07:17 NY · 13:17 CPH"

@@ -24,6 +24,17 @@ def _calendar(name: str) -> xcals.ExchangeCalendar:
     return xcals.get_calendar(name)
 
 
+NEW_YORK = ZoneInfo("America/New_York")
+COPENHAGEN = ZoneInfo("Europe/Copenhagen")  # Emil's own clock (Emil, 21 Oct 2026)
+
+
+def both_times(when: dt.datetime) -> str:
+    """`07:17 NY · 13:17 CPH`: a moment in New York and Copenhagen time (naive = UTC)."""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.UTC)
+    return f"{when.astimezone(NEW_YORK):%H:%M} NY · {when.astimezone(COPENHAGEN):%H:%M} CPH"
+
+
 def ny_time(schedule: Schedule, now: dt.datetime) -> dt.datetime:
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")

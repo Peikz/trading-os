@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import context
+from trading_os import clock, context
 from trading_os.notify import SCAN_LABELS, SLOT_LABELS
 from trading_os.store import RunContext
 
@@ -194,7 +194,8 @@ def build(
 ) -> str:
     title = f"# Trading OS · {SLOT_LABELS[ctx.slot]} {ctx.session.isoformat()}"
     kind = f"{ctx.run_kind}{', forced' if ctx.forced else ''}"
-    lines = [title, "", f"_Run {ctx.run_ts:%Y-%m-%d %H:%M} UTC · {kind}_", ""]
+    when = clock.both_times(ctx.run_ts).replace("NY", "New York").replace("CPH", "Copenhagen")
+    lines = [title, "", f"_Run {ctx.run_ts:%Y-%m-%d %H:%M} UTC ({when}) · {kind}_", ""]
     if header_lines:
         lines += ["## Market", "", *[f"- {line}" for line in header_lines], ""]
     pushed = [n for n in results if n in selected]
