@@ -70,17 +70,37 @@ PAGES = [
     "Chart",
     "Watchlists",
     "Journal",
-    "Study grades",
-    "Graded signals",
     "Market",
-    "Stats",
-    "History",
-    "Entries & exits",
-    "Market regime",
+    "Research",
+    "Live results",
     "System health",
-    "Validation",
     "Guide",
 ]
+# Research and Live results gather the history pages. One section runs at a time: tabs would
+# run every section's code (and its downloads) on each click.
+RESEARCH = {
+    "Grades": (
+        "Study grades",
+        "Net of costs and out of sample (2019-2026): the grade rules you confirmed and what each "
+        "grade returned. These are the numbers to decide on.",
+    ),
+    "History": (
+        "History",
+        "Every scan hit in the daily-bar replay. The graded section at the top is net of costs; "
+        "the tables below it are gross (no costs).",
+    ),
+    "Entries & exits": (
+        "Entries & exits",
+        "The minute-bar study: entry, stop and exit per strategy, gross of costs. The grades "
+        "add the costs.",
+    ),
+    "Market regime": (
+        "Market regime",
+        "Whether skipping trades in a weak market would have helped.",
+    ),
+}
+LIVE = {"All signals": "Stats", "Signals you graded": "Graded signals"}
+HEALTH = {"Jobs and data": "System health", "Validation against TradingView": "Validation"}
 
 
 # ---------------------------------------------------------------- sidebar
@@ -168,7 +188,7 @@ def show_history_graded() -> None:
             "earlier years only (2019-2026 out of sample). QM gainers, tight bases and the Trend "
             "Template have no stop of their own: 1 ADR under the Friday close, judged on the "
             "lows. Entries tested on minute bars (the open, the 10:15 and 12:00 checks, opening "
-            "ranges, next-day breaks) are on the Study grades page."
+            "ranges, next-day breaks) are under Research, Grades."
         )
         show = summary.rename(
             columns={
@@ -812,6 +832,31 @@ def market_lines(run: dashboard.Run | None) -> None:
 
 runs = runs_cached(str(data_dir), include_manual)
 
+if page == "Research":
+    st.header("Research")
+    section = st.radio(
+        "Section",
+        list(RESEARCH),
+        horizontal=True,
+        key="research_section",
+        label_visibility="collapsed",
+    )
+    page, what = RESEARCH[section]
+    st.caption(what)
+elif page == "Live results":
+    st.header("Live results")
+    section = st.radio(
+        "Section", list(LIVE), horizontal=True, key="live_section", label_visibility="collapsed"
+    )
+    page = LIVE[section]
+    st.caption("The live signals since launch, with what happened 5, 10, 20 and 60 sessions after.")
+elif page == "System health":
+    st.header("System health")
+    section = st.radio(
+        "Section", list(HEALTH), horizontal=True, key="health_section", label_visibility="collapsed"
+    )
+    page = HEALTH[section]
+
 if page == "Today":
     st.header("Today")
     if not runs:
@@ -1324,7 +1369,7 @@ elif page == "Journal":
             )
 
 elif page == "Market regime":
-    st.header("Market regime")
+    st.subheader("Market regime")
     folder = from_github("regime-10y", "*.parquet")
     needed = ["regime_daily", "regime_minute", "regime_minute_by_year"]
     needed += ["regime_daily_study", "regime_daily_study_by_year"]
@@ -1390,7 +1435,6 @@ elif page == "Guide":
     st.markdown("\n".join(body))
 
 elif page == "System health":
-    st.header("System health")
     now = dt.datetime.now(dt.UTC)
     st.caption(
         "From your local copy of the data repo: pull first (sidebar) to see the latest runs."
@@ -1453,7 +1497,7 @@ elif page == "System health":
             )
 
 elif page == "Study grades":
-    st.header("Study grades")
+    st.subheader("Study grades")
     rules = CFG.grading
     st.caption(
         "Each hit of a scan with a scorecard gets the grade its setup earned in the 10-year "
@@ -1535,7 +1579,7 @@ elif page == "Study grades":
             st.markdown(research.read_text(encoding="utf-8"))
 
 elif page == "Graded signals":
-    st.header("Graded signals")
+    st.subheader("Signals you graded")
     notes = dashboard.notes_state(data_dir)
     graded = notes[notes["kind"] == "signal"]
     if graded.empty:
@@ -1583,7 +1627,7 @@ elif page == "Market":
     st.line_chart(history.set_index("session_date")[["ratio_5d", "ratio_10d"]], height=220)
 
 elif page == "Stats":
-    st.header("Outcome statistics")
+    st.subheader("Outcome statistics")
     found = stats.load_outcomes(data_dir)
     minimum = st.slider("Minimum signals per group", 1, 50, CFG.stats["min_signals"])
     table = stats.summarize(outcomes.load_candidates(data_dir), found, minimum)
@@ -1594,12 +1638,13 @@ elif page == "Stats":
         st.dataframe(table, hide_index=True, width="stretch")
 
 elif page == "History":
-    st.header("History")
+    st.subheader("History")
     period = st.radio(
         "Period",
         ["2y", "10y"],
         horizontal=True,
         format_func=lambda p: "2 years (Massive)" if p == "2y" else "10 years (Alpaca, since 2016)",
+        index=1,
         key="hist_period",
     )
     if period == "10y":
@@ -1697,12 +1742,13 @@ elif page == "History":
         st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="hist-chart", width="stretch")
 
 elif page == "Entries & exits":
-    st.header("Entries & exits")
+    st.subheader("Entries & exits")
     ie_period = st.radio(
         "Period",
         ["2y", "10y"],
         horizontal=True,
         format_func=lambda p: "2 years (all trades)" if p == "2y" else "10 years (summaries)",
+        index=1,
         key="ie_period",
     )
     if ie_period == "10y":
@@ -1790,7 +1836,7 @@ elif page == "Entries & exits":
         st.dataframe(rows, hide_index=True, width="stretch")
 
 elif page == "Validation":
-    st.header("Validation against TradingView")
+    st.subheader("Validation against TradingView")
     if not runs:
         st.info("No runs yet.")
         st.stop()
