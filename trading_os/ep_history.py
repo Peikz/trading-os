@@ -17,6 +17,9 @@ after it. Facts only: the five criteria are yes/no columns, never a grade.
 - Fundamentals (`add_fundamentals`): TradingView keeps 8 years of quarterly EPS and revenue
   but no past report dates, so the quarter is matched by the company's reporting rhythm and
   marked inferred; today's float only. Stocks delisted since have none.
+- SEC facts (`add_sec`): where the company files with the SEC, the earnings timing and the
+  EPS/sales growth come from the data repo's `sec-10y` release (corrected acceptance times,
+  the CIK the ticker stood for that day) and replace the TradingView estimate.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_os import breadth, exits, sizing
+from trading_os import breadth, exits, sec_bulk, sizing
 from trading_os import history_metrics as hm
 from trading_os.audit import ordinary_ticker
 from trading_os.metrics import NEW_YORK, yoy_growth
@@ -36,6 +39,7 @@ from trading_os.metrics import NEW_YORK, yoy_growth
 HORIZONS = (1, 5, 21, 63, 126, 252)  # next day, week, month, quarter, half year, year
 TRAILS = (10, 20)  # exit at the first close under this MA
 QUARTER_DAYS = 365.25 / 4
+SEC_RELEASE = "sec-10y"  # the data repo's release with the SEC tables (sec_bulk.py)
 
 
 def market_context(g: dict[str, np.ndarray], tickers: pd.Index, cfg) -> pd.DataFrame:
@@ -475,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--no-fundamentals", action="store_true", help="skip TradingView")
     parser.add_argument("--rebuild", action="store_true", help="replace this date's build")
+    parser.add_argument(
+        "--sec-dir", type=Path, help=f"folder with the {SEC_RELEASE} files (default: download)"
+    )
     args = parser.parse_args(argv)
     cfg = load_config()
     files = sorted((args.data_dir / "data" / "bars").rglob("*.parquet"))
@@ -496,9 +503,11 @@ def main(argv: list[str] | None = None) -> int:
         by_ticker = details.join(listed.set_index("tv_ticker")["ticker"]).set_index("ticker")
         df = add_fundamentals(df, by_ticker, cfg)
         status(f"EP history: fundamentals for {len(by_ticker)} still-listed stocks")
-    sec_tables = load_sec(args.data_dir)
-    if sec_tables is not None and len(df):
-        df = add_sec(df, *sec_tables, sessions, cfg.ep_history["c3_growth_min_pct"])
+    sec_tables = load_sec(args.data_dir, args.sec_dir)
+    if sec_tables is None:
+        status(f"EP history: no {SEC_RELEASE} tables, TradingView estimates only")
+    elif len(df):
+        df = add_sec(df, sec_tables, sessions, cfg.ep_history["c3_growth_min_pct"])
         status(f"EP history: SEC facts for {int(df['earnings_sec'].notna().sum())} events")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out_path, **PARQUET_OPTIONS)
@@ -513,35 +522,37 @@ def _ny(day, hhmm: str) -> pd.Timestamp:
 
 def add_sec(
     df: pd.DataFrame,
-    releases: pd.DataFrame,
-    quarters: pd.DataFrame,
-    cik_by_ticker: Mapping[str, int],
+    tables: sec_bulk.Tables,
     sessions: list,
     c3_min: float = 50,
 ) -> pd.DataFrame:
-    """Exact earnings facts from SEC EDGAR where the company files there (US filers):
+    """Exact earnings facts from SEC EDGAR where the company files there (US filers), from the
+    data repo's `sec-10y` release (`sec_bulk`):
 
-    - `earnings_sec`: an 8-K item 2.02 was accepted between the prior close and the EP close,
-      and `earnings_timing` says when (after the prior close, pre-market, during the session);
-    - `eps_growth_sec` / `sales_growth_sec`: YoY growth of the latest quarter whose results
-      had been released by the EP close (point in time: the release, not the later 10-Q).
+    - `earnings_sec`: an earnings release (an 8-K item 2.02, or a 10-Q/10-K that came without
+      one) was accepted between the prior close and the EP close, and `earnings_timing` says
+      when (after the prior close, pre-market, during the session). The release's acceptance
+      times are corrected: the submissions JSON shows about a third of them 4-5 hours late,
+      which made pre-market releases look like mid-session ones;
+    - `eps_growth_sec` / `sales_growth_sec`: YoY growth of the latest quarter announced before
+      the EP-day open (`sec_bulk.pit_join`: the release, not the later 10-Q, and the company
+      the ticker stood for that day).
 
     Then `earnings`, `eps_growth_yoy`, `sales_growth_yoy` and C3 prefer SEC and fall back to
     the TradingView estimate; `fundamentals_source` says which.
     """
     out = df.copy()
     index = {d: i for i, d in enumerate(sessions)}
-    stamps = pd.to_datetime(releases["accepted"], utc=True).dt.tz_localize(None)  # UTC
-    by_cik = {int(cik): np.sort(group.to_numpy()) for cik, group in stamps.groupby(releases["cik"])}
-    q = quarters.assign(end=pd.to_datetime(quarters["end"])).sort_values("end")
-    q_by_cik = {int(cik): g.drop_duplicates("period", keep="last") for cik, g in q.groupby("cik")}
-    sec_cols = {"earnings_sec": None, "earnings_timing": None}
-    sec_cols |= {"eps_growth_sec": np.nan, "sales_growth_sec": np.nan}
-    for name, default in sec_cols.items():
-        out[name] = default
+    # Only the CIK and the growth are used, so the next-earnings estimate needs no quarter.
+    joined = sec_bulk.pit_join(out[["ticker", "session_date"]], tables, quarter_sessions=0)
+    events = tables.earnings_events.dropna(subset=["accepted"])
+    stamps = pd.to_datetime(events["accepted"], utc=True).dt.tz_localize(None)  # UTC
+    by_cik = {int(cik): np.sort(group.to_numpy()) for cik, group in stamps.groupby(events["cik"])}
+    out["earnings_sec"] = None
+    out["earnings_timing"] = None
     for i, row in out.iterrows():
-        cik = cik_by_ticker.get(row["ticker"])
-        if cik is None or int(cik) not in by_cik:
+        cik = joined.at[i, "cik"]
+        if pd.isna(cik) or int(cik) not in by_cik:
             continue
         times = by_cik[int(cik)]
         day = row["session_date"]
@@ -558,29 +569,9 @@ def add_sec(
                 out.at[i, "earnings_timing"] = "pre-market"
             else:
                 out.at[i, "earnings_timing"] = "during session"
-        table = q_by_cik.get(int(cik))
-        if table is None:
-            continue
-        known = []
-        for period, end in zip(table["period"], table["end"], strict=True):
-            after = times[times > end.tz_localize("UTC").to_datetime64()]
-            if len(after) and after[0] <= close.to_datetime64():
-                known.append(period)
-        if not known:
-            continue
-        latest = known[-1]
-        year, quarter = int(latest[2:6]), latest[6:]
-        base = f"CY{year - 1}{quarter}"
-        values = table.set_index("period")
-        if base not in values.index:
-            continue
-        for column, target, abs_base in (
-            ("eps", "eps_growth_sec", True),
-            ("revenue", "sales_growth_sec", False),
-        ):
-            now, then = values.at[latest, column], values.at[base, column]
-            if then == then and now == now and then != 0:
-                out.at[i, target] = (now - then) / (abs(then) if abs_base else then) * 100
+    covered = out["earnings_sec"].notna()
+    out["eps_growth_sec"] = joined["eps_yoy_pct"].where(covered)
+    out["sales_growth_sec"] = joined["revenue_yoy_pct"].where(covered)
     inferred = out.get("earnings_inferred", pd.Series(None, index=out.index))
     out["fundamentals_source"] = np.where(
         out["earnings_sec"].notna(), "sec", np.where(inferred.notna(), "inferred", None)
@@ -598,13 +589,19 @@ def add_sec(
     return out
 
 
-def load_sec(data_dir) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]] | None:
-    """The SEC tables and ticker -> CIK map from the data repo, or None before a SEC run."""
+def load_sec(data_dir, folder=None) -> sec_bulk.Tables | None:
+    """The `sec-10y` release's tables from `folder`, else downloaded fresh from the data repo
+    into the release cache (gh CLI signed in); None when they can't be had (offline and not
+    cached, or before the first SEC bulk build)."""
     from pathlib import Path
 
-    folder = Path(data_dir) / "data" / "ep_enrich" / "sec"
-    names = ("earnings_releases.parquet", "quarterly.parquet", "cik_map.parquet")
-    if not all((folder / n).exists() for n in names):
+    if folder is None:
+        from trading_os import dashboard, remote_data
+
+        folder = remote_data.CACHE / SEC_RELEASE
+        patterns = [f"{name}.parquet" for name in sec_bulk.TABLES]
+        dashboard.download_release(Path(data_dir), SEC_RELEASE, folder, patterns)
+    folder = Path(folder)
+    if not all((folder / f"{name}.parquet").exists() for name in sec_bulk.TABLES):
         return None
-    releases, quarters, mapping = (pd.read_parquet(folder / n) for n in names)
-    return releases, quarters, dict(zip(mapping["ticker"], mapping["cik"], strict=True))
+    return sec_bulk.load_tables(folder)

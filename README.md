@@ -91,6 +91,9 @@ the move before, the market) and what happened after (1 day, 1 week, 1 month, a 
 year, a year; R with the live entry and stop; exits under the 10/20-day MA). The xlsx in
 `data/exports/` has the EPStudyDatabase's EP Log columns first, ready to import as its own tab.
 The dashboard's EP history page filters and groups it and charts any event with what came after.
+Earnings timing and EPS/sales growth come from SEC EDGAR where the company files there (the data
+repo's `sec-10y` release, downloaded with `gh`, or a local copy with `--sec-dir`), else from
+TradingView's estimate.
 
 ## Strategy history
 

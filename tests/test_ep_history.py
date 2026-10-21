@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_os import ep_history
+from trading_os import ep_history, sec_bulk
 from trading_os.config import load_config
 
 TICKER = "".join(["EP", "HX"])  # built at runtime, like real data
@@ -140,3 +140,90 @@ def test_summary_counts_only_matured_horizons(study):
     table = ep_history.summary(df).set_index("horizon_d")
     assert table.loc[5, "n"] == 1 and table.loc[5, "win_rate_pct"] == 100.0
     assert table.loc[252, "n"] == 0 and np.isnan(table.loc[252, "mean_r"])
+
+
+def _sec_tables():
+    """One US filer in the sec-10y layout: Q1 announced at 07:00 ET on 8 May 2025 (the
+    submissions JSON shows it at 11:00 ET, UTC plus the offset again), Q2 at 16:05 ET on 6 Aug."""
+    utc = lambda s: pd.Timestamp(s, tz="UTC")  # noqa: E731
+    day = dt.date
+    ticker_cik = pd.DataFrame(
+        {
+            "ticker": [TICKER],
+            "cik": pd.array([30], dtype="Int64"),
+            "valid_from": [None],
+            "valid_to": [None],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "cik": [30, 30],
+            "form": ["8-K", "8-K"],
+            "accepted": [utc("2025-05-08 11:00"), utc("2025-08-06 20:05")],
+            "accepted_json": ["2025-05-08T15:00:00.000Z", "2025-08-06T20:05:00.000Z"],
+            "time_basis": ["header", "json"],
+            "reaction_session": [day(2025, 5, 8), day(2025, 8, 7)],
+            "timing": ["pre-market", "after-close"],
+        }
+    )
+    quarterly = pd.DataFrame(
+        {
+            "cik": [30, 30],
+            "fiscal_year": [2025, 2025],
+            "fiscal_quarter": [1, 2],
+            "period_end": [day(2025, 3, 31), day(2025, 6, 30)],
+            "accepted": [utc("2025-05-12 20:30"), utc("2025-08-11 20:30")],  # the 10-Qs
+            "known_at": [utc("2025-05-08 11:00"), utc("2025-08-06 20:05")],  # the releases
+            "eps": [1.4, 2.0],
+            "eps_prior": [1.0, 1.0],
+            "revenue": [130.0, 120.0],
+            "revenue_prior": [100.0, 100.0],
+        }
+    )
+    shares = pd.DataFrame(
+        {
+            "cik": [30],
+            "accepted": [utc("2025-05-12 20:30")],
+            "as_of": [day(2025, 5, 1)],
+            "shares": [1000.0],
+            "source": ["dei"],
+        }
+    )
+    companies = pd.DataFrame(
+        {
+            "cik": [30],
+            "sic": pd.array([7372], dtype="Int64"),
+            "sector": ["Information Technology"],
+            "is_spac": [False],
+            "spac_until": [None],
+        }
+    )
+    return sec_bulk.Tables(ticker_cik, events, quarterly, shares, companies)
+
+
+def test_sec_earnings_timing_uses_the_corrected_acceptance_times():
+    foreign = "".join(["FO", "RN"])  # no SEC filings: keeps the TradingView estimate
+    df = pd.DataFrame(
+        {
+            "ticker": [TICKER, TICKER, TICKER, foreign],
+            "session_date": [dt.date(2025, 5, 8), dt.date(2025, 8, 6)] + [dt.date(2025, 8, 7)] * 2,
+            "earnings_inferred": [False, False, False, True],
+            "eps_growth_yoy": [60.0, 60.0, 60.0, 80.0],  # TradingView's estimates
+            "sales_growth_yoy": [0.0, 0.0, 0.0, 0.0],
+        }
+    )
+    out = ep_history.add_sec(df, _sec_tables(), sessions(170), 50)
+    # 07:00 ET is pre-market; the JSON's 11:00 ET read as UTC would have said mid-session.
+    assert out.loc[0, "earnings_sec"] is True and out.loc[0, "earnings_timing"] == "pre-market"
+    # 16:05 ET is after that day's close, so it is the next session's earnings, not this one's.
+    assert out.loc[1, "earnings_sec"] is False and out.loc[1, "earnings_timing"] is None
+    assert out.loc[2, "earnings_sec"] is True
+    assert out.loc[2, "earnings_timing"] == "after prior close"
+    # Growth of the latest quarter announced before the EP-day open replaces TradingView's.
+    assert list(out["eps_growth_sec"].iloc[:3]) == pytest.approx([40, 40, 100])
+    assert list(out["sales_growth_sec"].iloc[:3]) == pytest.approx([30, 30, 20])
+    assert list(out["eps_growth_yoy"]) == pytest.approx([40, 40, 100, 80])
+    assert list(out["eps_growth_yoy_tv"]) == pytest.approx([60, 60, 60, 80])
+    assert list(out["c3_growth"]) == [False, False, True, True]
+    assert list(out["fundamentals_source"]) == ["sec", "sec", "sec", "inferred"]
+    assert out.loc[3, "earnings_sec"] is None and out.loc[3, "earnings"]
