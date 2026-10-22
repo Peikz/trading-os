@@ -50,6 +50,7 @@ from trading_os import (
     report,
     review,
     scan_editor,
+    search,
     sectors,
     sizing,
     stats,
@@ -134,7 +135,10 @@ HEALTH = {"Jobs and data": "System health", "Validation against TradingView": "V
 
 with st.sidebar:
     st.title("Trading OS")
-    page = st.radio("Page", PAGES, label_visibility="collapsed")
+    query = st.text_input(
+        "🔎 Search", key="search", placeholder="A ticker, or words in your notes and the guide"
+    )
+    page = st.radio("Page", PAGES, label_visibility="collapsed", key="page")
     data_dir = Path(st.text_input("Data repo folder", str(DEFAULT_DATA)))
     include_manual = st.toggle("Show manual test runs", value=True)
     left, right = st.columns(2)
@@ -946,6 +950,84 @@ def market_overview() -> None:
         st.markdown(LIGHT_TEXT)
 
 
+def open_chart(ticker: str) -> None:
+    """The search's button: the Chart page with this ticker."""
+    st.session_state["page"] = "Chart"
+    st.session_state["ch_ticker"] = ticker
+    st.session_state["search"] = ""
+
+
+def search_view(query: str) -> None:
+    """Search results in place of the page: a ticker everywhere, or words in notes and the
+    guide (`search.py`)."""
+    q = query.strip()
+    st.header(f"🔎 {q}")
+    if search.looks_like_ticker(q):
+        ticker = q.lstrip("$").upper()
+        st.button(f"Open {ticker} on the Chart page", on_click=open_chart, args=(ticker,))
+        recent = [r for r in runs if r.kind == "scheduled"][:30]
+        found = search.scan_hits(
+            ((r.label, scan_frames(str(r.candidates))) for r in recent), ticker,
+            report.SCAN_LABELS,
+        )  # fmt: skip
+        st.markdown(f"**Scan hits** (last {len(recent)} runs)")
+        if found.empty:
+            st.caption("None.")
+        else:
+            st.dataframe(found, hide_index=True, width="stretch")
+        places = []
+        mine = my_watchlists.current(my_watchlists.load(data_dir))
+        places += [f"your list *{n}*" for n in mine.loc[mine["ticker"] == ticker, "list"]]
+        scan_lists = dashboard.watchlist_state(data_dir)
+        if len(scan_lists):
+            on = scan_lists[(scan_lists["ticker"] == ticker) & (scan_lists["status"] == "active")]
+            places += [
+                {"bo_watch": "BO-Watch", "ep_watch": "EP-Watch"}.get(x, x) for x in on["list"]
+            ]
+        positions = dashboard.latest_positions(data_dir)
+        if len(positions) and ticker in set(positions["ticker"]):
+            places.append("an open position")
+        own = alerts.current(data_dir)
+        places += [
+            f"price alert {r['direction']} {r['level']:.2f}"
+            for r in own[own["ticker"] == ticker].to_dict("records")
+        ]
+        st.markdown("**On**: " + (", ".join(places) if places else "no list, position or alert"))
+        notes = stock_notes.current(data_dir, ticker)
+        tagged = daily_notes.current(data_dir, ticker)
+        if len(notes) or len(tagged):
+            st.markdown("**Notes**")
+            for n in notes.to_dict("records"):
+                st.markdown(f"- {n['note_date']} · stock note: {n['text']}")
+            for n in tagged.to_dict("records"):
+                st.markdown(f"- {n['note_date']} · daily note: {n['text']}")
+        st.divider()
+    # Words: your notes, daily notes, journal notes and the guide.
+    shown = 0
+    notes = search.text_hits(stock_notes.current(data_dir), ["text", "ticker"], q)
+    for n in notes.to_dict("records"):
+        st.markdown(f"- **{n['ticker']}** · {n['note_date']} · stock note: {n['text']}")
+        shown += 1
+    days = search.text_hits(daily_notes.current(data_dir), ["text", "tags"], q)
+    for n in days.to_dict("records"):
+        st.markdown(f"- {n['note_date']} · daily note: {n['text']}")
+        shown += 1
+    journal_notes = search.text_hits(dashboard.notes_state(data_dir), ["notes", "tags"], q)
+    for n in journal_notes.to_dict("records"):
+        st.markdown(f"- journal ({n['kind']} {n['ref_id']}): {n['notes']}")
+        shown += 1
+    guide = Path(__file__).resolve().parents[1] / "docs" / "GUIDE.md"
+    lines = search.guide_hits(guide.read_text(encoding="utf-8"), q) if guide.exists() else []
+    if lines:
+        st.markdown("**In the guide**")
+        for section, line in lines:
+            st.markdown(f"- *{section}*: {line[:240]}")
+            shown += 1
+    if not shown and not search.looks_like_ticker(q):
+        st.caption("Nothing found in your notes or the guide.")
+    st.caption("Clear the search box to go back to the page.")
+
+
 def levels_for(ticker: str) -> dict:
     """Pivot and order stop from the newest EOD snapshot; your open position's stop and open
     plans' entries and stops."""
@@ -1143,6 +1225,10 @@ def market_lines(run: dashboard.Run | None) -> None:
 # ---------------------------------------------------------------- pages
 
 runs = runs_cached(str(data_dir), include_manual)
+
+if query.strip():
+    search_view(query)
+    st.stop()
 
 if page == "Research":
     st.header("Research")
