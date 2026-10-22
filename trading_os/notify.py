@@ -117,6 +117,24 @@ ENTRY_TEXT = {
     "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
 }
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
+
+
+def best_first(hits: pd.DataFrame) -> pd.DataFrame:
+    """Best quality on top, for every table (Emil, 22 Oct 2026): by grade (A+ first), then the
+    grade's score (quality points, or the scorecard's predicted R), then the scan's own rank."""
+    if hits.empty or "grade" not in hits:
+        return hits.sort_values("rank") if "rank" in hits and len(hits) else hits
+    order = hits.assign(_g=hits["grade"].map(GRADE_RANK).fillna(9))
+    keys, ascending = ["_g"], [True]
+    if "grade_score" in order:
+        order["_s"] = pd.to_numeric(order["grade_score"], errors="coerce").fillna(-1e9)
+        keys, ascending = [*keys, "_s"], [*ascending, False]
+    if "rank" in order:
+        keys, ascending = [*keys, "rank"], [*ascending, True]
+    out = order.sort_values(keys, ascending=ascending, kind="stable")
+    return out.drop(columns=[c for c in ("_g", "_s") if c in out])
+
+
 # The plan of a scan pushed without a grade (`push_ungraded`): the study's entry and exit.
 UNGRADED_PLANS = {
     "ma_surf": [

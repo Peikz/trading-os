@@ -81,3 +81,13 @@ def test_the_sunday_lists_are_shown_in_full_not_counted():
     hits = pd.DataFrame([{"ticker": "AAA", "tier": "alert", "rank": 1, "grade": "C"}])
     assert notify.push_modes(cfg, hits, cfg.scans["qm_gainers"]).tolist() == ["full"]
     assert notify.push_modes(cfg, hits, cfg.scans["pivot_watch"]).tolist() == ["count"]
+
+
+def test_tables_put_the_best_quality_on_top():
+    hits = pd.DataFrame(
+        {"ticker": ["c0", "c3", "aplus", "c1", "a"], "rank": [1, 2, 3, 4, 5],
+         "grade": ["C", "C", "A+", "C", "A"], "grade_score": [0, 3, 6, 1, 2]}
+    )  # fmt: skip
+    assert notify.best_first(hits)["ticker"].tolist() == ["aplus", "a", "c3", "c1", "c0"]
+    plain = pd.DataFrame({"ticker": ["b", "a"], "rank": [2, 1]})
+    assert notify.best_first(plain)["ticker"].tolist() == ["a", "b"]

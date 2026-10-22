@@ -401,7 +401,7 @@ sec_bulk:                                   # 10-year point-in-time fundamentals
   header_minutes: 150                       # (proposed) time for EDGAR header checks per run
 
 report:                                     # Markdown report per run (reports/ in the data repo)
-  max_rows_per_scan: 25
+  max_rows_per_scan: 0                      # 0: every hit (Emil, 22 Oct 2026)
 
 stats:                                      # weekly outcome statistics (reports/stats/)
   min_signals: 5                            # smaller groups are left out

@@ -310,7 +310,7 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
     columns += [("Pred. R", "grade_score", "+.2f")]
     columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
-    view = hits.copy()
+    view = notify.best_first(hits).copy()  # best quality on top (Emil, 22 Oct 2026)
     view["tradingview"] = [tradingview_url(t, (exchanges or {}).get(t)) for t in view["ticker"]]
     if scan.startswith("breakout_"):
         view["b_flags"] = [report._b_flags(r) for r in view.to_dict("records")]

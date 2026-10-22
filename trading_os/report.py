@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import clock, context
+from trading_os import clock, context, notify
 from trading_os.notify import SCAN_LABELS, SLOT_LABELS
 from trading_os.store import RunContext
 
@@ -167,11 +167,13 @@ def scan_table(scan: str, hits: pd.DataFrame, max_rows: int) -> list[str]:
         "| " + " | ".join(h for h, _, _ in columns) + " |",
         "|" + "---|" * len(columns),
     ]
-    for row in hits.head(max_rows).to_dict("records"):
+    hits = notify.best_first(hits)
+    shown = hits if max_rows <= 0 else hits.head(max_rows)
+    for row in shown.to_dict("records"):
         if scan.startswith("breakout_"):
             row["b_flags"] = _b_flags(row)
         lines.append("| " + " | ".join(cell(row.get(c), f) for _, c, f in columns) + " |")
-    if len(hits) > max_rows:
+    if 0 < max_rows < len(hits):
         lines.append(f"\n_{len(hits) - max_rows} more in the candidates file._")
     return lines
 
