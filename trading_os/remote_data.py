@@ -65,9 +65,17 @@ def fetch(repo: str, tag: str, pattern: str, cache: Path = CACHE) -> list[Path]:
     folder.mkdir(parents=True, exist_ok=True)
     wanted = names(repo, tag, pattern)
     missing = [n for n in wanted if not (folder / n).exists()]
+    # Download beside the cache and move each finished file in: a page reading a file while
+    # it was still being written saw a broken file ("Parquet magic bytes not found").
+    partial = folder / ".partial"
+    partial.mkdir(exist_ok=True)
     for k in range(0, len(missing), 100):  # one call per hundred files (each call costs ~1 s)
         batch = [arg for name in missing[k : k + 100] for arg in ("-p", name)]
-        _gh(["release", "download", tag, "-R", repo, "-D", str(folder), "--clobber", *batch])
+        _gh(["release", "download", tag, "-R", repo, "-D", str(partial), "--clobber", *batch])
+        for name in missing[k : k + 100]:
+            done = partial / name
+            if done.exists():
+                done.replace(folder / name)
     paths = [folder / n for n in wanted if (folder / n).exists()]
     now = time.time()
     for p in paths:  # used just now: the last to be pruned
