@@ -28,6 +28,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read              # the push's job check reads this repo's run list
 
 jobs:
   eod:
@@ -52,6 +53,7 @@ jobs:
       - name: Run EOD scans
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GH_TOKEN: ${{ github.token }}
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           FORCE: ${{ inputs.force && '--force' || '' }}

@@ -146,6 +146,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         header = [*header, *industries.lines(ranked_industries, cfg.context["industry_top_n"])]
     if slot in ("pm", "eod"):
         header = [*header, *_position_lines(args.data_dir, cfg, session, slot, uni)]
+    if slot == "eod":
+        header = [*header, *_job_health(cfg)]
     if slot in ("pm", "eod"):
         events = watchlists.update(
             state,
@@ -242,6 +244,23 @@ def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
         return uni
+
+
+def _job_health(cfg) -> list[str]:
+    """One line on the timed jobs since yesterday (on time, late, missed, failed), from GitHub's
+    run list (needs GH_TOKEN in Actions). Auxiliary: never fails the run."""
+    from trading_os import health, timer
+
+    try:
+        runs = health.run_list(100)
+        if runs.empty:
+            return []
+        line = timer.health_line(runs, cfg.schedule.windows_et, dt.datetime.now(dt.UTC))
+        status("Job check: " + ("all on time" if line.startswith("🩺 All") else "issues found"))
+        return [line]
+    except Exception as exc:  # noqa: BLE001 - the push goes out without the line
+        status(f"Job check: FAILED ({type(exc).__name__}), left out")
+        return []
 
 
 def _position_lines(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame) -> list[str]:

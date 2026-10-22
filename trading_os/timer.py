@@ -159,6 +159,10 @@ def check(runs: pd.DataFrame, windows: dict, now: dt.datetime) -> pd.DataFrame:
             start = mine.min().to_pydatetime()
             late = max(0, round((start - fire).total_seconds() / 60))
             verdict = "✅ on time" if late <= ON_TIME_MINUTES else f"🟡 {late} min late"
+            if "conclusion" in runs:  # a run that started but failed counts as failed
+                ended = runs.loc[mine.index, "conclusion"].fillna("")
+                if len(ended) and (ended == "failure").all():
+                    verdict = "❌ failed"
             started = start.astimezone(ZoneInfo(TIMEZONE)).strftime("%H:%M")
         else:
             verdict, started = ("⏳ due" if now <= closes else "❌ missed"), ""
@@ -171,3 +175,25 @@ def check(runs: pd.DataFrame, windows: dict, now: dt.datetime) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def health_line(runs: pd.DataFrame, windows: dict, now: dt.datetime, hours: float = 24) -> str:
+    """`🩺 All 9 timed jobs since yesterday ran on time`, or the ones that didn't: one line for
+    the EOD push (Emil, 22 Oct 2026), so a silent failure shows the same day."""
+    table = check(runs, windows, now)
+    jobs = [j for j in JOBS if not j.retry]  # the rows of `check`, in order
+    since = now - dt.timedelta(hours=hours)
+    keep = [
+        i
+        for i, job in enumerate(jobs)
+        if last_fire(job, now) >= since and "due" not in table.iloc[i]["status"]
+    ]
+    if not keep:
+        return "🩺 Job check: nothing was due"
+    recent = table.iloc[keep]
+    bad = recent[~recent["status"].str.startswith("✅")]
+    if bad.empty:
+        return f"🩺 All {len(recent)} timed jobs since yesterday ran on time"
+    pairs = zip(bad["job"], bad["status"], strict=True)
+    issues = [f"{job.split(' ')[0]} {state}" for job, state in pairs]
+    return f"🩺 {len(recent) - len(bad)}/{len(recent)} jobs OK · " + " · ".join(issues)

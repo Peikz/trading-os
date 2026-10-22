@@ -132,3 +132,19 @@ def test_the_sync_takes_both_keys_from_the_environment_and_never_prompts(monkeyp
     monkeypatch.setenv("TIMER_GITHUB_TOKEN", "gh-test")
     assert script.main(["--no-prompt"]) == 0
     assert calls == [("sync", "cj-test", "gh-test"), ("list", "cj-test")]
+
+
+def test_the_daily_job_line_names_missed_and_failed_runs():
+    now = utc(2026, 10, 22, 21, 0)  # 17:00 New York, after the EOD start
+    jobs = [j for j in timer.JOBS if not j.retry]
+
+    def run(job, conclusion="success"):
+        fired = timer.last_fire(job, now).isoformat()
+        return {"workflowName": job.name, "createdAt": fired, "conclusion": conclusion}
+
+    rows = [run(j) for j in jobs if j.key not in ("weekly", "mid", "am")]
+    rows += [run(j, "failure") for j in jobs if j.key == "am"]
+    line = timer.health_line(pd.DataFrame(rows), WINDOWS, now)
+    assert "am ❌ failed" in line and "mid ❌ missed" in line and "weekly" not in line
+    rows = [run(j) for j in jobs if j.key != "weekly"]
+    assert timer.health_line(pd.DataFrame(rows), WINDOWS, now).startswith("🩺 All ")
