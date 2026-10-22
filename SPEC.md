@@ -253,6 +253,11 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
 
 ## 8. Notifications (ntfy.sh)
 
+- Your edits (Emil, 22 Oct 2026): every scan may carry an optional `label` (its name in the push) and
+  `note` (a line under its section), set with the rest of its settings on the dashboard's Scans page
+  (`scan_editor.py`: in-place edits validated by `parse_config`, then commit and push). The Sunday
+  lists are shown in full: they are lists to study, not graded setups.
+
 - One message per job, not per ticker.
 - Study grades (§11.17, Emil 20 Oct 2026): A+/A get a full block (grade, when to buy, exit and expected hold,
   the history behind the grade, size from the account risk x the grade's multiple), B one line under the

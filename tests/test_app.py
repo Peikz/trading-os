@@ -16,6 +16,7 @@ APP = Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py"
 PAGES = [
     "Today",
     "Screens",
+    "Scans",
     "Chart",
     "Watchlists",
     "Journal",

@@ -183,6 +183,12 @@ def push_slots(scan) -> tuple[str, ...]:
     return (later,) if isinstance(later, str) else tuple(later)
 
 
+def scan_label(cfg: Config, name: str) -> str:
+    """The scan's name in the push: yours from the Scans page (`label`), else the default."""
+    scan = cfg.scans.get(name)
+    return (scan.params.get("label") if scan else None) or SCAN_LABELS.get(name, name)
+
+
 def pushes_now(scan, slot: str | None) -> bool:
     """Whether `scan` pushes in the run of `slot` (None: any)."""
     return scan.action == "push" and (slot is None or slot in push_slots(scan))
@@ -235,7 +241,9 @@ def push_modes(cfg: Config, hits: pd.DataFrame, scan=None) -> pd.Series:
     `push_ungraded` (Emil's MA-surf) shows its C hits in full as well."""
     modes = cfg.grading["push"]
     out = hits["grade"].fillna("C").map(lambda g: modes.get(g, "count"))
-    if scan is not None and scan.params.get("push_ungraded"):
+    # Shown in full anyway: scans pushed on Emil's request (`push_ungraded`) and the Sunday
+    # lists (QM gainers, growth buckets: lists to study, not trade setups with a grade).
+    if scan is not None and (scan.params.get("push_ungraded") or scan.slot == "weekly"):
         out = out.replace("count", "full")
     return out
 
@@ -286,7 +294,7 @@ def later_counts(results: Mapping[str, pd.DataFrame], cfg: Config, slot: str) ->
             continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         if len(eligible):
-            out.append(f"{SCAN_LABELS.get(name, name)} {len(eligible)}")
+            out.append(f"{scan_label(cfg, name)} {len(eligible)}")
     return out
 
 
@@ -304,7 +312,7 @@ def c_counts(
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         n = int((push_modes(cfg, eligible, scan) == "count").sum())
         if n:
-            out.append(f"{SCAN_LABELS.get(name, name)} {n}")
+            out.append(f"{scan_label(cfg, name)} {n}")
     return out
 
 
@@ -577,7 +585,7 @@ def build_message(
     lines = [Line("head", text) for text in header_lines or []]
     counts, quiet, shown = [], [], {}
     for name, both in selected.items():
-        label = SCAN_LABELS.get(name, name)
+        label = scan_label(cfg, name)
         chosen, partial = both[~partial_rows(both)], both[partial_rows(both)]
         if both.empty:
             quiet.append(_quiet(label, results[name], cfg.scans[name]))
@@ -597,6 +605,9 @@ def build_message(
         if name in FLAG_LEGENDS:
             lines.append(Line("note", FLAG_LEGENDS[name]))
         lines += [Line("note", text) for text in UNGRADED_PLANS.get(name, [])]
+        note = cfg.scans[name].params.get("note") if name in cfg.scans else None
+        if note:  # your own note from the Scans page
+            lines.append(Line("note", note))
         for row in chosen.to_dict("records"):
             ticker = row["ticker"]
             if ticker in shown:

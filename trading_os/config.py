@@ -284,6 +284,9 @@ GRADING_STRATEGY_KEYS = {
 }
 
 SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
+# Optional on every scan (Emil, 22 Oct 2026; set on the dashboard's Scans page): the name
+# shown in the push, and a note shown under its section.
+SCAN_TEXT_KEYS = {"label", "note"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
 SCAN_PARAM_KEYS: dict[str, set[str]] = {
     "ep_pm": {"push_tier", "pm_change_min_pct", "price_min", "pm_volume_min", "market_cap_min"},
@@ -611,7 +614,14 @@ def _parse_scans(raw: Any) -> dict[str, ScanConfig]:
         raise ConfigError(f"scans: not in SPEC.md: {sorted(unknown)}")
     scans = {}
     for name, body in raw.items():
-        _check_keys(f"scans.{name}", body, SCAN_COMMON_KEYS | SCAN_PARAM_KEYS[name])
+        if isinstance(body, dict):
+            for key in SCAN_TEXT_KEYS & body.keys():
+                if not isinstance(body[key], str):
+                    raise ConfigError(f"scans.{name}.{key}: expected text")
+            core = {k: v for k, v in body.items() if k not in SCAN_TEXT_KEYS}
+        else:
+            core = body
+        _check_keys(f"scans.{name}", core, SCAN_COMMON_KEYS | SCAN_PARAM_KEYS[name])
         if not isinstance(body["enabled"], bool):
             raise ConfigError(f"scans.{name}.enabled: expected true/false")
         slots = tuple(body["slot"]) if isinstance(body["slot"], list) else (body["slot"],)

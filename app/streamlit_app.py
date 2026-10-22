@@ -49,6 +49,7 @@ from trading_os import (
     remote_data,
     report,
     review,
+    scan_editor,
     sizing,
     stats,
     stock_notes,
@@ -58,7 +59,7 @@ from trading_os import (
     validation,
 )
 from trading_os import interactive_chart as ichart
-from trading_os.config import load_config
+from trading_os.config import ConfigError, load_config
 
 st.set_page_config(page_title="Trading OS", page_icon="📈", layout="wide")
 CFG = load_config()
@@ -72,6 +73,7 @@ DEFAULT_DATA = Path(
 PAGES = [
     "Today",
     "Screens",
+    "Scans",
     "Chart",
     "Watchlists",
     "Journal",
@@ -1017,6 +1019,161 @@ elif page == "Screens":
         grade_form(
             "signal", row["signal_id"], f"Grade {ticker} · {scan}", f"sig-{row['signal_id']}"
         )
+
+elif page == "Scans":
+    st.header("Scans")
+    st.caption(
+        "Every scan: when it runs, when its hits are pushed, how it is graded and its "
+        "settings. Edit one below: the change is checked like the jobs check it, saved to "
+        "config/scans.yaml on this PC, and used by GitHub's jobs after Commit & push. Run times "
+        "come from the timer (trading_os/timer.py) and change in code, not here."
+    )
+    today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
+    graded = {}
+    for strategy, rule in (CFG.grading.get("quality") or {}).items():
+        grades = ", ".join(f"{g} at {pts}+ points" for pts, g in rule.get("grades", []))
+        for live in rule.get("live_scans", []):
+            graded[live] = f"{grades} ({strategy})"
+    hidden = {"push_tier", "push_slot", "push_ungraded", "label", "note"}
+
+    def scan_label(name: str) -> str:
+        return CFG.scans[name].params.get("label") or notify.SCAN_LABELS.get(name, name)
+
+    def runs_text(scan) -> str:
+        parts = []
+        for slot in scan.slots:
+            start = dashboard.slot_start(slot, today)
+            parts.append(f"{slot} {clock.both_times(start)}" if start else slot)
+        return " · ".join(parts)
+
+    def name_of(scan) -> str:
+        return scan.name
+
+    def pushed_text(scan) -> str:
+        if scan.action != "push":
+            return "saved only"
+        if name_of(scan) == "breadth":
+            return "market lines of the EOD push"
+        names = {"pm": "next pre-market 07:17"}
+        slots = notify.push_slots(scan)
+        parts = ["at its run" if s in scan.slots else names.get(s, s) for s in slots]
+        return " + ".join(dict.fromkeys(parts))
+
+    rows = []
+    for name, scan in CFG.scans.items():
+        if scan.action != "push" or name == "breadth":
+            grade = "-"
+        elif scan.slot == "weekly":
+            grade = "list, shown in full"
+        else:
+            grade = graded.get(name) or (
+                "C, pushed in full" if scan.params.get("push_ungraded") else "C (only counted)"
+            )
+        settings = ", ".join(f"{k} {v}" for k, v in scan.params.items() if k not in hidden)
+        rows.append(
+            {
+                "scan": scan_label(name),
+                "on": scan.enabled,
+                "runs (NY · CPH)": runs_text(scan),
+                "pushed": pushed_text(scan),
+                "grade": grade,
+                "settings": settings,
+                "note": scan.params.get("note", ""),
+                "key": name,
+            }
+        )
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        width="stretch",
+        column_config={"on": st.column_config.CheckboxColumn("on")},
+    )
+
+    st.subheader("Edit a scan")
+    pick = st.selectbox(
+        "Scan", list(CFG.scans), format_func=lambda n: f"{scan_label(n)} ({n})", key="sc_pick"
+    )
+    scan = CFG.scans[pick]
+    params = dict(scan.params)
+    with st.form(f"sc-edit-{pick}"):
+        a, b = st.columns(2)
+        new = {"enabled": a.toggle("On", value=scan.enabled)}
+        new["action"] = b.radio(
+            "Hits",
+            ["push", "log"],
+            index=0 if scan.action == "push" else 1,
+            horizontal=True,
+            format_func={"push": "pushed", "log": "saved only"}.get,
+        )
+        if "push_slot" in params:
+            own = scan.slots[0]
+            options = {"at its run": [own], "next pre-market": "pm", "both": [own, "pm"]}
+            current = params["push_slot"]
+            current = list(current) if isinstance(current, tuple) else current
+            names = [k for k, v in options.items() if v == current or [v] == current]
+            choice = st.radio(
+                "Pushed",
+                list(options),
+                index=list(options).index(names[0]) if names else 0,
+                horizontal=True,
+            )
+            new["push_slot"] = options[choice]
+        cols = st.columns(3)
+        k = 0
+        for key, value in params.items():
+            if key in hidden or isinstance(value, bool):
+                continue
+            if isinstance(value, int | float):
+                box = cols[k % 3]
+                if isinstance(value, int):
+                    new[key] = int(
+                        box.number_input(key, value=value, step=1, key=f"sc-{pick}-{key}")
+                    )
+                else:
+                    new[key] = float(
+                        box.number_input(key, value=value, format="%.4g", key=f"sc-{pick}-{key}")
+                    )
+                k += 1
+        for key, value in params.items():
+            if isinstance(value, bool) and key not in hidden:
+                new[key] = st.checkbox(key, value=value, key=f"sc-{pick}-{key}")
+        new["label"] = st.text_input(
+            "Name in the push", value=params.get("label", ""), placeholder=scan_label(pick)
+        )
+        new["note"] = st.text_area(
+            "Note under its section in the push", value=params.get("note", ""), height=80
+        )
+        submitted = st.form_submit_button("Check and save")
+    if submitted:
+        before = {"enabled": scan.enabled, "action": scan.action, **params}
+        changes = {}
+        for key, value in new.items():
+            old = before.get(key, "" if key in ("label", "note") else None)
+            old = list(old) if isinstance(old, tuple) else old
+            if value != old:
+                changes[key] = value
+        if not changes:
+            st.info("Nothing changed.")
+        else:
+            try:
+                shown = scan_editor.save(pick, changes)
+                st.session_state["sc_diff"] = (pick, shown)
+                st.cache_data.clear()
+                st.rerun()
+            except ConfigError as exc:
+                st.error(f"Not saved: {exc}")
+    if st.session_state.get("sc_diff"):
+        name, shown = st.session_state["sc_diff"]
+        st.success(
+            f"Saved {scan_label(name)} to config/scans.yaml on this PC. GitHub's jobs use it "
+            "after Commit & push."
+        )
+        st.code(shown, language="diff")
+    if st.button("Commit & push to GitHub", key="sc_push"):
+        ok, out = scan_editor.commit_and_push(pick)
+        (st.success if ok else st.error)(out)
+        if ok:
+            st.session_state.pop("sc_diff", None)
 
 elif page == "Chart":
     st.header("Chart")
