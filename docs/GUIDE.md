@@ -360,6 +360,8 @@ With Tailscale on the PC and the phone (same account), it is shared only with yo
 at `http://<pc-name>.<tailnet>.ts.net`. Open the Tailscale app, switch it on, then open that
 address in Safari (Share → Add to Home Screen for one tap). The PC has to be on.
 
+To have it without the PC: [SERVER.md](SERVER.md) moves the dashboard to a small cloud server (about €5 a month), private to your devices the same way, updating and restarting itself.
+
 After the code or `config/scans.yaml` changes, restart the dashboard (Ctrl-C in its terminal, then `scripts\start_dashboard.ps1` again). A running dashboard reloads its own page but keeps the older `trading_os` code it started with, so new config keys can stop it with an error such as `unknown slot`.
 
 ## 13. Glossary

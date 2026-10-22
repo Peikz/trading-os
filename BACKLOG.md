@@ -165,3 +165,4 @@ Still open (no default possible):
 - 2026-10-21 (later): Push titles, report headers and the dashboard run list show New York and Copenhagen time (Emil); the run list now also shows the after-hours (16:50) and close (15:45) runs, which it had missed.
 - 2026-10-21 (later): EP-Day saved only (Emil): no longer in the evening push; it still runs, feeds EP-Watch and the EP history.
 - 2026-10-21 (later): Evening push trimmed (Emil): EOD EP9M and Breakout trigger saved only; Luk flush pushed at EOD and again pre-market with its move (`push_slot: [eod, pm]`). Evening push = market lines, Luk flush, the note of what comes pre-market.
+- 2026-10-22: Dashboard on a cloud server (Emil): `docs/SERVER.md` + `scripts/server/install.sh` (Ubuntu 24.04: Tailscale-only access, GitHub CLI login with a fine-grained token, slim data clone, systemd service) and `update.sh` (10-minute timer: pull both repos, restart after a code change). Waiting for Emil to create the server.

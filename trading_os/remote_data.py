@@ -14,7 +14,13 @@ import tempfile
 import time
 from pathlib import Path
 
-CACHE = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "trading-os-cache"
+# TRADING_OS_CACHE: the server's fixed cache folder (docs/SERVER.md); else the PC's local app data.
+_CACHE_ENV = os.environ.get("TRADING_OS_CACHE")
+CACHE = (
+    Path(_CACHE_ENV)
+    if _CACHE_ENV
+    else Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "trading-os-cache"
+)
 LIMIT_BYTES = int(1.5 * 1024**3)  # the least recently used files go past this
 
 
