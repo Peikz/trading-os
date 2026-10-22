@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         notify.send(cfg.notify["server"], topic, notify.Message(f"Trading OS · {title}", body))
 
     until = dt.time.fromisoformat(args.until) if args.until else None
-    items, built = pd.DataFrame(), 0.0
+    items, built = pd.DataFrame(), None  # None: build the list on the first pass
     while True:
         now = clock.ny_time(cfg.schedule, dt.datetime.now(dt.UTC))
         session = now.date()
@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         live = trading and OPEN <= now.time() < CLOSE
         if live or args.once:
-            if time.monotonic() - built > REFRESH_S:
+            if built is None or time.monotonic() - built > REFRESH_S:
                 # Every 5 minutes: the data repo (last night's hits, alerts you added on the
                 # dashboard, a journal rebuild), then the watch list from it.
                 ok, _ = dashboard.pull(args.data_dir)

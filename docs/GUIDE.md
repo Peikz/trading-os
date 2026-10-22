@@ -324,6 +324,7 @@ runner can't carry a group; medians show the typical trade. No commissions or sl
 
 ## 10. Journal: trades, plans, review
 
+- **Daily notes** (since 22 Oct 2026, Journal → *Daily notes*): a note about the day, tagged with the stocks it is about (the tag field, or `$TICKER` in the text). Filter by stock or by how far back. A tagged note also shows on each tagged stock's Chart page under its notes ("From your daily notes"). Kept for good like the stock notes: an edit or delete adds a row.
 - **Fills are the record.** Import your broker's CSV export, or log a fill by hand (date,
   ticker, buy/sell, shares, price, fees, setup, initial stop). A later broker fill replaces
   the matching hand-logged one.

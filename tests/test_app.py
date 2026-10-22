@@ -3,6 +3,7 @@
 Needs the `app` dependency group (Streamlit); skipped otherwise (e.g. in CI).
 """
 
+import datetime as dt
 from pathlib import Path
 
 import pandas as pd
@@ -241,3 +242,18 @@ def test_chart_notes_show_old_notes_and_save_new_ones(data_repo, monkeypatch):
     saved = stock_notes.current(data_repo, "AAA")["text"].tolist()
     assert saved == ["tight flag, watch the pivot", "base looked loose"]
     assert any("tight flag" in t.value for t in at.text)
+
+
+def test_a_tagged_daily_note_shows_in_the_journal_and_on_the_chart(data_repo, monkeypatch):
+    from trading_os import daily_notes
+
+    daily_notes.add(data_repo, "Gap held into the close on $AAA", dt.date(2026, 10, 19))
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Journal").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Gap held" in t.value for t in at.text)
+    at.sidebar.radio[0].set_value("Chart").run()
+    at.text_input(key="ch_ticker").set_value("AAA").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("From your daily notes" in m.value for m in at.markdown)

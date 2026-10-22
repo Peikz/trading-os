@@ -119,3 +119,15 @@ def test_latest_prices_ask_the_iex_feed_in_batches():
     prices = client.latest_prices(symbols)
     assert len(prices) == 150 and len(calls) == 2
     assert all(c["feed"] == "iex" for c in calls)
+
+
+def test_once_builds_the_watch_list_at_once_on_a_fresh_machine(tmp_path, monkeypatch, capsys):
+    module = watcher()
+    alerts.add(tmp_path, A, 99.0, "above")
+    monkeypatch.setenv("ALPACA_API_KEY_ID", "id")
+    monkeypatch.setenv("ALPACA_API_SECRET_KEY", "secret")
+    monkeypatch.setattr(module.time, "monotonic", lambda: 12.0)  # booted 12 seconds ago
+    monkeypatch.setattr(module.dashboard, "pull", lambda d: (True, ""))
+    monkeypatch.setattr(module.AlpacaClient, "latest_prices", lambda self, s: {A: 10.0})
+    assert module.main(["--data-dir", str(tmp_path), "--once", "--no-push"]) == 0
+    assert "watching 1" in capsys.readouterr().out

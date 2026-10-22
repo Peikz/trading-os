@@ -30,6 +30,7 @@ from trading_os import (
     chart_marks,
     charts,
     clock,
+    daily_notes,
     dashboard,
     exits,
     health,
@@ -1142,6 +1143,16 @@ elif page == "Chart":
             if b.form_submit_button("Delete"):
                 stock_notes.remove(data_dir, n["note_id"])
                 st.rerun()
+    tagged = daily_notes.current(data_dir, ticker)
+    if len(tagged):
+        st.markdown(
+            f"**From your daily notes** ({len(tagged)}; edit them in Journal → Daily notes)"
+        )
+        for n in tagged.to_dict("records"):
+            others = [t for t in n["tag_list"] if t != ticker]
+            also = f" · also {' · '.join(others)}" if others else ""
+            st.markdown(f"**{n['note_date']}** · daily note{also}")
+            st.text(n["text"])
     st.caption(
         "Notes are saved at once on this PC in the data repo (data/journal/stock_notes/) and "
         "kept for good: an edit or a delete adds a row and never erases the old text. Use "
@@ -1369,9 +1380,58 @@ elif page == "Journal":
     trades = dashboard.latest_journal(data_dir)
     positions = dashboard.latest_positions(data_dir)
     setups = setup_names()
-    tab_open, tab_log, tab_plans, tab_closed, tab_real = st.tabs(
-        ["Open positions", "Log a trade", "Plans", "Closed trades", "Real vs study"]
+    tab_open, tab_daily, tab_log, tab_plans, tab_closed, tab_real = st.tabs(
+        ["Open positions", "Daily notes", "Log a trade", "Plans", "Closed trades", "Real vs study"]
     )
+
+    with tab_daily:
+        st.caption(
+            "A note about the day. Tag the stocks it is about in the tag field, or write "
+            "$TICKER in the text; each tagged stock's Chart page shows the note under its notes."
+        )
+        with st.form("daily-note", clear_on_submit=True):
+            a, b = st.columns([1, 3])
+            day = a.date_input("Day", value=dt.date.today(), key="dn_day")
+            typed = b.text_input("Stocks (comma or space separated)", key="dn_tags")
+            text = st.text_area("Note", key="dn_text", height=140)
+            if st.form_submit_button("Save note") and text.strip():
+                daily_notes.add(data_dir, text, day, typed)
+                st.rerun()
+        a, b = st.columns([2, 2])
+        only = a.selectbox("Show", ["All notes", *daily_notes.all_tags(data_dir)], key="dn_only")
+        days_back = b.select_slider(
+            "From the last",
+            [7, 30, 90, 365, 3650],
+            value=30,
+            key="dn_days",
+            format_func=lambda d: "all" if d == 3650 else f"{d} days",
+        )
+        notes = daily_notes.current(data_dir, None if only == "All notes" else only)
+        since = dt.date.today() - dt.timedelta(days=days_back)
+        notes = notes[pd.to_datetime(notes["note_date"]).dt.date >= since] if len(notes) else notes
+        if not len(notes):
+            st.caption("No daily notes here yet.")
+        for n in notes.to_dict("records"):
+            tags = " · ".join(n["tag_list"])
+            st.markdown(f"**{n['note_date']}**" + (f" · {tags}" if tags else ""))
+            st.text(n["text"])
+            with st.popover("Edit or delete"), st.form(f"dn-{n['note_id']}"):
+                new_day = st.date_input("Day", value=n["note_date"], key=f"dnd-{n['note_id']}")
+                new_tags = st.text_input(
+                    "Stocks", value=", ".join(n["tag_list"]), key=f"dnt-{n['note_id']}"
+                )
+                new_text = st.text_area("Note", value=n["text"], key=f"dnx-{n['note_id']}")
+                a, b = st.columns(2)
+                if a.form_submit_button("Save") and new_text.strip():
+                    daily_notes.edit(data_dir, n["note_id"], new_text, new_day, new_tags)
+                    st.rerun()
+                if b.form_submit_button("Delete"):
+                    daily_notes.remove(data_dir, n["note_id"])
+                    st.rerun()
+        st.caption(
+            "Saved at once in the data repo (data/journal/daily_notes/) and kept for good: an "
+            "edit or delete adds a row. Use “Save & push” to send them to GitHub."
+        )
 
     with tab_open:
         if positions.empty:
