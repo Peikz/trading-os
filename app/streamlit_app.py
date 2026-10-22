@@ -25,6 +25,7 @@ import streamlit as st
 from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
 
 from trading_os import (
+    alerts,
     breadth,
     chart_marks,
     charts,
@@ -279,6 +280,12 @@ def tradingview_url(ticker: str, exchange: str | None = None) -> str:
     """The stock's TradingView chart (exchange-qualified when known)."""
     symbol = f"{exchange}:{ticker}" if exchange else str(ticker)
     return f"https://www.tradingview.com/chart/?symbol={symbol.replace(':', '%3A')}"
+
+
+def tradingview_list(tickers, exchanges: dict | None = None) -> str:
+    """A TradingView import (Watchlist → Import list): EXCHANGE:TICKER, comma-separated."""
+    symbols = [f"{exchanges[t]}:{t}" if (exchanges or {}).get(t) else str(t) for t in tickers]
+    return ",".join(dict.fromkeys(symbols))
 
 
 @st.cache_data(ttl=600)
@@ -992,6 +999,14 @@ elif page == "Screens":
     st.caption(f"{len(hits)} hits")
     exchanges = exchanges_of(str(run.universe))
     show_table(scan, hits, exchanges)
+    if len(hits):
+        st.download_button(
+            "TradingView list (.txt)",
+            tradingview_list(hits["ticker"], exchanges),
+            file_name=f"{run.session}_{scan}.txt",
+            help="TradingView: Watchlist menu → Import list",
+            key="scr_tv",
+        )
     grade_blocks(hits)
     if len(hits):
         ticker = st.selectbox("Look at", hits["ticker"].tolist())
@@ -1251,6 +1266,13 @@ elif page == "Watchlists":
             width="stretch",
             column_config={"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")},
         )
+        st.download_button(
+            "TradingView list (.txt)",
+            tradingview_list(view["ticker"], exchanges),
+            file_name=f"{name or 'watchlist'}.txt",
+            help="TradingView: Watchlist menu → Import list",
+            key="wl_tv",
+        )
         a, b = st.columns([3, 1])
         gone = a.multiselect("Remove from the list", members["ticker"].tolist(), key="wl_rm")
         if b.button("Remove") and gone:
@@ -1258,6 +1280,47 @@ elif page == "Watchlists":
             st.cache_data.clear()
             st.rerun()
     st.caption("Saved in the data repo; use “Save & push” to send them to GitHub.")
+
+    st.subheader("Price alerts")
+    st.caption(
+        "The alert watcher (scripts\\start_alerts.ps1) checks every minute of the New York "
+        "session, 15:30–22:00 Copenhagen, and pushes once when a price is hit: your alerts "
+        "below, last close's BO-Watch and MA-surf pivots, and your open positions' stops. "
+        "Prices: Alpaca's real-time IEX feed. Your alerts end after they fire."
+    )
+    with st.form("alert-add", clear_on_submit=True):
+        a, b, c, d = st.columns([2, 2, 2, 4])
+        al_ticker = a.text_input("Ticker")
+        al_level = b.number_input("Price", min_value=0.0, step=0.01, format="%.2f")
+        al_dir = c.selectbox("When it trades", alerts.DIRECTIONS)
+        al_note = d.text_input("Note (in the push)")
+        if st.form_submit_button("Add alert"):
+            try:
+                alerts.add(data_dir, al_ticker, al_level, al_dir, al_note)
+                st.success(f"Alert set: {al_ticker.upper()} {al_dir} {al_level:.2f}.")
+            except ValueError as exc:
+                st.error(str(exc))
+    live_alerts = alerts.current(data_dir)
+    if live_alerts.empty:
+        st.caption("No alerts of your own yet.")
+    else:
+        st.dataframe(live_alerts.drop(columns="alert_id"), hide_index=True, width="stretch")
+        labels = {
+            r["alert_id"]: f"{r['ticker']} {r['direction']} {r['level']:.2f}"
+            for r in live_alerts.to_dict("records")
+        }
+        a, b = st.columns([3, 1])
+        drop = a.multiselect("Remove alerts", list(labels), format_func=labels.get, key="al_rm")
+        if b.button("Remove", key="al_rm_btn") and drop:
+            for alert_id in drop:
+                alerts.end(data_dir, alert_id)
+            st.rerun()
+    ny_today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
+    today_fired = alerts.fired(data_dir, ny_today)
+    if today_fired:
+        st.markdown(f"**Fired today** ({len(today_fired)})")
+        cols = ["fired_ts", "kind", "ticker", "level", "price", "note"]
+        st.dataframe(pd.DataFrame(today_fired)[cols], hide_index=True, width="stretch")
 
     st.subheader("Scan watchlists")
     state = dashboard.watchlist_state(data_dir)

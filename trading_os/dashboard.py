@@ -262,7 +262,7 @@ def pull(data_dir: Path) -> tuple[bool, str]:
 
 # What the dashboard writes for you: journal, plans, notes and grades, your watchlists, your
 # chart lines and anchors, and docs. Save & push commits these folders and nothing else.
-SAVED_BY_YOU = ("data/journal", "data/my_watchlists", "data/chart_marks", "docs")
+SAVED_BY_YOU = ("data/journal", "data/my_watchlists", "data/chart_marks", "data/my_alerts", "docs")
 
 
 def save_and_push(data_dir: Path, message: str = "journal: notes and grades") -> tuple[bool, str]:

@@ -30,6 +30,7 @@ import requests
 from trading_os.logsafe import status
 
 DATA_URL = "https://data.alpaca.markets/v2/stocks/bars"
+LATEST_URL = "https://data.alpaca.markets/v2/stocks/trades/latest"
 ASSETS_URL = "https://paper-api.alpaca.markets/v2/assets"
 # Probe symbols for the check: listed for decades, and a few delisted since 2023.
 LISTED = "AAPL"
@@ -90,6 +91,18 @@ class AlpacaClient:
                 raise requests.HTTPError(f"HTTP {response.status_code}", response=response)
             return response.json()
         raise requests.HTTPError("rate limited three times")
+
+    def latest_prices(self, symbols: Iterable[str]) -> dict[str, float]:
+        """The latest trade per symbol on the free real-time IEX feed (the price alerts):
+        symbol -> price. Symbols without a trade are left out."""
+        symbols = sorted(set(symbols))
+        out: dict[str, float] = {}
+        for k in range(0, len(symbols), 100):
+            body = self._get(LATEST_URL, {"symbols": ",".join(symbols[k : k + 100]), "feed": "iex"})
+            for symbol, trade in (body.get("trades") or {}).items():
+                if trade and trade.get("p"):
+                    out[symbol] = float(trade["p"])
+        return out
 
     def bars(
         self,
