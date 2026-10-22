@@ -30,6 +30,7 @@ PAGES = [
     "Guide",
 ]
 SECTIONS = [  # (page, its section picker's key, section)
+    ("Research", "research_section", "Strategy rules"),
     ("Research", "research_section", "How it was tested"),
     ("Research", "research_section", "Grades"),
     ("Research", "research_section", "History"),

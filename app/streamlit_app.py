@@ -98,6 +98,11 @@ PAGES = [
 # Research and Live results gather the history pages. One section runs at a time: tabs would
 # run every section's code (and its downloads) on each click.
 RESEARCH = {
+    "Strategy rules": (
+        "Strategy rules",
+        "How every strategy is defined (live scans and the ones tested only), with the exact "
+        "numbers from the config and how it did in each kind of market.",
+    ),
     "How it was tested": (
         "How it was tested",
         "How every setup was tested on 10 years of data, the best time to buy, where the stop "
@@ -1026,6 +1031,92 @@ def search_view(query: str) -> None:
     if not shown and not search.looks_like_ticker(q):
         st.caption("Nothing found in your notes or the guide.")
     st.caption("Clear the search box to go back to the page.")
+
+
+# (label, rules from: a live scan's name or a study module, its config, its heat-table key)
+STRATEGY_RULES = [
+    ("EP 10:30 (the EP gap at the open)", "scan:ep_am", None, "ep_a_1030"),
+    ("EP-AH (earnings gap after hours)", "scan:ep_ah", None, "ep_a_ah"),
+    ("EP-Day (the gap at the close)", "scan:ep_day", None, "ep_next_day"),
+    ("EP-PM (pre-market gappers)", "scan:ep_pm", None, None),
+    ("EP9M (Stockbee: 9 million shares)", "scan:ep9m", None, None),
+    ("EP9M pace (EP9M during the session)", "scan:ep9m_pace", None, "ep9m_a"),
+    ("Momentum Burst up (Stockbee)", "scan:mb_up", None, "mb_up"),
+    ("Momentum Burst down (Stockbee)", "scan:mb_down", None, "mb_down"),
+    ("Parabolic long (Qullamaggie)", "scan:parabolic_long", None, "parabolic_long"),
+    ("Parabolic short (Qullamaggie)", "scan:parabolic_short", None, "parabolic_short"),
+    ("Breakouts B1-B5 (BO-Watch, trigger)", "module:breakouts", "breakout", "breakout"),
+    ("MA-surf (Qullamaggie)", "module:qm_setups", "qm_surf", "qm_surf"),
+    ("VCP (Minervini)", "module:minervini", "minervini", "vcp"),
+    ("Trend Template (Minervini)", "module:minervini", "minervini", None),
+    ("Luk AVWAP flush (Martin Luk)", "module:luk", "luk", "luk_flush_a"),
+    ("Luk pullback (Martin Luk)", "module:luk", "luk", "luk_pullback"),
+    ("Luk inside day (Martin Luk)", "module:luk", "luk", "luk_inside_day"),
+    ("High tight flag (O'Neil, Minervini)", "module:patterns", "htf", None),
+    ("Pocket pivot (Morales and Kacher)", "module:patterns", "pocket_pivot", None),
+]
+
+
+def strategy_rules_view() -> None:
+    """Every strategy's definition: its own rules text (a live scan's function, or the study
+    module that sets it up), its config numbers, and its study result per market heat."""
+    import importlib
+    import inspect
+
+    from trading_os.scans import REGISTRY
+
+    labels = [label for label, *_ in STRATEGY_RULES]
+    pick = st.selectbox("Strategy", labels, key="rules_pick")
+    _, source, conf_key, heat_key = next(r for r in STRATEGY_RULES if r[0] == pick)
+    kind, name = source.split(":")
+    if kind == "scan":
+        scan = CFG.scans[name]
+        status_text = "on" if scan.enabled else "off"
+        st.markdown(
+            f"**Live scan** `{name}` · {status_text} · runs at {', '.join(scan.slots)} · "
+            f"{'pushed' if scan.action == 'push' else 'saved only'}"
+        )
+        doc = inspect.getdoc(REGISTRY[name]) or ""
+        settings = dict(scan.params)
+    else:
+        live = {"qm_setups": "ma_surf", "breakouts": "breakout_watch / breakout_trigger",
+                "luk": "luk_flush (the AVWAP flush only)"}.get(name)  # fmt: skip
+        st.markdown(
+            f"**{'Live scan ' + live if live else 'Tested in the study only, no live scan'}**"
+        )
+        doc = inspect.getdoc(importlib.import_module(f"trading_os.{name}")) or ""
+        settings = dict(getattr(CFG, conf_key, {}) or {})
+    st.markdown("**The rules**")
+    st.markdown(doc.replace("\n- ", "\n\n- "))
+    if settings:
+        st.markdown("**The numbers** (config/scans.yaml; change live scans on the Scans page)")
+        rows = [{"setting": k, "value": str(list(v) if isinstance(v, tuple) else v)}
+                for k, v in settings.items()]  # fmt: skip
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    stats = heat.load(data_dir)
+    if heat_key and stats:
+        st.markdown("**How it did, per market heat** (net R a trade after costs, its study plan)")
+        out = []
+        for _, band in stats["bands"]:
+            t = heat.table(stats, band)
+            mine = t[t["setup"] == next(
+                (s["label"] for s in stats["setups"] if s["key"] == heat_key), None
+            )]  # fmt: skip
+            if len(mine):
+                r = mine.iloc[0]
+                out.append({
+                    "heat": f"{band} ({stats['band_labels'][band]})",
+                    "R 2016-21": r["r_2016-21"], "trades 16-21": r["trades_2016-21"],
+                    "R 2022-26": r["r_2022-26"], "trades 22-26": r["trades_2022-26"],
+                    "verdict": r["verdict"], "plan": r["plan"],
+                })  # fmt: skip
+        if out:
+            st.dataframe(pd.DataFrame(out).round(2), hide_index=True, width="stretch")
+    elif heat_key is None:
+        st.caption(
+            "No per-heat result for this one: it was tested as a condition or a variant (see "
+            "How it was tested and the research report in the data repo)."
+        )
 
 
 def levels_for(ticker: str) -> dict:
@@ -2246,6 +2337,9 @@ elif page == "System health":
                 "minutes_late: how long after its cron GitHub started a scheduled run. A run "
                 "that starts after its window closes exits without scanning."
             )
+
+elif page == "Strategy rules":
+    strategy_rules_view()
 
 elif page == "How it was tested":
     st.subheader("The grade rules in config now")
