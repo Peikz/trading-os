@@ -72,6 +72,10 @@ jobs:
         if: always() && !inputs.dry_run
         working-directory: data-repo
         run: |
+          if [ ! -d data/my_alerts ]; then   # nothing fired and no alerts of your own yet
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
           git add -A data/my_alerts
           if git diff --cached --quiet; then
             echo "Data: nothing new to commit"
