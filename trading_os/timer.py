@@ -61,6 +61,9 @@ JOBS = (
     TimerJob("ah", "intraday.yml", "Intraday", "16:50", WEEKDAYS, {"slot": "ah"}),
     TimerJob("ah", "intraday.yml", "Intraday", "16:56", WEEKDAYS, {"slot": "ah"}, True),
     TimerJob("outcomes", "outcomes.yml", "Outcomes", "18:00", WEEKDAYS),
+    # Price alerts (Emil, 22 Oct 2026): the session in two runs (a job may run 6 hours at most).
+    TimerJob("alerts", "alerts.yml", "Price alerts", "09:25", WEEKDAYS, {"until": "12:44"}),
+    TimerJob("alerts", "alerts.yml", "Price alerts", "12:45", WEEKDAYS, {"until": "16:00"}),
     TimerJob("weekly", "weekly.yml", "Weekly", "12:00", (0,)),
 )
 

@@ -1,0 +1,99 @@
+# Price alerts (Emil, 22 Oct 2026): every minute of the session, last close's BO-Watch and
+# MA-surf pivots, open positions' stops and the alerts added on the dashboard, with Alpaca's
+# real-time IEX prices; one push per event (trading_os/alerts.py, scripts/alert_watch.py).
+# The cron-job.org timer starts it twice a session, 09:25 (until 12:44) and 12:45 (until 16:00)
+# New York, because a job may run at most 6 hours; there is no GitHub cron, since a late start
+# would only miss alerts. What fired is committed to the data repo when a run ends.
+# Not in the data-repo concurrency group: it runs for hours and only appends its own files.
+# This repo is public and so are these logs: the job prints counts and status only.
+
+name: Price alerts
+
+on:
+  workflow_dispatch:
+    inputs:
+      timer:
+        description: "Started by the cron-job.org timer"
+        type: boolean
+        default: false
+      until:
+        description: "Stop at this New York time (HH:MM)"
+        type: string
+        default: "16:00"
+      dry_run:
+        description: "One check now, no push (a test of the keys and the data)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: price-alerts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Watch
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          UNTIL: ${{ inputs.until }}
+          DRY: ${{ inputs.dry_run && '--once --no-push' || '' }}
+        run: |
+          git -C data-repo config user.name "trading-os-bot"
+          git -C data-repo config user.email "trading-os-bot@users.noreply.github.com"
+          if [ -n "$DRY" ]; then
+            uv run --frozen --no-dev python scripts/alert_watch.py --data-dir data-repo $DRY
+          else
+            uv run --frozen --no-dev python scripts/alert_watch.py --data-dir data-repo --until "$UNTIL"
+          fi
+
+      - name: Commit what fired
+        if: always() && !inputs.dry_run
+        working-directory: data-repo
+        run: |
+          git add -A data/my_alerts
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "alerts $(TZ=America/New_York date +%F): fired (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Price alerts failed", message: "The price-alert watcher stopped. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/

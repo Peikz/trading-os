@@ -59,7 +59,7 @@ the extra starts are harmless.
 | Live check | the 1st of each month | The live A+ / A signals against the grading study, and your trades against their plan (section 11, Live results) |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |
 
-**Price alerts** (since 22 Oct 2026, on your PC): `scripts\start_alerts.ps1` checks every minute of the session (15:30–22:00 Copenhagen) and pushes once when a price is hit: 🎯 last close's BO-Watch and MA-surf names over their pivot (with the plan's stop), 🛑 an open position at its stop, 🔔 your own alerts from the Watchlists page (they end once fired). Prices come from Alpaca's free real-time IEX feed, so the alerts are on price only. It needs the keys once: `scripts\set_local_secrets.ps1` (hidden prompts, stored as your Windows user variables). Keep its window open; nothing places orders.
+**Price alerts** (since 22 Oct 2026): GitHub Actions (`alerts.yml`, started by the timer at 09:25 and 12:45 New York) checks every minute of the session (15:30–22:00 Copenhagen) and pushes once when a price is hit: 🎯 last close's BO-Watch and MA-surf names over their pivot (with the plan's stop), 🛑 an open position at its stop, 🔔 your own alerts from the Watchlists page (they end once fired). Prices come from Alpaca's free real-time IEX feed, so the alerts are on price only. It uses the repo's secrets, so nothing runs on your PC; what fired is saved to the data repo when each run ends. To run it on the PC instead: `scripts\set_local_secrets.ps1` once, then `scripts\start_alerts.ps1`. Nothing places orders.
 
 GitHub starts its scheduled runs late, on 19–20 Oct 2026 by 2½ to 6½ hours, so pre-market and
 the intraday checks never ran inside their windows. A run that starts after its window does

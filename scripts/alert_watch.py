@@ -5,6 +5,11 @@ server: `scripts\\start_alerts.ps1`. Facts only; nothing places orders.
 
 uv run python scripts/alert_watch.py --data-dir ../trading-os-data          # runs until stopped
 uv run python scripts/alert_watch.py --data-dir ../trading-os-data --once   # one check now
+uv run python scripts/alert_watch.py --data-dir data-repo --until 12:44      # GitHub Actions
+
+On GitHub Actions (`alerts.yml`, Emil, 22 Oct 2026) the cron-job.org timer starts it twice a
+session, 09:25-12:44 and 12:45-16:00 New York (a job may run at most 6 hours), with the keys
+from the repo's secrets; the workflow commits what fired when the run ends.
 
 Needs ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY and NTFY_TOPIC in the environment
 (`scripts\\set_local_secrets.ps1`). Prints times and counts only.
@@ -69,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true", help="one check now, then stop")
     parser.add_argument("--no-push", action="store_true")
     parser.add_argument("--interval", type=float, default=60)
+    parser.add_argument("--until", help="stop at this New York time, HH:MM (GitHub Actions)")
     args = parser.parse_args(argv)
     if args.data_dir is None:
         parser.error("--data-dir or DATA_DIR is required")
@@ -85,17 +91,23 @@ def main(argv: list[str] | None = None) -> int:
             return
         notify.send(cfg.notify["server"], topic, notify.Message(f"Trading OS · {title}", body))
 
-    items, built, day = pd.DataFrame(), 0.0, None
+    until = dt.time.fromisoformat(args.until) if args.until else None
+    items, built = pd.DataFrame(), 0.0
     while True:
         now = clock.ny_time(cfg.schedule, dt.datetime.now(dt.UTC))
         session = now.date()
-        live = clock.is_session(cfg.schedule, session) and OPEN <= now.time() < CLOSE
-        if session != day:  # a new day: last night's EOD hits and today's journal
-            ok, _ = dashboard.pull(args.data_dir)
-            status(f"Alerts {now:%Y-%m-%d}: data repo {'pulled' if ok else 'pull FAILED'}")
-            day, built = session, 0.0
+        trading = clock.is_session(cfg.schedule, session)
+        if until is not None and (now.time() >= until or not trading):
+            status(f"Alerts {now:%H:%M} NY: {'no session today' if not trading else 'done'}")
+            return 0
+        live = trading and OPEN <= now.time() < CLOSE
         if live or args.once:
             if time.monotonic() - built > REFRESH_S:
+                # Every 5 minutes: the data repo (last night's hits, alerts you added on the
+                # dashboard, a journal rebuild), then the watch list from it.
+                ok, _ = dashboard.pull(args.data_dir)
+                if not ok:
+                    status(f"Alerts {now:%H:%M} NY: data repo pull FAILED, using what is here")
                 items, built = watch_list(args.data_dir, cfg, session), time.monotonic()
                 kinds = items["kind"].value_counts().to_dict() if len(items) else {}
                 status(f"Alerts {now:%H:%M} NY: watching {len(items)} {kinds}")
