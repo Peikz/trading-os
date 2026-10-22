@@ -1080,7 +1080,8 @@ def strategy_rules_view() -> None:
         settings = dict(scan.params)
     else:
         live = {"qm_setups": "ma_surf", "breakouts": "breakout_watch / breakout_trigger",
-                "luk": "luk_flush (the AVWAP flush only)"}.get(name)  # fmt: skip
+                "luk": "luk_flush and luk_pullback (not the inside day)",
+                "minervini": "vcp and minervini_tt (the Trend Template list)"}.get(name)  # fmt: skip
         st.markdown(
             f"**{'Live scan ' + live if live else 'Tested in the study only, no live scan'}**"
         )
