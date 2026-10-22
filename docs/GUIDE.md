@@ -278,6 +278,22 @@ adding the cool-market C setups lowered the return every way it was tried. The M
 the full table for every heat. Rebuild it after the grading study changes:
 `uv run python scripts/heat_stats.py --data-dir ../trading-os-data`.
 
+**Managing your positions** (since 22 Oct 2026): the pre-market and EOD pushes carry a 💼 block
+for your open positions (from the journal): risk to stops and average R, then one line each with
+R so far and what its plan says. EP, EP9M, Luk flush and parabolic long hold 21 sessions: the
+morning push says "day 21/21: the plan sells at today's close", the evening before says
+"tomorrow". MA-surf and breakouts trail the 20-day MA, a parabolic short covers over it: the EOD
+push names a close through it. 📢 marks earnings within two sessions. With Saxo connected
+([SAXO.md](SAXO.md)) the stop is your working stop order at Saxo.
+
+**The Saxo ticket**: every A+/A plan, and every pivot buy (BO-Watch, MA-surf), ends with a 🎫 line
+to type into Saxo's order ticket: order type, amount, price, duration and the stop loss (an
+extended-hours limit for EP-AH, a market order at the plan's time, a stop if traded at the pivot).
+Nothing is ever sent to Saxo by the system.
+
+**The job check**: the EOD push has one 🩺 line on the timed jobs since yesterday: all on time,
+or which were late, missed or failed.
+
 ## 8. Position size, facts and watchlists
 
 **Size**: every pushed EP and breakout gets entry, stop, shares, position and risk in USD,
@@ -348,6 +364,7 @@ watchlists to the private repo).
 | **Today** | The market panel (Market Light, breadth, SPY/QQQ/VIX) and the newest run's pushed scans with their study grade, facts, charts and TradingView links; each A+, A or B hit also gets its block as in the push (when to buy, the exit, the history behind the grade, why, the plan) |
 | **Screens** | Any run, any scan, both tiers: the full table with each hit's study grade and the A+/A/B blocks, an interactive chart, Open in TradingView, and your own grading form (grade, notes, screenshots) |
 | **Chart** | Any stock, interactive (drag to pan, scroll or pinch to zoom): daily or weekly candles with volume, 2 or 10 years, MA 10/20/50/200 and EMA 9/21, the scans' past hits (amber triangles, hover for the scan), your buys and sells, today's pivot and stops; anchored VWAPs (from the highest high, the lowest low, the year start, the latest scan hit, or any day you save); trend lines, saved per stock in the data repo as you draw them on the daily bars (the line tool, top right; drag a line or its ends to move it, click it and use the eraser to delete it; a line drawn past the last bar keeps extending each day; or type one in through two points); and an intraday view of any day with minute bars (1/5/15-minute candles, VWAP from the open, pre-/post-market shaded) |
+| **Chart → Intraday → Live** (22 Oct 2026) | A recent session's 1/5/15-minute candles from Alpaca's real-time feed, with VWAP, the prior close, the stock's pivot, stops and plan entry, and a line at 10:30. Needs the Alpaca keys on the PC (`scripts\set_local_secrets.ps1`) |
 | **Scans** (22 Oct 2026) | Every scan: when it runs (New York · Copenhagen), when its hits are pushed, its grade and settings. *Edit a scan*: on/off, pushed or saved only, when it is pushed, its thresholds, and your own name and note for the push. Each edit is checked like the jobs check config, saved to `config/scans.yaml`, and used by GitHub's jobs after *Commit & push*. Run times live in the timer and change in code |
 | **Watchlists** | Your own lists (add by typing or a TradingView export; each ticker with close, change, RVOL, ADR, RS, distance to the high and pivot, earnings, today's scans) the scans' EP-Watch and BO-Watch, your price alerts (add, remove, what fired today), and *TradingView list (.txt)* to download a list (Screens has the same for a scan) for TradingView's Watchlist → Import list |
 | **Journal** | Tabs: *Open positions* (open P&L, open R, money at risk to the stops), *Log a trade*, *Plans*, *Closed trades* (stats, R curve, MFE/MAE, review chart, grading), *Real vs study* |
