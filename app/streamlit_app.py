@@ -1079,9 +1079,12 @@ def strategy_rules_view() -> None:
         doc = inspect.getdoc(REGISTRY[name]) or ""
         settings = dict(scan.params)
     else:
-        live = {"qm_setups": "ma_surf", "breakouts": "breakout_watch / breakout_trigger",
-                "luk": "luk_flush and luk_pullback (not the inside day)",
-                "minervini": "vcp and minervini_tt (the Trend Template list)"}.get(name)  # fmt: skip
+        live = {
+            "qm_setups": "ma_surf",
+            "breakouts": "breakout_watch / breakout_trigger",
+            "luk": "luk_flush and luk_pullback (not the inside day)",
+            "minervini": "vcp and minervini_tt (the Trend Template list)",
+        }.get(name)
         st.markdown(
             f"**{'Live scan ' + live if live else 'Tested in the study only, no live scan'}**"
         )
