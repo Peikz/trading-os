@@ -23,18 +23,18 @@ def config_copy(tmp_path):
 def test_values_change_in_place_and_comments_stay(config_copy):
     old = config_copy.read_text(encoding="utf-8")
     shown = scan_editor.save(
-        "ep_pm", {"pm_change_min_pct": 12, "label": "EP pre-market", "note": "Heads-up, #1"},
+        "ep_day", {"gap_min_pct": 12, "label": "EP day one", "note": "Heads-up, #1"},
         config_copy,
     )  # fmt: skip
     new = config_copy.read_text(encoding="utf-8")
-    assert "-     pm_change_min_pct: 10" in shown and "pm_change_min_pct: 12" in shown
+    assert "-     gap_min_pct: 10" in shown and "gap_min_pct: 12" in shown
     assert len(new.splitlines()) == len(old.splitlines()) + 2  # the two text keys, own lines
     assert sum(1 for ln in new.splitlines() if ln.lstrip().startswith("#")) == sum(
         1 for ln in old.splitlines() if ln.lstrip().startswith("#")
     )
-    scan = load_config(config_copy).scans["ep_pm"]
-    assert scan["pm_change_min_pct"] == 12
-    assert scan.params["label"] == "EP pre-market" and scan.params["note"] == "Heads-up, #1"
+    scan = load_config(config_copy).scans["ep_day"]
+    assert scan["gap_min_pct"] == 12
+    assert scan.params["label"] == "EP day one" and scan.params["note"] == "Heads-up, #1"
 
 
 def test_lists_booleans_and_the_push_switch(config_copy):
@@ -80,4 +80,4 @@ def test_the_sunday_lists_are_shown_in_full_not_counted():
     cfg = load_config()
     hits = pd.DataFrame([{"ticker": "AAA", "tier": "alert", "rank": 1, "grade": "C"}])
     assert notify.push_modes(cfg, hits, cfg.scans["qm_gainers"]).tolist() == ["full"]
-    assert notify.push_modes(cfg, hits, cfg.scans["ep_pm"]).tolist() == ["count"]
+    assert notify.push_modes(cfg, hits, cfg.scans["pivot_watch"]).tolist() == ["count"]

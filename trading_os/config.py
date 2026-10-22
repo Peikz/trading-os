@@ -289,7 +289,14 @@ SCAN_COMMON_KEYS = {"enabled", "phase", "slot", "action"}
 SCAN_TEXT_KEYS = {"label", "note"}
 # Scan-specific keys. Adding a scan here requires it to be in SPEC.md first (CLAUDE.md).
 SCAN_PARAM_KEYS: dict[str, set[str]] = {
-    "ep_pm": {"push_tier", "pm_change_min_pct", "price_min", "pm_volume_min", "market_cap_min"},
+    "ep_pm": {
+        "push_tier",
+        "push_ungraded",
+        "pm_change_min_pct",
+        "price_min",
+        "pm_volume_min",
+        "market_cap_min",
+    },
     "ep9m_early": {"push_tier", "pm_volume_min", "pm_gap_min_pct", "pm_gap_basis"},
     "watchlist_gappers": {"lists", "pm_gap_min_pct", "pm_gap_basis"},
     "ep_day": {

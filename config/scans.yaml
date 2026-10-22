@@ -55,9 +55,10 @@ schedule:                                   # SPEC §3
 
 scans:
   # --- Pre-market (SPEC §6.1) ---
-  ep_pm:
-    {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
-     pm_change_min_pct: 10, price_min: 1.00, pm_volume_min: 50_000, market_cap_min: 50_000_000}
+  ep_pm:                                    # shown in full as a heads-up (Emil, 22 Oct 2026)
+    {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert, push_ungraded: true,
+     pm_change_min_pct: 10, price_min: 1.00, pm_volume_min: 50_000, market_cap_min: 50_000_000,
+     note: "Heads-up only: the buy is the 10:30 check (EP 10:30 A+)"}
   # pm_gap_basis (proposed, pending Emil): premarket_change = current pre-market price vs
   # prior close; premarket_gap = first pre-market print vs prior close.
   ep9m_early:
