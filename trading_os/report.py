@@ -37,7 +37,20 @@ COLUMNS: dict[str, list[tuple[str, str, str]]] = {
         (">MA50", "above_ma50", "flag"),
         (">MA200", "above_ma200", "flag"),
     ],
-    "ep_ah": [("AH %", "ah_change_pct", "+.1f"), ("AH vol", "ah_volume", "shares")],
+    "ep_ah": [
+        ("AH %", "ah_change_pct", "+.1f"),
+        ("AH vol", "ah_volume", "shares"),
+        ("Mcap", "market_cap", "money"),
+        ("Earnings", "earnings_flag", "flag"),
+    ],
+    "ep_am": [
+        ("Gap %", "gap_pct", "+.1f"),
+        ("Chg %", "chg_pct", "+.1f"),
+        ("RVOL at time", "rvol_at_time_tv", ".1f"),
+        ("$ vol", "dollar_volume", "money"),
+        ("Mcap", "market_cap", "money"),
+        ("Earnings", "earnings_flag", "flag"),
+    ],
     "ep9m_pace": [
         *_MOVE,
         ("Pace", "proj_volume", "shares"),
@@ -145,6 +158,10 @@ def _b_flags(row: Mapping[str, Any]) -> str:
 
 def scan_table(scan: str, hits: pd.DataFrame, max_rows: int) -> list[str]:
     columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text"), ("Tier", "tier", "text")]
+    if "grade" in hits:  # the study grade and why (Emil, 22 Oct 2026)
+        columns += [("Grade", "grade", "text"), ("Why", "grade_why", "text")]
+        if "grade_points" in hits and hits["grade_points"].notna().any():
+            columns.append(("Points", "grade_points", "text"))
     columns += COLUMNS.get(scan, [])
     lines = [
         "| " + " | ".join(h for h, _, _ in columns) + " |",

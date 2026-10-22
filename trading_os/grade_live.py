@@ -122,6 +122,28 @@ def stop_for(entry: float, adr_usd: float, stop_adr: float, floor_pct: float) ->
     return entry - max(stop_adr * adr_usd, floor_pct / 100 * entry)
 
 
+# Short names of the quality points for the push and the report (Emil, 22 Oct 2026).
+POINT_NAMES = {
+    "earnings": "earnings",
+    "earnings_recent": "earnings ≤10d",
+    "sideways_1_2m": "1-2 mo base",
+    "market_cool_lt45": "market not hot",
+    "revenue_accel": "revenue accel.",
+    "eps_yoy_pos": "EPS up y/y",
+    "near_52w_high": "near 52w high",
+    "tight_5d": "tight 5d",
+}
+
+
+def point_text(g: grader.Grade) -> str | None:
+    """`✅ earnings · ✅ EPS up y/y · ❌ market not hot`: which quality points held (count
+    grades only)."""
+    if not g.note or "quality points" not in g.note:
+        return None
+    marks = [f"{'✅' if pts else '❌'} {POINT_NAMES.get(name, name)}" for name, _, pts in g.reasons]
+    return " · ".join(marks)
+
+
 def _why(g: grader.Grade, top: int = 3) -> str:
     parts = [f"{name} {pts:+.2f}" for name, _, pts in g.reasons[:top] if pts]
     return ", ".join(parts)
@@ -204,6 +226,7 @@ def grade_hits(
                 "grade_score": g.score,
                 "grade_cost_r": g.cost_r,
                 "grade_why": g.note or _why(g),
+                "grade_points": point_text(g),
                 "grade_entry_rule": rule.get("entries", {}).get(
                     f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
                 ),

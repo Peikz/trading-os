@@ -98,3 +98,19 @@ def test_the_saxo_ticket_per_plan():
         "🎫 Saxo: Buy · Stop if traded 15.30 from 10:00 · Day · stop loss 14.23 GTC"
     )
     assert notify.saxo_line({"grade": "A"}, "ep_am") is None  # no stop, no ticket
+
+
+def test_a_c_ep_hit_shows_its_points_and_no_size():
+    from trading_os import notify
+
+    row = {"ticker": "AAA", "grade": "C", "grade_why": "1 of 6 quality points",
+           "grade_points": "❌ earnings · ✅ EPS up y/y", "gap_pct": 37.0, "rvol50": 6.7,
+           "dollar_volume": 2.75e8, "plan_shares": 1016, "plan_entry": 15.43, "plan_stop": 15.06,
+           "plan_position_usd": 15700, "plan_risk_usd": 374,
+           "plan_stop_basis": "day low"}  # fmt: skip
+    text = [line.text for line in notify._block(row, "ep_am", "am")]
+    assert any("C · 1 of 6 quality points · not a buy by the study" in t for t in text)
+    assert any("✅ EPS up y/y" in t for t in text)
+    assert not any("sh ·" in t or "Saxo" in t for t in text)  # no size, no ticket
+    a_plus = row | {"grade": "A+", "grade_why": "5 of 6 quality points"}
+    assert any("sh ·" in t for t in (line.text for line in notify._block(a_plus, "ep_am", "am")))

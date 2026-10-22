@@ -251,6 +251,11 @@ def push_modes(cfg: Config, hits: pd.DataFrame, scan=None) -> pd.Series:
 def grade_lines(row: Mapping[str, Any]) -> list[str]:
     """`🅰 Study A · +0.52R`, the plan's timing and exit, and the history behind the grade."""
     grade = row.get("grade")
+    points = row.get("grade_points")
+    points = points if isinstance(points, str) and points else None
+    if grade == "C" and points:  # shown in full anyway (push_ungraded): why it isn't a buy
+        head = f"C · {row.get('grade_why')} · not a buy by the study"
+        return [head, *wrap(points.split(" · "), WIDTH - len(INDENT))]
     if grade is None or pd.isna(grade) or grade == "C":
         return []
     score = row.get("grade_score")
@@ -261,6 +266,8 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
         tail = "" if score is None or pd.isna(score) else f" · {score:+.2f}R"
         head = f"🅰 Study {grade}" + tail
     out = [head]
+    if points:
+        out += wrap(points.split(" · "), WIDTH - len(INDENT))
     when = ENTRY_TEXT.get(str(row.get("grade_entry_rule")), "")
     hold = row.get("grade_hold_sessions")
     median = row.get("grade_stat_days_median")
@@ -539,7 +546,10 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     pm = premarket_line(row)
     if pm:
         out.append(Line("plan", INDENT + pm))
-    out += [Line("plan", INDENT + text) for text in plan_lines(row)]
+    # A C hit shown for its facts (EP 10:30, EP-AH) gets no size: it is not a buy by the study.
+    # Pivot watches (BO-Watch, MA-surf) keep theirs: the pivot and stop are the plan.
+    if row.get("grade") != "C" or scan in PIVOT_SCANS:
+        out += [Line("plan", INDENT + text) for text in plan_lines(row)]
     buys = row.get("grade") in ("A+", "A") or scan in PIVOT_SCANS
     ticket = saxo_line(row, scan) if buys else None
     if ticket:

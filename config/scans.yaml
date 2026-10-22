@@ -83,12 +83,12 @@ scans:
   ep_am:                                    # EP gap at the 10:17 check, bought ~10:30 (Emil,
                                             # 21 Oct 2026): the study's 10:30 entry, which needs
                                             # only the opening gap (graded by the EP quality count)
-    {enabled: true, phase: 1, slot: am, action: push, push_tier: alert,
+    {enabled: true, phase: 1, slot: am, action: push, push_tier: alert, push_ungraded: true,
      gap_min_pct: 10, price_min: 1.00, market_cap_min: 50_000_000}
   ep_ah:                                    # EP after hours at 16:50, bought before Saxo's 17:00
                                             # close (Emil, 21 Oct 2026): the study's 16:45 entry,
                                             # measured on after-close earnings releases only
-    {enabled: true, phase: 1, slot: ah, action: push, push_tier: alert,
+    {enabled: true, phase: 1, slot: ah, action: push, push_tier: alert, push_ungraded: true,
      ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000,
      earnings_only: true}
   ep9m:                                     # saved only since 21 Oct 2026 (Emil): its buys are
