@@ -21,10 +21,13 @@ from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
     luk_flush,
+    luk_pullback,
     ma_surf,
+    minervini_tt,
     parabolic_long,
     parabolic_short,
     tight_bases,
+    vcp,
 )
 from trading_os.scans.intraday import pivot_watch
 from trading_os.scans.momentum import mb_down, mb_up
@@ -55,6 +58,9 @@ REGISTRY: dict[str, ScanFn] = {
     "tight_bases": tight_bases,
     "luk_flush": luk_flush,
     "ma_surf": ma_surf,
+    "luk_pullback": luk_pullback,
+    "vcp": vcp,
+    "minervini_tt": minervini_tt,
 }
 
 

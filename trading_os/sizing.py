@@ -41,7 +41,7 @@ PLAN_COLUMNS = [
 EP_CLOSE = ("ep_day", "ep_close", "ep_am", "ep9m", "ep9m_pace")  # intraday: the last price
 EP_PREMARKET = ("ep_pm", "ep9m_early", "watchlist_gappers")
 EP_AFTERHOURS = ("ep_ah",)
-BREAKOUT_RULES = ("breakout_trigger", "breakout_watch", "pivot_watch", "ma_surf")
+BREAKOUT_RULES = ("breakout_trigger", "breakout_watch", "pivot_watch", "ma_surf", "vcp")
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ def plan(row: Mapping[str, Any], scan: str, rules: Mapping[str, Any]) -> tuple[f
         )
     if scan == "breakout_trigger":
         return row.get("close", nan), row.get("order_stop", nan), "order stop"
-    if scan in ("breakout_watch", "ma_surf"):
+    if scan in ("breakout_watch", "ma_surf", "vcp"):
         return row.get("pivot", nan), row.get("order_stop", nan), "order stop, buy-stop at pivot"
     if scan == "pivot_watch":  # intraday: over the pivot buys now, below it waits at the pivot
         pivot, price = row.get("pivot", nan), row.get("close", nan)

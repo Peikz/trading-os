@@ -95,6 +95,37 @@ def _pair(row: Mapping[str, Any]) -> str:
     )
 
 
+# Live scan -> its study setup in heat_stats.json, for the per-hit heat tag (Emil, 22 Oct 2026).
+SCAN_KEYS = {
+    "ep_am": "ep_a_1030", "ep_ah": "ep_a_ah", "ep9m_pace": "ep9m_a", "luk_flush": "luk_flush_a",
+    "ma_surf": "qm_surf", "vcp": "vcp", "luk_pullback": "luk_pullback", "mb_up": "mb_up",
+    "mb_down": "mb_down", "parabolic_long": "parabolic_long",
+    "parabolic_short": "parabolic_short", "breakout_watch": "breakout",
+    "breakout_trigger": "breakout", "ep_day": "ep_next_day",
+}  # fmt: skip
+VERDICT_WORDS = {"held": "held", "lost": "lost", "mixed": "mixed", "too few trades": "few trades"}
+
+
+def tag(stats: Mapping[str, Any] | None, count: Any, scan: str) -> str | None:
+    """`🌡 warm: held · +0.28/+0.92R (n 39/60)`: how this scan's setup did at today's heat on
+    2016-21 and 2022-26 (net R a trade). None without stats, a count or a study setup."""
+    key = SCAN_KEYS.get(scan)
+    if not stats or key is None:
+        return None
+    band_name = band(count, stats["bands"])
+    if band_name is None:
+        return None
+    label = next((s["label"] for s in stats["setups"] if s["key"] == key), None)
+    t = table(stats, band_name)
+    mine = t[t["setup"] == label]
+    if mine.empty:
+        return None
+    row = mine.iloc[0].to_dict()
+    n = "/".join(str(row[f"trades_{p}"]) for p in PERIODS)
+    word = VERDICT_WORDS.get(row["verdict"], row["verdict"])
+    return f"🌡 {band_name}: {word} · {_pair(row)}R (n {n})"
+
+
 def push_lines(stats: Mapping[str, Any] | None, count: Any) -> list[str]:
     """The heat band of today's count, how the graded setups did in it, and the other setups
     that held in both periods."""

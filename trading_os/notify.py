@@ -55,6 +55,9 @@ SCAN_LABELS = {
     "tight_bases": "Tight bases",
     "luk_flush": "Luk flush",
     "ma_surf": "MA-surf",
+    "luk_pullback": "Luk pullback",
+    "vcp": "VCP",
+    "minervini_tt": "Trend Template",
 }
 # An icon per section, so the eye finds the setup type (no meaning beyond the type).
 SECTION_ICONS = {
@@ -64,6 +67,9 @@ SECTION_ICONS = {
     "ep_ah": "🌙",
     "luk_flush": "🌊",
     "ma_surf": "🏄",
+    "luk_pullback": "↩️",
+    "vcp": "🌀",
+    "mb_up": "💥",
     "parabolic_long": "🪂",
     "parabolic_short": "🎢",
     "ep9m": "📊",
@@ -143,6 +149,18 @@ UNGRADED_PLANS = {
         "out on a close under the 20-day MA",
     ],
     "breakout_watch": ["C (no grade) · buy-stop at the pivot"],
+    "vcp": [
+        "C (no grade) · study plan: stop if traded at the pivot",
+        "stop 1 ADR under the pivot · out at the close after 21 sessions",
+    ],
+    "luk_pullback": [
+        "C (no grade) · study plan: bought at the pullback day's close",
+        "stop 1 ADR under · out at the close after 21 sessions",
+    ],
+    "mb_up": [
+        "C (no grade) · study plan: buy at the open",
+        "stop at the burst day's low · out at the close after 21 sessions",
+    ],
     "parabolic_long": [
         "C (no grade) · study plan: buy at the open",
         "stop 1 ADR under · out at the close after 21 sessions",
@@ -514,7 +532,7 @@ def plan_lines(row: Mapping[str, Any]) -> list[str]:
 # The Saxo order ticket per plan (Emil, 22 Oct 2026): what to enter, never sent by the system.
 MARKET_ENTRIES = {"t_1030": "~10:30", "t_1015": "after 10:15", "t_1200": "after 12:00",
                   "next_1030": "next day ~10:30", "next_open": "at the open"}  # fmt: skip
-PIVOT_SCANS = ("breakout_watch", "ma_surf", "pivot_watch")
+PIVOT_SCANS = ("breakout_watch", "ma_surf", "pivot_watch", "vcp")
 
 
 def saxo_line(row: Mapping[str, Any], scan: str) -> str | None:
@@ -561,6 +579,9 @@ def wrap(parts: Iterable[str], width: int) -> list[str]:
 def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     out = [Line("hit", "▸ " + _first_line(row, scan, slot))]
     out += [Line("plan", INDENT + text) for text in grade_lines(row)]
+    heat_tag = row.get("heat_tag")
+    if isinstance(heat_tag, str) and heat_tag:
+        out.append(Line("plan", INDENT + heat_tag))
     pm = premarket_line(row)
     if pm:
         out.append(Line("plan", INDENT + pm))

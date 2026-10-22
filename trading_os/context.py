@@ -34,7 +34,15 @@ DETAIL_FIELDS = {
 }
 PREMARKET_SCANS = ("ep_pm", "ep9m_early", "watchlist_gappers")
 EP_SCANS = ("ep_day", "ep_close", "ep_am", "ep_ah", "ep9m", "ep9m_pace", *PREMARKET_SCANS)
-BREAKOUT_SCANS = ("breakout_trigger", "breakout_watch", "pivot_watch", "luk_flush", "ma_surf")
+BREAKOUT_SCANS = (
+    "breakout_trigger",
+    "breakout_watch",
+    "pivot_watch",
+    "luk_flush",
+    "ma_surf",
+    "vcp",
+    "luk_pullback",
+)
 CONTEXT_COLUMNS = [
     "ctx_eps_surprise_pct",
     "ctx_rev_surprise_pct",

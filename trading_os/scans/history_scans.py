@@ -125,6 +125,37 @@ def ma_surf(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     )
 
 
+def luk_pullback(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Martin Luk's pullback (Emil, 22 Oct 2026): the rows `luk_live.attach` marked, a leader
+    dipping to its EMA 9 or 21 and closing back over it. Ranked by dollar volume."""
+    if "luk_pullback" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    return ranked(df, _mask(df["luk_pullback"]), "dollar_volume")
+
+
+def vcp(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Minervini's VCP (Emil, 22 Oct 2026): Trend Template stocks with a VCP base still under
+    its pivot (`minervini_live.attach`), with the pivot and stop under the plan's names.
+    Ranked by dollar volume."""
+    if "vcp_watch" not in df or "vcp_pivot" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    hits = ranked(df, _mask(df["vcp_watch"]), "dollar_volume")
+    return hits.assign(
+        pivot=hits["vcp_pivot"],
+        order_stop=hits["vcp_order_stop"],
+        risk_adr=hits["vcp_risk_adr"],
+        base_len=hits["vcp_base_len"],
+    )
+
+
+def minervini_tt(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """Minervini's Trend Template (Emil, 22 Oct 2026): every stock passing it at the close,
+    ranked by RS, strongest first."""
+    if "minervini_tt" not in df or "mm_rs" not in df:  # no stock passed today
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    return ranked(df, _mask(df["minervini_tt"]), "mm_rs")
+
+
 def luk_flush(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """Martin Luk's AVWAP flush (Emil, 20 Oct 2026): the rows `luk_live.attach` marked.
     Ranked by dollar volume, largest first."""

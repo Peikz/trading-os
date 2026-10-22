@@ -117,3 +117,13 @@ def test_build_scores_each_setup_per_band_and_period(tmp_path):
     assert got[("qm_surf", "cool", "2022-26")]["trades"] == 1
     surf = next(s for s in out["setups"] if s["key"] == "qm_surf")
     assert surf["plan"] == "10:00 over the pivot; the setup's own stop; trail the 20-day MA"
+
+
+def test_the_heat_tag_per_scan():
+    s = stats()
+    s["setups"].append({"key": "qm_surf", "label": "MA-surf live", "short": "MA-surf",
+                        "kind": "C", "side": "long", "plan": "x"})  # fmt: skip
+    s["rows"] += [row("qm_surf", "warm", "2016-21", 0.25, 0.30, 40),
+                  row("qm_surf", "warm", "2022-26", 0.75, 0.60, 50)]  # fmt: skip
+    assert heat.tag(s, 60, "ma_surf") == "🌡 warm: held · +0.25/+0.75R (n 40/50)"
+    assert heat.tag(s, 60, "qm_gainers") is None and heat.tag(None, 60, "ma_surf") is None

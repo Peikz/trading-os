@@ -26,7 +26,7 @@ COLUMNS = {"level": "luk_level", "avwap": "luk_avwap", "base_days": "base_days"}
 
 def attach(df: pd.DataFrame, data_dir: Path, cfg, session: dt.date) -> pd.DataFrame:
     """`df` plus `luk_flush` (bool) and the flush's levels, for the alert-tier rows."""
-    out = df.assign(luk_flush=False)
+    out = df.assign(luk_flush=False, luk_pullback=False)
     alert = df[df["tier"] == "alert"] if "tier" in df else df
     if alert.empty:
         return out
@@ -38,11 +38,18 @@ def attach(df: pd.DataFrame, data_dir: Path, cfg, session: dt.date) -> pd.DataFr
     bars["ticker"] = bars["ticker"].astype(str)
     g, names = hm.grids(bars, sessions)
     found = luk.find(g, names, sessions, cfg.luk)
-    found = found[(found["strategy"] == "luk_avwap_flush") & (found["session_date"] == session)]
-    if found.empty:
-        return out
-    levels = found.set_index("ticker")[list(COLUMNS)].rename(columns=COLUMNS)
+    today = found[found["session_date"] == session]
     key = out["ticker"].astype(str)
+    # The pullback (Emil, 22 Oct 2026): a leader that dips to its EMA 9 or 21 and closes back
+    # over it; pushed the next morning (study plan: bought at that close, 1-ADR stop, 21 days).
+    pullbacks = today[today["strategy"] == "luk_pullback"].drop_duplicates("ticker")
+    out["luk_pullback"] = key.isin(set(pullbacks["ticker"]))
+    if len(pullbacks):
+        out["luk_pb_level"] = key.map(pullbacks.set_index("ticker")["level"])
+    flushes = today[today["strategy"] == "luk_avwap_flush"]
+    if flushes.empty:
+        return out
+    levels = flushes.set_index("ticker")[list(COLUMNS)].rename(columns=COLUMNS)
     out["luk_flush"] = key.isin(levels.index)
     for column in levels.columns:
         out[column] = key.map(levels[column])

@@ -103,9 +103,9 @@ scans:
   pivot_watch:                              # BO-Watch names at/over their pivot (Emil, 19 Oct)
     {enabled: true, phase: 2, slot: [am, mid], action: push, push_tier: alert,
      near_pivot_pct: 1.0}                   # (proposed) up to 1 % below the pivot counts
-  mb_up:
-    {enabled: true, phase: 1, slot: eod, action: log,
-     chg_min_pct: 4, volume_min: 100_000, volume_gt_prior: true, close_loc_min: 0.70}
+  mb_up:                                    # pushed the next morning (Emil, 22 Oct 2026)
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true, chg_min_pct: 4, volume_min: 100_000, volume_gt_prior: true, close_loc_min: 0.70}
   mb_down:
     {enabled: true, phase: 1, slot: eod, action: log,
      chg_max_pct: -4, volume_min: 100_000, volume_gt_prior: true}
@@ -133,6 +133,18 @@ scans:
                                             # rules in `luk:`, bought the next session (grading)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
      push_slot: [eod, pm]}                  # EOD, and again pre-market with its move (Emil)
+  luk_pullback:                             # Martin Luk's pullback, live (Emil, 22 Oct
+                                            # 2026): rules in `luk:`; C, pushed pre-market
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true}
+  vcp:                                      # Minervini's VCP, live (Emil, 22 Oct 2026): a
+                                            # base still under its pivot; rules in
+                                            # `minervini:`; C, pushed pre-market
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+     push_ungraded: true}
+  minervini_tt:                             # Minervini's Trend Template as a daily list,
+                                            # ranked by RS (Emil, 22 Oct 2026); saved only
+    {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert}
   ma_surf:                                  # Qullamaggie's MA-surf, live (Emil, 21 Oct 2026:
                                             # "I will use this strategy more"): rules in
                                             # `qm_surf:`; grade C, pushed anyway (push_ungraded)

@@ -126,8 +126,10 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
-    if slot == "eod" and cfg.scans["luk_flush"].enabled:
+    if slot == "eod" and (cfg.scans["luk_flush"].enabled or cfg.scans["luk_pullback"].enabled):
         uni = _with_luk(uni, args.data_dir, cfg, session)
+    if slot == "eod" and (cfg.scans["vcp"].enabled or cfg.scans["minervini_tt"].enabled):
+        uni = _with_minervini(uni, args.data_dir, cfg, session)
     if slot == "eod" and cfg.scans["ma_surf"].enabled:
         uni = _with_surf(uni, args.data_dir, cfg, session)
 
@@ -166,6 +168,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
+    results = _with_heat_tags(results, args.data_dir, session)
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
     selected = notify.select_for_push(results, cfg, slot)
@@ -346,6 +349,41 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
     except Exception as exc:  # noqa: BLE001 - extra lines in the push; the run goes on
         status(f"Last close's watch: FAILED ({type(exc).__name__}), left out")
         return {}
+
+
+def _with_heat_tags(results: dict, data_dir: Path, session) -> dict:
+    """Each hit's heat tag (`heat.tag`): how its setup did at the latest Sunday scan count's
+    heat. Auxiliary: hits go out without it on a problem."""
+    try:
+        stats = heat.load(data_dir)
+        count, _ = breadth.latest_scan_count(data_dir, session)
+        if not stats or count is None:
+            return results
+        out = dict(results)
+        for name, hits in results.items():
+            text = heat.tag(stats, count, name)
+            if text and len(hits):
+                out[name] = hits.assign(heat_tag=text)
+        return out
+    except Exception as exc:  # noqa: BLE001
+        status(f"Heat tags: FAILED ({type(exc).__name__}), left out")
+        return results
+
+
+def _with_minervini(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
+    """Minervini's Trend Template and VCP flags (EOD). A problem leaves them empty."""
+    from trading_os import minervini_live
+
+    try:
+        out = minervini_live.attach(uni, data_dir, cfg, session)
+        status(
+            f"Minervini: {int(out['minervini_tt'].sum())} Trend Template, "
+            f"{int(out['vcp_watch'].sum())} VCP"
+        )
+        return out
+    except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
+        status(f"Minervini: FAILED ({type(exc).__name__}), scans empty")
+        return uni
 
 
 def _with_surf(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:

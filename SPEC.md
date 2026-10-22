@@ -144,11 +144,14 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | EP-Day (yours) | Gap ≥ 10%, RVOL ≥ 3, volume ≥ 300K, price ≥ $1, mcap ≥ $50M | 1 | Log since 21 Oct 2026 (Emil): its buys are EP 10:30 and EP-AH; still feeds EP-Watch and the EP history |
 | EP-AH | Moved to the 16:50 after-hours check on 21 Oct 2026 (§6.1b) | 1 | — |
 | EP9M (Stockbee) | Volume ≥ 9M shares, change ≥ +4%. No MA filter (MA position stored as columns) | 1 | Log since 21 Oct 2026 (Emil): its buys are the 10:15 / 12:00 EP9M pace checks |
-| Momentum Burst up (Stockbee) | Change ≥ +4%, volume > prior day, volume ≥ 100K, close location ≥ 0.70 | 1 | Log |
+| Momentum Burst up (Stockbee) | Change ≥ +4%, volume > prior day, volume ≥ 100K, close location ≥ 0.70 | 1 | Push next pre-market (Emil, 22 Oct 2026) |
 | Momentum Burst down (Stockbee) | Change ≤ −4%, volume > prior day, volume ≥ 100K | 1 | Log |
 | Parabolic Short (Kullamägi) | ≥ 50% gain in ≤ 10 days (mcap ≥ $1B) or ≥ 200% (mcap < $1B); ≥ 3 consecutive up days; distance from MA10 in ADR stored | 1 | Push next pre-market (Emil, 21 Oct 2026) |
 | Parabolic Long (Kullamägi) | ≥ 30% drop in ≤ 10 days; ≥ 3 consecutive down days; distance below MA10 in ADR stored | 1 | Push next pre-market (Emil, 21 Oct 2026) |
 | Luk AVWAP flush (Emil, 20 Oct 2026) | Martin Luk's AVWAP flush (§11.16, rules in config `luk:`), alert tier, from 300 sessions of daily bars. Graded (§11.17); the plan buys the next session around 10:30 | 2 | Push at EOD and again in the next pre-market push with its pre-market move (Emil, 21 Oct 2026) |
+| Luk pullback (Emil, 22 Oct 2026) | Martin Luk's pullback (config `luk:`, proposed, the study's rules): a leader dips to its EMA 9 or 21 and closes back over it. Grade C, pushed in the next pre-market push with the study plan (bought at that close, 1-ADR stop, 21 sessions) | 2 | Push next pre-market |
+| VCP (Minervini; Emil, 22 Oct 2026) | A Trend Template stock with a VCP base at the close (2-6 shrinking contractions, the last tight, volume drying up; config `minervini:`, proposed) still under its pivot: the next session's buy-stop at the pivot, stop 1 ADR under (at least 1 %), hold 21. Grade C, pushed pre-market | 2 | Push next pre-market |
+| Trend Template (Minervini; Emil, 22 Oct 2026) | Every alert-tier stock passing Minervini's Trend Template at the close, ranked by RS (within the alert tier) | 2 | Log |
 | MA-surf (Emil, 21 Oct 2026) | Qullamaggie's breakout from a base surfing the rising 10- or 20-day MA (rules in config `qm_surf:`, all proposed, unchanged from the study), alert tier, from 160 sessions of daily bars. Grade C (no edge of its own in the 2016-26 study), pushed anyway (`push_ungraded`) because Emil trades it: the study plan for the next session (from 10:00 ET over the pivot buy, under it a buy-stop at the pivot; the order stop under the base's right side; out on a close under the 20-day MA), sized at the account's risk like the breakouts | 2 | Push |
 | Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K. Extended 19 Oct 2026 (Emil) with the rest of Stockbee's Market Monitor: up/down ≥ 25% and ≥ 50% in a month (22 sessions), up/down ≥ 13% in 34 sessions (needs daily history); plus SPY and VIX next to QQQ; 20 Oct 2026 (Emil): QQQ shown like SPY (change, MA position), and the QQQ trend's SMA20 from 5 sessions ago taken from the daily bars until EOD runs have stored it | 1 | Push (top lines) |
 | Market Light (yours) | See §6.5. Computed daily; the scan count input only changes on Sundays | 1 | Push (one line) |
@@ -278,6 +281,10 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
   the move against the pivot, and a warning when it is up more than 1 ADR pre-market; the study plan
   sits once under each section (all grade C, `push_ungraded`). The EOD push names what is held back
   ("In the pre-market push: ..."). Only the push moves: the hits are saved with the EOD run.
+- Heat tag (Emil, 22 Oct 2026): every hit of a scan with a study setup carries how that setup did at the
+  latest scan count's heat on 2016-21 / 2022-26 (`heat.tag`: held / mixed / lost / few trades, net R a
+  trade, trades) in the push and the report. It is a fact, not a grade: A/B grades stay with the
+  setups that passed the blind and account tests.
 - If a job fails, push a short failure message with a link to the Actions run.
 
 ---

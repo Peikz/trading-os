@@ -12,7 +12,8 @@ from trading_os.store import RunContext
 
 A = "".join(["S", "R", "F"])
 LATER = ("breakout_watch", "ma_surf", "parabolic_long", "parabolic_short")
-CARRIED = (*LATER, "luk_flush")  # Luk flush: pushed at EOD and again pre-market
+# Luk flush: pushed at EOD and again pre-market; the momentum scans since 22 Oct 2026.
+CARRIED = (*LATER, "luk_flush", "mb_up", "luk_pullback", "vcp")
 
 
 def hit(**kw):
@@ -92,3 +93,28 @@ def test_the_premarket_run_carries_last_closes_hits(tmp_path: Path):
     assert out["parabolic_long"].iloc[0]["pm_price"] == 10.3
     assert out["breakout_watch"].empty
     assert (out["ma_surf"]["carried_from"] == "eod").all()
+
+
+def test_the_momentum_scans_are_live_and_pushed_next_morning():
+    cfg = load_config()
+    for name in ("mb_up", "luk_pullback", "vcp"):
+        scan = cfg.scans[name]
+        assert scan.enabled and scan.action == "push" and notify.pushes_now(scan, "pm")
+        assert scan.params["push_ungraded"] and name in notify.UNGRADED_PLANS
+    assert cfg.scans["minervini_tt"].action == "log"  # a list, saved only
+
+
+def test_the_scans_read_their_live_flags():
+    from trading_os.scans import REGISTRY
+
+    cfg = load_config()
+    uni = hit(
+        tier="alert", dollar_volume=1e7, luk_pullback=True, vcp_watch=True, vcp_pivot=12.0,
+        vcp_order_stop=11.4, vcp_risk_adr=1.0, vcp_base_len=30, minervini_tt=True, mm_rs=91.0,
+    )  # fmt: skip
+    vcp = REGISTRY["vcp"](uni, cfg.scans["vcp"]).iloc[0]
+    assert (vcp["pivot"], vcp["order_stop"]) == (12.0, 11.4)
+    assert len(REGISTRY["luk_pullback"](uni, cfg.scans["luk_pullback"])) == 1
+    assert len(REGISTRY["minervini_tt"](uni, cfg.scans["minervini_tt"])) == 1
+    empty = hit(tier="alert")
+    assert REGISTRY["vcp"](empty, cfg.scans["vcp"]).empty
