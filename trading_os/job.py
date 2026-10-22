@@ -145,6 +145,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if slot == "weekly":
         header = [*header, *industries.lines(ranked_industries, cfg.context["industry_top_n"])]
     if slot in ("pm", "eod"):
+        header = [*header, *_position_lines(args.data_dir, cfg, session, slot, uni)]
+    if slot in ("pm", "eod"):
         events = watchlists.update(
             state,
             results,
@@ -240,6 +242,34 @@ def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
         return uni
+
+
+def _position_lines(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame) -> list[str]:
+    """The position manager's block (`manage.py`): each open position's plan, day k of N, the
+    day's exits, 20-day MA closes, earnings, R and risk. Auxiliary: never fails the run."""
+    from trading_os import dashboard, manage
+
+    try:
+        positions = dashboard.latest_positions(data_dir)
+        if positions.empty:
+            return []
+        if slot == "eod":
+            market = uni
+        else:
+            last = clock.previous_session(cfg.schedule, session)
+            path = history.universe_snapshot_path(data_dir, last)
+            market = pd.read_parquet(path) if path.exists() else pd.DataFrame(columns=["ticker"])
+        today = dt.date.today() + dt.timedelta(days=30)
+        sessions = [
+            *clock.sessions_back(cfg.schedule, session, 400),
+            *clock.sessions_after(cfg.schedule, session, 10, today),
+        ]
+        table = manage.review(positions, market, session, sessions, cfg.grading, slot)
+        status(f"Positions: {len(table)} open, {int(table['action'].ne('').sum())} with an action")
+        return manage.push_lines(table)
+    except Exception as exc:  # noqa: BLE001 - the push goes out without the block
+        status(f"Positions: FAILED ({type(exc).__name__}), left out")
+        return []
 
 
 def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:

@@ -1612,6 +1612,31 @@ elif page == "Journal":
                 view[[c for c in cols if c in view]].round(2), hide_index=True, width="stretch"
             )
             st.caption("Valued at the newest daily close in the data repo, not live prices.")
+            eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+            if eod_runs:
+                from trading_os import manage
+
+                snap = read_parquet(str(eod_runs[0].universe))
+                plan_day = eod_runs[0].session
+                around = [
+                    *clock.sessions_back(CFG.schedule, plan_day, 400),
+                    *clock.sessions_after(
+                        CFG.schedule, plan_day, 10, plan_day + dt.timedelta(days=30)
+                    ),
+                ]
+                plan_check = manage.review(positions, snap, plan_day, around, CFG.grading, "eod")
+                st.markdown(f"**What each plan says** (at the {plan_day} close)")
+                shown = plan_check[["ticker", "setup", "rule", "held", "hold", "r_now", "earnings"]]
+                st.dataframe(
+                    shown.assign(action=plan_check["action"]).round(2),
+                    hide_index=True,
+                    width="stretch",
+                )
+                st.caption(
+                    "hold: sell at the close after `hold` sessions · trail_ma20: out on a close "
+                    "under the 20-day MA · cover_ma20: a short covers on a close over it. The "
+                    "same lines come in the pre-market and EOD pushes."
+                )
             pick = st.selectbox("Chart", ["—", *view["ticker"]], key="open_chart")
             if pick != "—":
                 row = view[view["ticker"] == pick].iloc[0]
