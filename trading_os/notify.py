@@ -486,6 +486,41 @@ def plan_lines(row: Mapping[str, Any]) -> list[str]:
     ]
 
 
+# The Saxo order ticket per plan (Emil, 22 Oct 2026): what to enter, never sent by the system.
+MARKET_ENTRIES = {"t_1030": "~10:30", "t_1015": "after 10:15", "t_1200": "after 12:00",
+                  "next_1030": "next day ~10:30", "next_open": "at the open"}  # fmt: skip
+PIVOT_SCANS = ("breakout_watch", "ma_surf", "pivot_watch")
+
+
+def saxo_line(row: Mapping[str, Any], scan: str) -> str | None:
+    """`🎫 Saxo: Buy 625 · Market ~10:30 · Day · stop loss 1.75 GTC`: the ticket for the plan.
+    Shares and stop come from the plan; without a stop there is no ticket."""
+
+    def num(key):
+        v = row.get(key)
+        return None if v is None or pd.isna(v) else float(v)
+
+    stop = num("plan_stop") or num("grade_stop") or num("order_stop")
+    if stop is None:
+        return None
+    shares = num("plan_shares")
+    amount = f"Buy {int(shares):,}" if shares else "Buy"
+    rule = str(row.get("grade_entry_rule") or "")
+    pivot, price = num("pivot"), num("plan_entry")
+    if rule.startswith("ah_") and price:
+        order = f"Limit {price:.2f} · extended hours · Day"
+    elif rule in MARKET_ENTRIES:
+        order = f"Market {MARKET_ENTRIES[rule]} · Day"
+    elif scan in PIVOT_SCANS and pivot:
+        when = " from 10:00" if scan == "ma_surf" else ""
+        order = f"Stop if traded {pivot:.2f}{when} · Day"
+    elif rule == "close":
+        order = "Market on close · Day"
+    else:
+        return None
+    return f"🎫 Saxo: {amount} · {order} · stop loss {stop:.2f} GTC"
+
+
 def wrap(parts: Iterable[str], width: int) -> list[str]:
     """Join phrases with ` · ` into lines of at most `width` characters (a longer phrase
     gets a line of its own)."""
@@ -505,6 +540,10 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     if pm:
         out.append(Line("plan", INDENT + pm))
     out += [Line("plan", INDENT + text) for text in plan_lines(row)]
+    buys = row.get("grade") in ("A+", "A") or scan in PIVOT_SCANS
+    ticket = saxo_line(row, scan) if buys else None
+    if ticket:
+        out.append(Line("plan", INDENT + ticket))
     if context.has_context(row):
         out += [
             Line("fact", INDENT + text)

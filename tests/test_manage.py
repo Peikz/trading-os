@@ -79,3 +79,22 @@ def test_unknown_setups_have_no_plan():
     assert manage.plan("tight_bases", {}) == (None, None)
     assert manage.plan("luk_flush", load_config().grading) == (manage.HOLD, 21)
     assert isinstance(dt.date.today(), dt.date)
+
+
+def test_the_saxo_ticket_per_plan():
+    from trading_os import notify
+
+    ah = {"grade": "A+", "grade_entry_rule": "ah_1645", "plan_entry": 12.5, "plan_stop": 11.8,
+          "plan_shares": 400}  # fmt: skip
+    assert notify.saxo_line(ah, "ep_ah") == (
+        "🎫 Saxo: Buy 400 · Limit 12.50 · extended hours · Day · stop loss 11.80 GTC"
+    )
+    am = {"grade": "A+", "grade_entry_rule": "t_1030", "grade_stop": 9.1, "plan_shares": 1200}
+    assert notify.saxo_line(am, "ep_am") == (
+        "🎫 Saxo: Buy 1,200 · Market ~10:30 · Day · stop loss 9.10 GTC"
+    )
+    surf = {"grade": "C", "pivot": 15.3, "order_stop": 14.23}
+    assert notify.saxo_line(surf, "ma_surf") == (
+        "🎫 Saxo: Buy · Stop if traded 15.30 from 10:00 · Day · stop loss 14.23 GTC"
+    )
+    assert notify.saxo_line({"grade": "A"}, "ep_am") is None  # no stop, no ticket

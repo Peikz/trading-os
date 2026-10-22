@@ -425,6 +425,9 @@ def grade_blocks(hits: pd.DataFrame) -> None:
         why = row.get("grade_why")
         body = [*lines[1:], *([f"Why: {why}"] if isinstance(why, str) and why else [])]
         body += notify.plan_lines(row)
+        ticket = notify.saxo_line(row, str(row.get("scan", "")))
+        if ticket:
+            body.append(ticket)
         items = "\n".join(f"- {b}" for b in body)
         st.markdown(f"**{row['ticker']}** · {lines[0]}\n{items}")
 
