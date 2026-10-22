@@ -186,6 +186,9 @@ def fact_lines(scan: str, hits: pd.DataFrame) -> list[str]:
     """One bullet per pushed name with the facts behind it, the headline linked below."""
     if scan not in (*context.EP_SCANS, *context.BREAKOUT_SCANS):
         return []
+    if "ctx_done" not in hits:
+        return []
+    hits = hits[hits["ctx_done"].fillna(False).astype(bool)]  # only names with facts
     lines = []
     for row in hits.to_dict("records"):
         if not context.has_context(row):

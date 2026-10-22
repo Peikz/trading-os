@@ -4,12 +4,15 @@ Needs the `app` dependency group (Streamlit); skipped otherwise (e.g. in CI).
 """
 
 import datetime as dt
+import os
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 pytest.importorskip("streamlit")
+
+os.environ["TRADING_OS_NO_LIVE"] = "1"  # the Market page's live sector data
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py"

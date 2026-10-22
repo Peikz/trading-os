@@ -50,6 +50,7 @@ from trading_os import (
     report,
     review,
     scan_editor,
+    sectors,
     sizing,
     stats,
     stock_notes,
@@ -59,10 +60,20 @@ from trading_os import (
     validation,
 )
 from trading_os import interactive_chart as ichart
+from trading_os.config import DEFAULT_PATH as CONFIG_PATH
 from trading_os.config import ConfigError, load_config
 
 st.set_page_config(page_title="Trading OS", page_icon="📈", layout="wide")
-CFG = load_config()
+
+
+@st.cache_resource(show_spinner=False)
+def config_at(path: str, mtime: float):
+    """The config, parsed once per version of the file (an edit on the Scans page changes
+    its time, so the next click reads it again): parsing it took ~0.5 s on every click."""
+    return load_config(path)
+
+
+CFG = config_at(str(CONFIG_PATH), CONFIG_PATH.stat().st_mtime)
 _cli = argparse.ArgumentParser()
 _cli.add_argument("--data-dir", default=None)  # streamlit run app/streamlit_app.py -- --data-dir X
 _args, _ = _cli.parse_known_args(sys.argv[1:])
@@ -276,6 +287,20 @@ def candidates_of(run: dashboard.Run) -> pd.DataFrame:
     return read_parquet(str(run.candidates))
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def scan_frames(path: str) -> dict[str, pd.DataFrame]:
+    """A run's hits split per scan, each with only the columns that scan fills. A run file
+    holds every scan's fields (hundreds of columns), and every filter on it copied them all:
+    the Today page spent ~1 s a click on that."""
+    cands = read_parquet(path)
+    if cands.empty or "scan" not in cands:
+        return {}
+    return {
+        scan: hits.dropna(axis=1, how="all").reset_index(drop=True)
+        for scan, hits in cands.groupby("scan", sort=False)
+    }
+
+
 FORMATS = {"money": "compact", "shares": "compact", "int": "%d"}
 
 
@@ -310,10 +335,16 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
     columns += [("Pred. R", "grade_score", "+.2f")]
     columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
+    # Only the columns the table shows (and the sort needs), before sorting: a run file
+    # carries every scan's fields.
+    wanted = {c for _, c, _ in columns} | {"grade", "grade_score", "rank", "ticker"}
+    wanted |= {f"b{i}" for i in range(1, 6)}
+    hits = hits[[c for c in hits.columns if c in wanted]]
     view = notify.best_first(hits).copy()  # best quality on top (Emil, 22 Oct 2026)
     view["tradingview"] = [tradingview_url(t, (exchanges or {}).get(t)) for t in view["ticker"]]
-    if scan.startswith("breakout_"):
-        view["b_flags"] = [report._b_flags(r) for r in view.to_dict("records")]
+    if scan.startswith("breakout_"):  # from the five flag columns, not whole rows
+        flags = [c for c in (f"b{i}" for i in range(1, 6)) if c in view]
+        view["b_flags"] = [report._b_flags(r) for r in view[flags].to_dict("records")]
     present = [(h, c, f) for h, c, f in columns if c in view.columns]
     config = {}
     for header, _, fmt in present:
@@ -416,7 +447,10 @@ def grade_blocks(hits: pd.DataFrame) -> None:
     the history behind the grade, why, and the plan (C hits are saved, not shown)."""
     if "grade" not in hits:
         return
-    graded = hits[hits["grade"].isin(["A+", "A", "B"])]
+    keep = hits["grade"].isin(["A+", "A", "B"])
+    if not keep.any():  # most scans, most days: nothing to show
+        return
+    graded = hits[keep]
     graded = graded.assign(_order=graded["grade"].map(notify.GRADE_RANK)).sort_values("_order")
     for row in graded.to_dict("records"):
         lines = notify.grade_lines(row)
@@ -793,6 +827,125 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
     )
 
 
+@st.cache_data(ttl=600, show_spinner="Fetching indexes and sectors from TradingView…")
+def sector_table(folder: str) -> tuple[pd.DataFrame, str]:
+    """The ETFs of `sectors.py` now (one TradingView request, at most every 10 minutes), else
+    the last EOD's saved rows. Returns (table, where it came from)."""
+    try:
+        if os.environ.get("TRADING_OS_NO_LIVE"):  # the tests: no network
+            raise RuntimeError("live data off")
+        return sectors.fetch(tv.fetch_details), "live from TradingView"
+    except Exception:  # noqa: BLE001 - offline: the last saved day
+        files = sorted((Path(folder) / "data" / "sectors").glob("*/*.parquet"))
+        if not files:
+            return pd.DataFrame(columns=sectors.COLUMNS), "not available"
+        return pd.read_parquet(files[-1]), f"saved {files[-1].stem.split('_')[0]}"
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def industry_files(folder: str) -> list[str]:
+    return [str(f) for f in sorted((Path(folder) / "data" / "industries").glob("*/*.parquet"))]
+
+
+LIGHT_TEXT = """
+**How the Market Light is set** (your rules, SPEC §6.5), from three inputs:
+
+- **QQQ trend**: *up* = close over its 20-day and the 10-day over the 20-day; *down* = close
+  under its 50-day and the 20-day lower than 5 sessions ago; *sideways* = anything else.
+- **Breadth** (Stockbee-style): *strong* = 10-day up/down ratio ≥ 1.5 and more stocks up 25 %+
+  in a quarter than down; *weak* = 10-day ratio under 1.0 and more down than up; *neutral* =
+  the rest (a 5-day ratio over 2, a breadth thrust, lifts weak to neutral).
+- **Scan count** (Sunday): stocks over $5, 500K+ average volume, up 50 %+ in a quarter, over
+  their 20-day. How many stocks are running.
+
+The light, first match wins:
+
+| Light | When | Your rule for new entries |
+|---|---|---|
+| 🛑 **STOP** | QQQ down **and** breadth weak, or the scan count under 5 | none |
+| 🔴 **RED** | QQQ down **or** breadth weak, or the scan count under 15 | A grades only, half risk |
+| 🟢 **GREEN** | QQQ up **and** breadth not weak **and** the scan count 50+ | normal |
+| 🟡 **YELLOW** | anything else | A and B grades only |
+
+The evening's light covers the next day's orders. From the 10-year study: picking trades by
+the Light did **not** hold up on 2022–26; market **heat** (the scan count band above) did. So
+read the Light as the state of the market, and the heat lines for what the setups did in it.
+"""
+
+
+def market_overview() -> None:
+    """Indexes, sectors and themes: returns over a chosen period, against SPY, the trend, the
+    rotation quadrant and a rotation chart; then the industries' rank moves."""
+    import plotly.express as px
+
+    st.subheader("Indexes, sectors and themes")
+    table, source = sector_table(str(data_dir))
+    if table.empty:
+        st.info("No sector data yet: it comes from TradingView, and with each EOD run.")
+        return
+    table = sectors.rotation(table)
+    periods = {"Today": "chg_pct", "1 week": "ret_1w", "1 month": "ret_1m",
+               "3 months": "ret_3m", "Year to date": "ret_ytd"}  # fmt: skip
+    a, b = st.columns([3, 2])
+    period = a.radio("Return over", list(periods), index=2, horizontal=True, key="sec_period")
+    groups = b.multiselect("Show", ["Index", "Sector", "Theme"], ["Index", "Sector", "Theme"],
+                           key="sec_groups")  # fmt: skip
+    col = periods[period]
+    view = table[table["group"].isin(groups)].sort_values(col, ascending=False)
+    shown = view[["name", "ticker", "group", col, "vs_spy_1m", "vs_spy_1w", "quadrant", "trend",
+                  "rvol"]].rename(columns={col: f"{period} %", "vs_spy_1m": "1M vs SPY",
+                                           "vs_spy_1w": "1W vs SPY", "rvol": "RVOL"})  # fmt: skip
+    styled = shown.style.format(precision=1).background_gradient(
+        cmap="RdYlGn", subset=[f"{period} %", "1M vs SPY", "1W vs SPY"]
+    )
+    st.dataframe(styled, hide_index=True, width="stretch")
+    st.caption(
+        f"{source}. Quadrant: **Leading** = ahead of SPY over the month and this week; "
+        "**Weakening** = ahead over the month, behind this week; **Lagging** = behind on both; "
+        "**Improving** = behind over the month, ahead this week (money moving in)."
+    )
+    fig = px.scatter(
+        view, x="vs_spy_1m", y="vs_spy_1w", text="ticker", color="group",
+        hover_name="name", labels={"vs_spy_1m": "1 month vs SPY (%)",
+                                   "vs_spy_1w": "1 week vs SPY (%)"},
+        height=480,
+    )  # fmt: skip
+    fig.update_traces(textposition="top center")
+    fig.add_hline(y=0, line_width=1, line_color="#888")
+    fig.add_vline(x=0, line_width=1, line_color="#888")
+    for x, y, label in ((1, 1, "Leading"), (1, -1, "Weakening"), (-1, -1, "Lagging"),
+                        (-1, 1, "Improving")):  # fmt: skip
+        fig.add_annotation(xref="paper", yref="paper", x=(x + 1) / 2 * 0.96 + 0.02,
+                           y=(y + 1) / 2 * 0.96 + 0.02, text=label, showarrow=False,
+                           font={"color": "#888"})  # fmt: skip
+    st.plotly_chart(fig, width="stretch", key="sec_rotation")
+
+    files = industry_files(str(data_dir))
+    if files:
+        st.subheader("Industries: who leads and who is moving")
+        latest = read_parquet(files[-1])
+        back = st.radio("Rank move since", ["1 week", "1 month"], horizontal=True, key="ind_back")
+        offset = 5 if back == "1 week" else 21
+        earlier = read_parquet(files[-1 - offset]) if len(files) > offset else pd.DataFrame()
+        moves = sectors.industry_moves(latest, earlier)
+        a, b = st.columns(2)
+        cols = ["industry_rank", "industry", "sector", "moved", "med_ret_22", "members"]
+        names = {"industry_rank": "rank", "moved": f"moved ({back})",
+                 "med_ret_22": "median 1M %"}  # fmt: skip
+        a.markdown("**Top 15 now**")
+        a.dataframe(moves.head(15)[cols].rename(columns=names).round(1), hide_index=True)
+        b.markdown(f"**Climbing most** ({back})")
+        climbing = moves.dropna(subset=["moved"]).sort_values("moved", ascending=False).head(15)
+        b.dataframe(climbing[cols].rename(columns=names).round(1), hide_index=True)
+        st.caption(
+            "Industries ranked by their stocks' median 1- and 3-month returns (the EOD job). "
+            "A big climb is money moving into a group before it reaches the top. Needs "
+            f"{offset + 1} saved EOD runs for the move column."
+        )
+    with st.expander("What the Market Light means (GREEN, YELLOW, RED, STOP)"):
+        st.markdown(LIGHT_TEXT)
+
+
 def levels_for(ticker: str) -> dict:
     """Pivot and order stop from the newest EOD snapshot; your open position's stop and open
     plans' entries and stops."""
@@ -1040,9 +1193,8 @@ if page == "Today":
     latest = [r for r in (latest_pm, latest_am, latest_mid, latest_eod) if r is not None]
     for run in sorted(latest, key=runs.index):  # newest first
         st.subheader(run.label)
-        cands = candidates_of(run)
-        for scan, hits in cands.groupby("scan", sort=False):
-            if CFG.scans[scan].action != "push":
+        for scan, hits in scan_frames(str(run.candidates)).items():
+            if scan not in CFG.scans or CFG.scans[scan].action != "push":
                 continue
             shown = hits[hits["tier"] == "alert"] if "push_tier" in CFG.scans[scan].params else hits
             label = report.SCAN_LABELS.get(scan, scan)
@@ -1065,10 +1217,10 @@ elif page == "Screens":
         st.info("No runs yet.")
         st.stop()
     run = st.selectbox("Run", runs, format_func=lambda r: r.label)
-    cands = candidates_of(run)
-    scans = list(dict.fromkeys(cands["scan"]))
+    frames = scan_frames(str(run.candidates))
+    scans = list(frames)
     scan = st.selectbox("Scan", scans, format_func=lambda s: report.SCAN_LABELS.get(s, s))
-    hits = cands[cands["scan"] == scan]
+    hits = frames[scan]
     tiers = st.multiselect("Tier", ["alert", "log"], default=["alert", "log"])
     hits = hits[hits["tier"].isin(tiers)]
     st.caption(f"{len(hits)} hits")
@@ -2241,6 +2393,7 @@ elif page == "Market":
             "return every way it was tried (data repo docs/research/how-we-test.md). Facts "
             f"about past rules, not advice. Built {heat_stats['built']}."
         )
+    market_overview()
     st.subheader("Breadth and the Market Light")
     st.dataframe(
         history[

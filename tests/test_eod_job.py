@@ -285,7 +285,8 @@ def test_push_carries_facts_and_headline(tmp_path, capsys, sent, monkeypatch):
     assert run_eod(["--data-dir", str(tmp_path), "--force"]) == 0
     out, _ = capsys.readouterr()
     assert "Context: added" in out and "supply deal" not in out
-    assert asked == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
+    facts = [a for a in asked if len(a) < 10]  # the other request is the sector ETFs
+    assert facts == [[f"NASDAQ:{GAPPER}"]]  # one request, pushed names only
     [message] = sent
     assert "no earnings" not in message.body  # silence means no report
     assert "float 6M (50% traded)" in message.body and "rev +50% / +40%" in message.body

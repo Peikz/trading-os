@@ -142,6 +142,10 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
     if slot in ("eod", "weekly") and not ranked_industries.empty:
         extras["industries"] = ranked_industries
+    if slot == "eod":
+        sector_table = _sectors()
+        if not sector_table.empty:
+            extras["sectors"] = sector_table
     if slot == "weekly":
         header = [*header, *industries.lines(ranked_industries, cfg.context["industry_top_n"])]
     if slot in ("pm", "eod"):
@@ -244,6 +248,22 @@ def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Luk flush: FAILED ({type(exc).__name__}), scan empty")
         return uni
+
+
+def _sectors() -> pd.DataFrame:
+    """Indexes, sectors and themes (`sectors.py`) in one TradingView request, for the
+    dashboard's Market page. Auxiliary: never fails the run."""
+    from trading_os import sectors
+
+    try:
+        table = once_more(
+            lambda: sectors.fetch(tv.fetch_details), label="TradingView", wait_s=TV_RETRY_WAIT_S
+        )
+        status(f"Sectors: {len(table)} of {len(sectors.ETFS)} saved")
+        return table
+    except Exception as exc:  # noqa: BLE001 - the Market page shows the last saved day
+        status(f"Sectors: FAILED ({type(exc).__name__}), left out")
+        return pd.DataFrame()
 
 
 def _job_health(cfg) -> list[str]:
