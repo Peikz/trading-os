@@ -724,6 +724,75 @@ def minute_bars(folder: str, ticker: str, day) -> pd.DataFrame:
     return bars[bars["ts"].dt.date == day].sort_values("ts")
 
 
+@st.cache_data(ttl=60, show_spinner="Fetching minute bars from Alpaca…")
+def live_minutes(ticker: str, day: dt.date) -> pd.DataFrame:
+    """One session's minute bars from Alpaca's free real-time IEX feed (keys from the
+    environment: scripts/set_local_secrets.ps1), 04:00-20:00 New York; ts in New York time."""
+    from trading_os.alpaca import AlpacaClient
+
+    client = AlpacaClient(
+        os.environ["ALPACA_API_KEY_ID"], os.environ["ALPACA_API_SECRET_KEY"], per_minute=60
+    )
+    client.feed = "iex"
+    start = dt.datetime.combine(day, dt.time(4, 0), tzinfo=clock.NEW_YORK)
+    end = min(
+        dt.datetime.combine(day, dt.time(20, 0), tzinfo=clock.NEW_YORK), dt.datetime.now(dt.UTC)
+    )
+    raw = client.bars([ticker], "1Min", start.astimezone(dt.UTC), end.astimezone(dt.UTC))
+    if raw.empty:
+        return raw
+    ts = pd.to_datetime(raw["ts"], utc=True).dt.tz_convert(clock.NEW_YORK)
+    return raw.assign(ts=ts, minute=ts.dt.hour * 60 + ts.dt.minute)
+
+
+def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
+    """The Chart page's live intraday chart: a recent session's 1/5/15-minute candles with VWAP,
+    the prior close, your plan levels and a line at 10:30, the EP entry time."""
+    if not (os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY")):
+        st.info(
+            "Live minute bars need the Alpaca keys on this PC: run "
+            "scripts\\set_local_secrets.ps1 (press Enter at the ntfy prompt to skip it), then "
+            "restart the dashboard."
+        )
+        return
+    today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
+    recent = clock.sessions_back(CFG.schedule, today, 5)[::-1]
+    a, b = st.columns(2)
+    day = a.selectbox("Session", recent, key="ch_live_day")
+    every = b.radio(
+        "Candle",
+        [1, 5, 15],
+        index=1,
+        horizontal=True,
+        key="ch_live_every",
+        format_func=lambda m: f"{m} min",
+    )
+    try:
+        minutes = live_minutes(ticker, day)
+    except Exception as exc:  # noqa: BLE001 - shown, not raised
+        st.error(f"Alpaca didn't answer ({type(exc).__name__}).")
+        return
+    if minutes.empty:
+        st.caption(f"No trades for {ticker} on {day} in Alpaca's IEX feed yet.")
+        return
+    prior = daily[daily["session_date"] < day]["close"] if len(daily) else pd.Series(dtype=float)
+    fig = ichart.intraday_figure(
+        minutes,
+        title=f"{ticker} · {day} · live",
+        prev_close=float(prior.iloc[-1]) if len(prior) else None,
+        levels=levels,
+        every=every,
+    )
+    with contextlib.suppress(Exception):  # the 10:30 bar may not exist yet
+        fig.add_vline(x="10:30", line_dash="dot", line_width=1, line_color="#9e9e9e")
+    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_live", width="stretch")
+    st.caption(
+        "Alpaca's IEX feed: real-time prices, but its volume is a small part of the market's. "
+        "Dotted line: 10:30, the EP entry time. Lines: the pivot, stops and plan entry for this "
+        "stock. Refreshes every minute."
+    )
+
+
 def levels_for(ticker: str) -> dict:
     """Pivot and order stop from the newest EOD snapshot; your open position's stop and open
     plans' entries and stops."""
@@ -1361,8 +1430,13 @@ elif page == "Chart":
     # A toggle, not an expander: Streamlit runs a collapsed expander's code too, and that
     # fetched a month of minute bars from GitHub for every stock you looked at.
     if st.toggle("Intraday (minute bars)", key="ch_intraday_on"):
-        days = minute_days(str(data_dir), ticker)
-        if not days:
+        source = st.radio(
+            "Minute bars", ["Live (Alpaca)", "Study days"], horizontal=True, key="ch_src"
+        )
+        days = [] if source.startswith("Live") else minute_days(str(data_dir), ticker)
+        if source.startswith("Live"):
+            live_intraday(ticker, levels_for(ticker), bars)
+        elif not days:
             st.caption(
                 "No minute bars for this stock on this PC. They exist for days a strategy could "
                 "have traded it (the minute study's data)."

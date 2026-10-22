@@ -258,3 +258,15 @@ def test_a_tagged_daily_note_shows_in_the_journal_and_on_the_chart(data_repo, mo
     at.text_input(key="ch_ticker").set_value("AAA").run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("From your daily notes" in m.value for m in at.markdown)
+
+
+def test_live_minute_bars_ask_for_the_keys_when_missing(data_repo, monkeypatch):
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    monkeypatch.delenv("ALPACA_API_KEY_ID", raising=False)
+    monkeypatch.delenv("ALPACA_API_SECRET_KEY", raising=False)
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Chart").run()
+    at.text_input(key="ch_ticker").set_value("AAA").run()
+    at.toggle(key="ch_intraday_on").set_value(True).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Alpaca keys" in i.value for i in at.info)

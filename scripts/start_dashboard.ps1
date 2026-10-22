@@ -19,4 +19,10 @@ if ($tailscale) {
     Write-Host "Tailscale not installed: the dashboard is on this PC only (http://localhost:$port)."
 }
 
+# Alpaca keys for the Chart page's live minute bars, if stored (scripts\set_local_secrets.ps1).
+foreach ($name in "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY") {
+    $value = [Environment]::GetEnvironmentVariable($name, "User")
+    if ($value) { Set-Item -Path "Env:$name" -Value $value }
+}
+
 uv run --group app streamlit run app/streamlit_app.py --server.port $port --server.headless true
