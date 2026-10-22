@@ -266,12 +266,14 @@ def _job_health(cfg) -> list[str]:
 def _position_lines(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame) -> list[str]:
     """The position manager's block (`manage.py`): each open position's plan, day k of N, the
     day's exits, 20-day MA closes, earnings, R and risk. Auxiliary: never fails the run."""
-    from trading_os import dashboard, manage
+    from trading_os import dashboard, manage, saxo
 
     try:
         positions = dashboard.latest_positions(data_dir)
         if positions.empty:
             return []
+        # Your working stop orders at Saxo win over the logged stop (scripts/saxo_sync.py).
+        positions = saxo.with_broker_stops(positions, saxo.latest_stops(data_dir))
         if slot == "eod":
             market = uni
         else:
