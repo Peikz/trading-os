@@ -37,6 +37,7 @@ The results live only in the private data repo (`docs/research/`, start with `ho
 - **Costs in R:** stops at least 1 % and 0.25 ADR away; ETFs and funds left out.
 - **Measure selection luck** over the family of variants actually tried (probability of backtest overfitting, deflated Sharpe), and **placebo** any surprising account effect (the same tweak on a random subset of the same size, and on the other period).
 - **Reproduce a reported number exactly before building on it.**
+- **A model (regression, ML) must beat the quality points in the account and when trained on either period** before it picks or ranks trades. Leave out features that describe a bar the entry can't see yet (e.g. the gap day's close for a 10:30 buy).
 - **Emil trades setups only:** indexes appear only as a labelled yardstick, never as a plan. Results are facts about past rules, not advice.
 
 ## Code conventions
