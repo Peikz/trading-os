@@ -22,8 +22,9 @@ def _zip() -> bytes:
         "NONDERIV_TRANS.tsv": "ACCESSION_NUMBER\tTRANS_DATE\tTRANS_CODE\tTRANS_SHARES\t"
         "TRANS_PRICEPERSHARE\n"
         "a1\t01-MAR-2024\tP\t1000\t10.5\na1\t01-MAR-2024\tA\t500\t0\n",
-        "REPORTINGOWNER.tsv": "ACCESSION_NUMBER\tRPTOWNER_RELATIONSHIP\tRPTOWNER_TITLE\n"
-        "a1\tDirector,Officer\tCEO\n",
+        "REPORTINGOWNER.tsv": "ACCESSION_NUMBER\tRPTOWNERCIK\tRPTOWNER_RELATIONSHIP\t"
+        "RPTOWNER_TITLE\n"
+        "a1\t99\tDirector,Officer\tCEO\n",
     }
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -39,6 +40,7 @@ def test_insider_table_keeps_open_market_purchases_and_sales():
     assert row["ticker"] == A and row["code"] == "P" and row["value"] == 10_500
     assert row["filing_date"] == dt.date(2024, 3, 5) and row["trans_date"] == dt.date(2024, 3, 1)
     assert row["director"] and row["officer"] and not row["ten_pct"]
+    assert row["owner_cik"] == 99
 
 
 def test_news_rows_keep_headlines_only():

@@ -30,7 +30,7 @@ INSIDER_URL = (
 NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
 INSIDER_COLUMNS = [
     "ticker", "cik", "filing_date", "trans_date", "code", "shares", "price", "value",
-    "director", "officer", "ten_pct", "title",
+    "director", "officer", "ten_pct", "title", "owner_cik",
 ]  # fmt: skip
 ACC = "ACCESSION_NUMBER"
 NEWS_COLUMNS = ["ticker", "session_date", "id", "created_at", "headline", "source", "symbols"]
@@ -63,11 +63,14 @@ def insider_table(blob: bytes) -> pd.DataFrame:
             "NONDERIV_TRANS.TSV",
             [ACC, "TRANS_DATE", "TRANS_CODE", "TRANS_SHARES", "TRANS_PRICEPERSHARE"],
         )
-        owner = _read(z, "REPORTINGOWNER.TSV", [ACC, "RPTOWNER_RELATIONSHIP", "RPTOWNER_TITLE"])
+        owner = _read(
+            z, "REPORTINGOWNER.TSV", [ACC, "RPTOWNERCIK", "RPTOWNER_RELATIONSHIP", "RPTOWNER_TITLE"]
+        )
     trans = trans[trans["TRANS_CODE"].isin(["P", "S"])]
     rel = owner.groupby(ACC).agg(
         relationship=("RPTOWNER_RELATIONSHIP", lambda s: ",".join(s.dropna())),
         title=("RPTOWNER_TITLE", lambda s: ",".join(s.dropna())),
+        owner_cik=("RPTOWNERCIK", "first"),
     )
     t = trans.merge(sub, on=ACC).join(rel, on=ACC)
     shares = pd.to_numeric(t["TRANS_SHARES"], errors="coerce")
@@ -87,6 +90,7 @@ def insider_table(blob: bytes) -> pd.DataFrame:
             "officer": relationship.str.contains("officer"),
             "ten_pct": relationship.str.contains("tenpercent|10"),
             "title": t["title"].fillna(""),
+            "owner_cik": pd.to_numeric(t["owner_cik"], errors="coerce"),
         }
     )
     return out.dropna(subset=["ticker", "filing_date"])[INSIDER_COLUMNS]
