@@ -317,14 +317,17 @@ def _position_lines(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame) 
 
 
 def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
-    """Pre-market: the last close's hits of the scans that push now (`push_slot: pm`: BO-Watch,
-    MA-surf, the parabolics; Emil, 21 Oct 2026), with today's pre-market price and move, so
-    they arrive before the open. Auxiliary: a problem leaves them out, never fails the run."""
+    """Pre-market: the last session's hits of the scans that push now (`push_slot: pm`:
+    BO-Watch, MA-surf, the parabolics, Luk flush from the EOD run; EP-AH from the after-hours
+    check, Emil 23 Oct 2026), with today's pre-market price and move, so they arrive before the
+    open. `carried_from` is the run they came from. Auxiliary: a problem leaves them out, never
+    fails the run."""
     names = [
         name
         for name, scan in cfg.scans.items()
         if scan.enabled
         and scan.action == "push"
+        and isinstance(scan.slot, str)
         and scan.slot != "pm"
         and "pm" in notify.push_slots(scan)
     ]
@@ -332,18 +335,23 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
         return {}
     try:
         last = clock.previous_session(cfg.schedule, session)
-        path = Path(data_dir) / "data" / "candidates" / str(last.year) / f"{last}_eod.parquet"
-        if not path.exists():
-            status("Last close's watch: no EOD run to carry over")
-            return {}
-        cands = pd.read_parquet(path)
+        folder = Path(data_dir) / "data" / "candidates" / str(last.year)
         fields = [c for c in ("pm_price", "pm_change_pct", "pm_volume") if c in uni]
         pm = uni.drop_duplicates("ticker").set_index("ticker")[fields]
-        out = {}
+        runs, out = {}, {}
         for name in names:
-            rows = cands[cands["scan"] == name]
+            slot = cfg.scans[name].slot
+            if slot not in runs:
+                path = folder / f"{last}_{slot}.parquet"
+                runs[slot] = pd.read_parquet(path) if path.exists() else None
+            if runs[slot] is None:
+                continue
+            rows = runs[slot][runs[slot]["scan"] == name]
             rows = rows.drop(columns=fields, errors="ignore").join(pm, on="ticker")
-            out[name] = rows.assign(carried_from="eod").reset_index(drop=True)
+            out[name] = rows.assign(carried_from=slot).reset_index(drop=True)
+        if not out:
+            status("Last close's watch: no run to carry over")
+            return {}
         status("Last close's watch: " + ", ".join(f"{n} {len(h)}" for n, h in out.items()))
         return out
     except Exception as exc:  # noqa: BLE001 - extra lines in the push; the run goes on

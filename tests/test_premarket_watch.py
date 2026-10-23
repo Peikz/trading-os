@@ -95,6 +95,31 @@ def test_the_premarket_run_carries_last_closes_hits(tmp_path: Path):
     assert (out["ma_surf"]["carried_from"] == "eod").all()
 
 
+def test_ep_ah_comes_again_in_the_premarket_push(tmp_path: Path):
+    """EP-AH (Emil, 23 Oct 2026): pushed at the after-hours check and again the next morning,
+    against its after-hours price, without last night's ticket or buy time."""
+    cfg = load_config()
+    scan = cfg.scans["ep_ah"]
+    assert notify.pushes_now(scan, "ah") and notify.pushes_now(scan, "pm")
+    last = dt.date(2026, 10, 21)
+    folder = tmp_path / "data" / "candidates" / "2026"
+    folder.mkdir(parents=True)
+    graded = {"grade": "A+", "grade_entry_rule": "ah_1645", "grade_stop": 9.5, "ah_price": 11.0,
+              "ah_change_pct": 10.0, "ah_volume": 2e5}  # fmt: skip
+    hit(scan="ep_ah", **graded).to_parquet(folder / f"{last}_ah.parquet")
+    uni = pd.DataFrame({"ticker": [A], "pm_price": [10.78], "pm_change_pct": [7.8]})
+    out = job._from_last_close(tmp_path, cfg, dt.date(2026, 10, 22), uni)
+    assert "ma_surf" not in out  # no EOD file: only the after-hours run carries over
+    row = out["ep_ah"].iloc[0].to_dict()
+    assert row["carried_from"] == "ah" and row["pm_price"] == 10.78
+    assert notify.premarket_line(row) == "PM 10.78 +7.8% · -2.0% vs AH 11.00"
+    assert notify.saxo_line(row, "ep_ah") is None
+    selected = notify.select_for_push(out, cfg, "pm")
+    message = notify.build_message(ctx("pm"), out, selected, cfg)
+    assert notify.AH_CARRIED_TEXT.split(":")[0] in message.body
+    assert "buy after hours now" not in message.body
+
+
 def test_the_momentum_scans_are_live_and_pushed_next_morning():
     cfg = load_config()
     for name in ("mb_up", "luk_pullback", "vcp"):

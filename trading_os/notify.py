@@ -122,6 +122,7 @@ ENTRY_TEXT = {
     "t_1030": "buy ~10:30 NY (16:30 CPH)",
     "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
 }
+AH_CARRIED_TEXT = "found after hours last night: the study bought at 16:45 NY, before 17:00"
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 
 
@@ -174,13 +175,20 @@ UNGRADED_PLANS = {
 
 def premarket_line(row: Mapping[str, Any]) -> str | None:
     """`PM 15.80 +3.1% · +3.3% vs pivot`, and a warning when it is up more than 1 ADR
-    pre-market (the study's MA-surf plan doesn't buy a stock already up more than its ADR)."""
-    if row.get("carried_from") != "eod":
+    pre-market (the study's MA-surf plan doesn't buy a stock already up more than its ADR).
+    EP-AH from last night: `PM 15.80 +12.0% · -2.0% vs AH 16.12`."""
+    carried = row.get("carried_from")
+    if carried not in ("eod", "ah"):
         return None
     price, change = row.get("pm_price"), row.get("pm_change_pct")
     if price is None or pd.isna(price):
         return "PM: no trade yet"
     text = f"PM {price:.2f}" + ("" if change is None or pd.isna(change) else f" {change:+.1f}%")
+    if carried == "ah":  # an after-hours mover: against its after-hours price, no ADR warning
+        ah = row.get("ah_price")
+        if ah is not None and not pd.isna(ah) and ah > 0:
+            text += f" · {(price / ah - 1) * 100:+.1f}% vs AH {ah:.2f}"
+        return text
     pivot = row.get("pivot")
     if pivot is not None and not pd.isna(pivot) and pivot > 0:
         text += f" · {(price / pivot - 1) * 100:+.1f}% vs pivot"
@@ -305,6 +313,8 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
     if points:
         out += wrap(points.split(" · "), WIDTH - len(INDENT))
     when = ENTRY_TEXT.get(str(row.get("grade_entry_rule")), "")
+    if row.get("carried_from") == "ah":  # the morning after: that buy time has passed
+        when = AH_CARRIED_TEXT
     hold = row.get("grade_hold_sessions")
     median = row.get("grade_stat_days_median")
     exit_text = ""
@@ -485,8 +495,8 @@ def format_weekly(row: Mapping[str, Any], scan: str) -> str:
 
 
 def _first_line(row: Mapping[str, Any], scan: str, slot: str) -> str:
-    if row.get("carried_from") == "eod":  # found at last night's close: its own numbers
-        slot = "eod"
+    if row.get("carried_from") in ("eod", "ah"):  # found last night: that run's numbers
+        slot = row["carried_from"]
     if slot == "weekly":
         return format_weekly(row, scan)
     if scan.startswith("breakout_"):
@@ -544,7 +554,7 @@ def saxo_line(row: Mapping[str, Any], scan: str) -> str | None:
         return None if v is None or pd.isna(v) else float(v)
 
     stop = num("plan_stop") or num("grade_stop") or num("order_stop")
-    if stop is None:
+    if stop is None or row.get("carried_from") == "ah":  # last night's ticket: its time is gone
         return None
     shares = num("plan_shares")
     amount = f"Buy {int(shares):,}" if shares else "Buy"

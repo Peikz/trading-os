@@ -318,6 +318,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     "ep_ah": {
         "push_tier",
         "push_ungraded",
+        "push_slot",
         "ah_change_min_pct",
         "price_min",
         "market_cap_min",

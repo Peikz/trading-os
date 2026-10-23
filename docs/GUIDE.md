@@ -254,7 +254,7 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 
 | Push | When to buy |
 |---|---|
-| 🌙 EP-AH (16:50 New York check) | after hours now, before 17:00 New York (23:00 Copenhagen) |
+| 🌙 EP-AH (16:50 New York check, and again in the next pre-market push since 23 Oct 2026) | after hours now, before 17:00 New York (23:00 Copenhagen). The morning copy shows the pre-market price and move against last night's after-hours price; the buy time has passed, so it has no Saxo ticket |
 | ⚡ EP 10:30 (10:17 check) | around 10:30 New York (16:30 Copenhagen); "flagged last evening" if the 16:50 check already sent it |
 | ⏱️ EP9M pace (10:17 check) | after the 10:15 check (16:15 Copenhagen) |
 | 🌊 Luk flush (EOD, and again in the next pre-market push with its pre-market move) | the next session around 10:30 New York (16:30 Copenhagen) |
