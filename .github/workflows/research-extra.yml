@@ -1,0 +1,59 @@
+# Extra research data (Emil, 23 Oct 2026): SEC insider purchases and sales, and Alpaca news
+# headlines for the study's EP / EP9M trades, into the data repo's "research-extra" release
+# (not git). Manual runs only. This repo is public: the job prints counts and status only.
+
+name: Research extra data
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "insiders = SEC Form 345 data sets; news = headlines for news_requests.parquet"
+        type: choice
+        options: [insiders, news]
+        default: insiders
+
+concurrency:
+  group: research-extra-${{ inputs.mode }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: The news request list
+        if: ${{ inputs.mode == 'news' }}
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p work
+          gh release download research-extra -R "${{ github.repository_owner }}/trading-os-data" -D work -p news_requests.parquet
+          echo "request files: $(ls work | wc -l)"
+
+      - name: Fetch
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: uv run --frozen --no-dev python -m trading_os.research_extra --mode ${{ inputs.mode }} --out out --requests work/news_requests.parquet
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release view research-extra -R "$REPO" >/dev/null 2>&1 || gh release create research-extra -R "$REPO" --title "Extra research data" --notes "Insider purchases and sales (SEC Form 345 data sets) and news headlines (Alpaca) for the research (trading_os/research_extra.py)." >/dev/null
+          gh release upload research-extra out/*.parquet -R "$REPO" --clobber
+          echo "uploaded: $(ls out | wc -l) files"
