@@ -13,7 +13,9 @@ the features the study used, taken the same way:
 
 Then `grader.grade` gives the grade, and the study plan becomes the hit's plan: entry at the
 live price, stop 1 ADR under it (at least the 1 % floor), the account's risk x the grade's
-multiple. Every other hit is C ("no edge after costs"). The per-grade history (trades, win
+multiple. A setup on its own plan (`stop: order`, MA-surf since 23 Oct 2026) keeps the scan's
+buy-stop at the pivot and its order stop, and trails the 20-day MA instead of a holding
+period. Every other hit is C ("no edge after costs"). The per-grade history (trades, win
 rate, R, years) comes from the private data repo. Auxiliary: a failure leaves the hits
 ungraded and never stops a run.
 """
@@ -29,7 +31,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import clock, grader, history
+from trading_os import clock, grader, history, sizing
 from trading_os import history_metrics as hm
 
 FEATURE_SESSIONS = 260  # the 52-week high before the signal (quality counts)
@@ -132,6 +134,7 @@ POINT_NAMES = {
     "eps_yoy_pos": "EPS up y/y",
     "near_52w_high": "near 52w high",
     "tight_5d": "tight 5d",
+    "spy_over_ma200": "SPY > 200-day",
 }
 
 
@@ -206,10 +209,14 @@ def grade_hits(
             feats.update(extra.loc[ticker].dropna().to_dict())
         if "base_days" in rec:
             feats["sig_base_days"] = rec.get("base_days")
-        entry = entry_price(rec, scan)
-        adr_usd = rec.get("adr20_usd")
         adr_pct = rec.get("adr20_pct")
-        stop = stop_for(entry, adr_usd, rule["stop_adr"], cfg.intraday_study["min_stop_pct"])
+        if rule.get("stop") == "order":  # its own plan: buy-stop at the pivot, its order stop
+            entry, stop, basis = sizing.plan(rec, scan, cfg.sizing)
+        else:
+            entry = entry_price(rec, scan)
+            min_stop = cfg.intraday_study["min_stop_pct"]
+            stop = stop_for(entry, rec.get("adr20_usd"), rule["stop_adr"], min_stop)
+            basis = "1 ADR (study plan)"
         g = grader.grade(
             scan,
             feats,
@@ -230,10 +237,12 @@ def grade_hits(
                 "grade_entry_rule": rule.get("entries", {}).get(
                     f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
                 ),
-                "grade_hold_sessions": rule["hold_sessions"],
+                "grade_hold_sessions": rule.get("hold_sessions"),
+                "grade_exit": rule.get("exit", "hold"),
                 "grade_risk_mult": g.risk_mult,
                 "grade_stop": stop,
                 "grade_entry": entry,
+                "grade_stop_basis": basis,
                 "grade_basis": "quality" if "parts" in rule else "scorecard",
             }
         )
@@ -269,10 +278,8 @@ def with_stats(hits: pd.DataFrame, stats: Mapping[str, Any]) -> pd.DataFrame:
 
 
 def resize(hits: pd.DataFrame, account, usd_rate: float) -> pd.DataFrame:
-    """The study plan as the hit's plan: entry at the live price, the study stop, shares
-    for the account's risk x the grade's multiple (C: none)."""
-    from trading_os import sizing
-
+    """The study plan as the hit's plan: entry at the live price (MA-surf: the pivot), the
+    study stop, shares for the account's risk x the grade's multiple (C: none)."""
     if account is None or hits.empty or "grade_stop" not in hits:
         return hits
     out = hits.copy()
@@ -293,7 +300,8 @@ def resize(hits: pd.DataFrame, account, usd_rate: float) -> pd.DataFrame:
             continue
         for key, value in sized.items():
             out.at[idx, key] = value
-        out.at[idx, "plan_stop_basis"] = "1 ADR (study plan)"
+        basis = rec.get("grade_stop_basis")
+        out.at[idx, "plan_stop_basis"] = basis if isinstance(basis, str) else "1 ADR (study plan)"
     return out
 
 

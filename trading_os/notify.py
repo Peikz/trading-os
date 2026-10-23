@@ -121,7 +121,9 @@ ENTRY_TEXT = {
     "t_1015": "buy after the 10:15 check (16:15 CPH)",
     "t_1030": "buy ~10:30 NY (16:30 CPH)",
     "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
+    "pivot_1000": "buy-stop at the pivot from 10:00 NY (16:00 CPH)",
 }
+EXIT_TEXT = {"trail_ma20": "trail the 20-day MA: out on a close under it"}
 AH_CARRIED_TEXT = "found after hours last night: the study bought at 16:45 NY, before 17:00"
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 
@@ -144,8 +146,8 @@ def best_first(hits: pd.DataFrame) -> pd.DataFrame:
 
 # The plan of a scan pushed without a grade (`push_ungraded`): the study's entry and exit.
 UNGRADED_PLANS = {
-    "ma_surf": [
-        "C (no grade) · from 10:00 NY (16:00 CPH)",
+    "ma_surf": [  # graded since 23 Oct 2026 (Emil): A with SPY over its 200-day
+        "A with SPY over its 200-day, else C · from 10:00 NY (16:00 CPH)",
         "over the pivot: buy · under it: buy-stop at the pivot",
         "out on a close under the 20-day MA",
     ],
@@ -317,7 +319,7 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
         when = AH_CARRIED_TEXT
     hold = row.get("grade_hold_sessions")
     median = row.get("grade_stat_days_median")
-    exit_text = ""
+    exit_text = EXIT_TEXT.get(str(row.get("grade_exit")), "")
     if hold is not None and not pd.isna(hold):
         exit_text = f"out at the close after {int(hold)} sessions"
         if median is not None and not pd.isna(median):

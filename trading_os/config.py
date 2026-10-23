@@ -264,6 +264,9 @@ GRADING_KEYS = {
     "strategies",
 }
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
+# A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
+GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
+QUALITY_OWN_PLAN = {"stop": {"order"}, "exit": {"trail_ma20"}}
 CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
 GRADING_COST_KEYS = {
     "commission_pct",
@@ -588,7 +591,12 @@ def _check_grading(raw: Any) -> None:
     ):
         raise ConfigError("grading.quality_enabled: true, false or a list of quality strategies")
     for name, rule in raw["quality"].items():
-        _check_keys(f"grading.quality.{name}", rule, GRADING_QUALITY_KEYS)
+        own = isinstance(rule, dict) and "exit" in rule
+        expected = GRADING_QUALITY_OWN_PLAN_KEYS if own else GRADING_QUALITY_KEYS
+        _check_keys(f"grading.quality.{name}", rule, expected)
+        for key, allowed in QUALITY_OWN_PLAN.items() if own else ():
+            if rule[key] not in allowed:
+                raise ConfigError(f"grading.quality.{name}.{key}: one of {sorted(allowed)}")
         unknown = set(rule["parts"]) - set(raw["conditions"])
         if unknown:
             raise ConfigError(f"grading.quality.{name}: unknown conditions {sorted(unknown)}")

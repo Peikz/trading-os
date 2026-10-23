@@ -444,8 +444,16 @@ def quality_rules(grading) -> pd.DataFrame:
                 "Points (one each)": points,
                 "Grade by points": " · ".join(bands),
                 "When to buy": buys,
-                "Stop": f"{rule['stop_adr']:g} ADR under the entry (at least 1 %)",
-                "Exit": f"at the close {rule['hold_sessions']} sessions after the entry",
+                "Stop": (
+                    f"{rule['stop_adr']:g} ADR under the entry (at least 1 %)"
+                    if "stop_adr" in rule
+                    else "the scan's order stop"
+                ),
+                "Exit": (
+                    f"at the close {rule['hold_sessions']} sessions after the entry"
+                    if "hold_sessions" in rule
+                    else notify.EXIT_TEXT.get(rule.get("exit"), str(rule.get("exit")))
+                ),
             }
         )
     return pd.DataFrame(rows)

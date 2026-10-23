@@ -164,10 +164,12 @@ def quality_grade(scan: str, features: Mapping[str, Any], grading: Mapping[str, 
             label = grade_label
             break
     entries = rule.get("entries", {})
-    plan = {
+    plan = {  # a setup on its own plan has `stop` / `exit` instead (MA-surf)
         "entry": entries.get(scan, rule.get("entry")),
-        "stop_adr": rule["stop_adr"],
-        "hold_sessions": rule["hold_sessions"],
+        "stop_adr": rule.get("stop_adr"),
+        "hold_sessions": rule.get("hold_sessions"),
+        "stop": rule.get("stop", "adr"),
+        "exit": rule.get("exit", "hold"),
     }
     return Grade(
         scan,

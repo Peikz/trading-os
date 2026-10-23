@@ -249,7 +249,7 @@ of yes/no points a setup has. EP and EP9M: an earnings release (EP9M: in the las
 1–2 months sideways, a market that isn't hot (fewer than 45 stocks up 50 % in a quarter),
 revenue growth accelerating, EPS up year on year, within 20 % of the 52-week high; 5–6 points =
 A+; 4 points or fewer is C for both (saved, not pushed as a trade: an EP with 4 is about
-break-even, and EP9M with 4 as a B trade halved the account's result in the study). Luk flush: a market that isn't hot and a tight 5-day range = A. The push says
+break-even, and EP9M with 4 as a B trade halved the account's result in the study). Luk flush: a market that isn't hot and a tight 5-day range = A. MA-surf (since 23 Oct 2026): SPY closed over its 200-day average on the signal day = A at 0.75 % risk, else C. The push says
 "N of M quality points" and shows the history of that grade at that entry:
 
 | Push | When to buy |
@@ -259,8 +259,8 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 | ⏱️ EP9M pace (10:17 check) | after the 10:15 check (16:15 Copenhagen) |
 | 🌊 Luk flush (EOD, and again in the next pre-market push with its pre-market move) | the next session around 10:30 New York (16:30 Copenhagen) |
 | 💥 MB up, ↩️ Luk pullback, 🌀 VCP (found at the close, pushed the next pre-market since 22 Oct 2026, grade C) | each with its study plan under the section and a 🌡 heat line: how that setup did at today's market heat on both test periods (held, mixed, lost or few trades). Minervini's Trend Template is saved as a daily list (Screens), not pushed |
-| 🎯 BO-Watch, 🏄 MA-surf, 🪂 Parabolic long, 🎢 Parabolic short (found at the close, pushed the next pre-market at 07:17 New York / 13:17 Copenhagen, grade C; since 21 Oct 2026) | each line shows the pre-market price and move, the move against the pivot, and ⚠️ when it is already up more than 1 ADR. The study plan sits under each section header. Parabolic long: buy at the open, stop 1 ADR under, out after 21 sessions. Parabolic short: short around 10:30, stop over the signal day's high, cover on a close over the 20-day MA |
-| 🏄 MA-surf (EOD, grade C, pushed on your request since 21 Oct 2026) | the next session from 10:00 New York (16:00 Copenhagen): over the pivot buy, under it a buy-stop at the pivot; stop under the base's right side; sell on a close under the 20-day MA |
+| 🎯 BO-Watch, 🏄 MA-surf, 🪂 Parabolic long, 🎢 Parabolic short (found at the close, pushed the next pre-market at 07:17 New York / 13:17 Copenhagen, grade C except MA-surf with SPY over its 200-day; since 21 Oct 2026) | each line shows the pre-market price and move, the move against the pivot, and ⚠️ when it is already up more than 1 ADR. The study plan sits under each section header. Parabolic long: buy at the open, stop 1 ADR under, out after 21 sessions. Parabolic short: short around 10:30, stop over the signal day's high, cover on a close over the 20-day MA |
+| 🏄 MA-surf (found at EOD, pushed the next pre-market; A when SPY is over its 200-day, else C, since 23 Oct 2026) | the next session from 10:00 New York (16:00 Copenhagen): over the pivot buy, under it a buy-stop at the pivot; stop under the base's right side; sell on a close under the 20-day MA |
 
 The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked
 blind on 2016–21 do worse (research report §9, portfolio report §11–12).
