@@ -4,6 +4,9 @@
 - `insiders`: SEC's quarterly insider transaction data sets (Forms 3/4/5, free bulk files):
   open-market purchases (code P) and sales (S) with the filing date, the issuer's ticker and
   the owner's role. Filing date = the day the market could know.
+- `events8k`: every 8-K since 2015 with its item codes (1.01 a material agreement, 2.02
+  results, 5.02 a management change, 8.01 other events...) and acceptance time, from SEC's
+  bulk submissions.zip.
 - `news`: Alpaca's news headlines (Benzinga) for a list of (ticker, window end) requests, the
   study's EP / EP9M trades, each for the 4 days up to its entry. Headlines only, no article text.
 
@@ -154,9 +157,39 @@ def news(client, requests_file: Path, out: Path, days: int = 4) -> int:
     return 0 if failed < len(asks) else 1
 
 
+def events_8k(zip_path: Path, since: str = "2015-01-01") -> pd.DataFrame:
+    """cik, accession, filed, accepted, items for every 8-K filed since `since`."""
+    import json
+
+    from trading_os.sec_bulk import _member_cik
+
+    cols: dict[str, list] = {k: [] for k in ("cik", "accession", "filed", "accepted", "items")}
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in zf.infolist():
+            parsed = _member_cik(member.filename)
+            if parsed is None:
+                continue
+            cik, is_main = parsed
+            body = json.loads(zf.read(member))
+            page = (body.get("filings") or {}).get("recent") or {} if is_main else body
+            forms = page.get("form") or []
+            n = len(forms)
+            keys = ("accessionNumber", "filingDate", "acceptanceDateTime", "items")
+            get = {k: page.get(k) or [None] * n for k in keys}
+            for i, form in enumerate(forms):
+                if form != "8-K" or (get["filingDate"][i] or "") < since:
+                    continue
+                cols["cik"].append(cik)
+                cols["accession"].append(get["accessionNumber"][i])
+                cols["filed"].append(get["filingDate"][i])
+                cols["accepted"].append(get["acceptanceDateTime"][i])
+                cols["items"].append(get["items"][i] or "")
+    return pd.DataFrame(cols)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
-    parser.add_argument("--mode", choices=["insiders", "news"], required=True)
+    parser.add_argument("--mode", choices=["insiders", "events8k", "news"], required=True)
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--requests", type=Path, help="news: the (ticker, until_utc) list")
     parser.add_argument("--first-year", type=int, default=2015)
@@ -169,6 +202,19 @@ def main(argv: list[str] | None = None) -> int:
             status("Insiders: SEC_USER_AGENT not set")
             return 1
         return insiders(BulkClient(agent, 5), args.out, args.first_year, dt.date.today())
+    if args.mode == "events8k":
+        from trading_os.sec_bulk import SUBMISSIONS_ZIP_URL, BulkClient
+
+        agent = os.environ.get("SEC_USER_AGENT", "")
+        if "@" not in agent:
+            status("8-K events: SEC_USER_AGENT not set")
+            return 1
+        path = BulkClient(agent, 5).download(SUBMISSIONS_ZIP_URL, Path("work") / "submissions.zip")
+        table = events_8k(path)
+        args.out.mkdir(parents=True, exist_ok=True)
+        table.to_parquet(args.out / "events_8k.parquet", index=False)
+        status(f"8-K events: {len(table)} filings")
+        return 0 if len(table) else 1
     from trading_os.alpaca import AlpacaClient
 
     key = os.environ.get("ALPACA_API_KEY_ID", "")

@@ -50,3 +50,20 @@ def test_news_rows_keep_headlines_only():
     assert rows == [{"ticker": A, "session_date": dt.date(2024, 3, 5), "id": 7,
                      "created_at": "2024-03-05T12:00:00Z", "headline": "x", "source": "benzinga",
                      "symbols": A}]  # fmt: skip
+
+
+def test_events_8k_keeps_8ks_with_their_items(tmp_path):
+    import json
+
+    main = {"filings": {"recent": {"form": ["8-K", "10-Q", "8-K"],
+                                   "accessionNumber": ["x1", "x2", "x3"],
+                                   "filingDate": ["2024-03-05", "2024-03-06", "2014-01-02"],
+                                   "acceptanceDateTime": ["2024-03-05T16:05:00.000Z"] * 3,
+                                   "items": ["1.01,9.01", "", "2.02"]}}}  # fmt: skip
+    path = tmp_path / "submissions.zip"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("CIK0000000123.json", json.dumps(main))
+    t = rx.events_8k(path)
+    want = {"cik": 123, "accession": "x1", "filed": "2024-03-05",
+            "accepted": "2024-03-05T16:05:00.000Z", "items": "1.01,9.01"}  # fmt: skip
+    assert t.to_dict("records") == [want]

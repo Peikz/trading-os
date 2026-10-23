@@ -1,4 +1,5 @@
-# Extra research data (Emil, 23 Oct 2026): SEC insider purchases and sales, and Alpaca news
+# Extra research data (Emil, 23 Oct 2026): SEC insider purchases and sales, 8-K item codes,
+# and Alpaca news
 # headlines for the study's EP / EP9M trades, into the data repo's "research-extra" release
 # (not git). Manual runs only. This repo is public: the job prints counts and status only.
 
@@ -8,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "insiders = SEC Form 345 data sets; news = headlines for news_requests.parquet"
+        description: "insiders = SEC Form 345; events8k = every 8-K with its items; news = headlines"
         type: choice
-        options: [insiders, news]
+        options: [insiders, events8k, news]
         default: insiders
 
 concurrency:
