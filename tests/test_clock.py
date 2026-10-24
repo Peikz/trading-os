@@ -2,7 +2,13 @@ import datetime as dt
 
 import pytest
 
-from trading_os.clock import in_window, session_date, sessions_after, sessions_back
+from trading_os.clock import (
+    in_window,
+    previous_session,
+    session_date,
+    sessions_after,
+    sessions_back,
+)
 from trading_os.config import load_config
 
 UTC = dt.UTC
@@ -132,3 +138,12 @@ def test_intraday_session_is_today_once_open(schedule):
     assert session_date(schedule, "mid", utc(2026, 10, 19, 16, 3)) == dt.date(2026, 10, 19)
     # Before the open (a forced run) it is the previous session.
     assert session_date(schedule, "am", utc(2026, 10, 19, 11, 0)) == dt.date(2026, 10, 16)
+
+
+def test_previous_session_takes_any_day(schedule):
+    """A Saturday (the dashboard on a weekend) gives Friday; a session gives the one before."""
+    assert previous_session(schedule, dt.date(2026, 10, 24)) == dt.date(2026, 10, 23)
+    assert previous_session(schedule, dt.date(2026, 10, 26)) == dt.date(2026, 10, 23)
+    assert previous_session(schedule, dt.date(2026, 11, 26)) == dt.date(
+        2026, 11, 25
+    )  # Thanksgiving

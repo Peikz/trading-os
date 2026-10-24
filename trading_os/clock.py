@@ -46,7 +46,13 @@ def is_session(schedule: Schedule, day: dt.date) -> bool:
 
 
 def previous_session(schedule: Schedule, session: dt.date) -> dt.date:
-    return _calendar(schedule.calendar).previous_session(pd.Timestamp(session)).date()
+    """The last session before `session`, which need not be a session itself: a Saturday or a
+    holiday gives the session before it (the dashboard and the alert watcher ask on weekends)."""
+    cal = _calendar(schedule.calendar)
+    day = pd.Timestamp(session)
+    if cal.is_session(day):
+        return cal.previous_session(day).date()
+    return cal.date_to_session(day, direction="previous").date()
 
 
 def sessions_back(schedule: Schedule, until: dt.date, count: int) -> list[dt.date]:
