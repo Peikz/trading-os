@@ -394,6 +394,21 @@ def breadth_lines(row: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def short_lines(
+    row: Mapping[str, Any], suffix: str = "", index_row: Mapping[str, Any] | None = None
+) -> list[str]:
+    """The push's market head (Emil, 23 Oct 2026: only the Light, the heat and QQQ against its
+    averages, then the stocks): the Light line and QQQ's MA line (from `index_row`, the last
+    close's row before the open). The full header stays in the report and on the dashboard."""
+    lines = light_lines(row, suffix)[:1]
+    source = index_row if index_row is not None else row
+    if _known(source.get("qqq_close")):
+        side = _ma_side(source, "qqq")
+        if side:
+            lines.append(f"QQQ {side}")
+    return lines
+
+
 def push_lines(row: Mapping[str, Any]) -> list[str]:
     """EOD market header (push, report, dashboard): light, breadth, SPY and VIX."""
     return [*light_lines(row), *breadth_lines(row), *index_lines(row)]
@@ -442,11 +457,15 @@ def premarket_row(
     }
 
 
+def premarket_suffix(row: Mapping[str, Any]) -> str:
+    """` (from the 10-22 close)`: the close the pre-market Light was set at."""
+    day = row["last_eod_session"]
+    return f" (from the {day:%m-%d} close)" if day is not None and row["light"] else ""
+
+
 def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> list[str]:
     """Light for today's orders, last close's breadth, and the pre-market movers."""
-    day = row["last_eod_session"]
-    when = f" (from the {day:%m-%d} close)" if day is not None and row["light"] else ""
-    lines = light_lines(row, suffix=when)
+    lines = light_lines(row, suffix=premarket_suffix(row))
     if last:
         lines.append(f"Last close {breadth_lines(last)[0]}")
     qqq = row["qqq_pm_change_pct"]

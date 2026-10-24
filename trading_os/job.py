@@ -141,7 +141,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = run_scans(uni, cfg, slot)
     if slot == "weekly":
         results = _with_cats(results, args.data_dir, cfg, session)
-    extras, header = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
+    extras, header, push_head = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
     if slot in ("eod", "weekly") and not ranked_industries.empty:
         extras["industries"] = ranked_industries
     if slot == "eod":
@@ -153,7 +153,10 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if slot in ("pm", "eod"):
         header = [*header, *_position_lines(args.data_dir, cfg, session, slot, uni)]
     if slot == "eod":
-        header = [*header, *_job_health(cfg)]
+        health_line = _job_health(cfg)
+        header = [*header, *health_line]
+        # the push names a job problem only (Emil, 23 Oct 2026: market head, then the stocks)
+        push_head = [*push_head, *(x for x in health_line if not x.startswith("🩺 All"))]
     if slot in ("pm", "eod"):
         events = watchlists.update(
             state,
@@ -187,7 +190,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     else:
         report_path = store.run_outputs(args.data_dir, ctx)["report"]
         link = notify.report_url(cfg, report_path.relative_to(args.data_dir).as_posix())
-        message = notify.build_message(ctx, shown, selected, cfg, header, click=link)
+        message = notify.build_message(ctx, shown, selected, cfg, push_head, click=link)
         try:
             once_more(
                 lambda: notify.send(cfg.notify["server"], topic, message),
@@ -641,18 +644,23 @@ def _with_sizing(results: dict, data_dir: Path, cfg) -> dict:
 
 
 def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame):
-    """EOD: today's breadth row and push lines. Pre-market: the light for today, last close's
-    breadth and the pre-market movers. Weekly: the Sunday scan count. Each ends with the
-    market heat lines: how the setups did at this count (`heat`)."""
+    """(extras, the report's header, the push's head). EOD: today's breadth row and lines.
+    Pre-market: the light for today, last close's breadth and the pre-market movers. Weekly:
+    the Sunday scan count. The header ends with the market heat lines (`heat`); the push
+    keeps only the Light, the heat and QQQ against its averages (Emil, 23 Oct 2026)."""
     stats = heat.load(data_dir)
     if slot == "weekly":
         count = breadth.scan_count(uni, cfg)
         field = cfg.market_light["scan_count"]["avg_volume_field"]
         status("Market Light scan count: saved")
         frame = pd.DataFrame([{"scan_count": count, "avg_volume_field": field}])
-        return {"market_light_count": frame}, heat.push_lines(stats, count)
+        return (
+            {"market_light_count": frame},
+            heat.push_lines(stats, count),
+            heat.short_line(stats, count),
+        )
     if slot not in ("eod", "pm") or not cfg.scans["breadth"].enabled:
-        return {}, []
+        return {}, [], []
     qqq = once_more(
         lambda: tv.fetch_quote(cfg.market_light["qqq"]["symbol"]),
         label="TradingView",
@@ -664,14 +672,17 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
         pm_row = {**breadth.premarket_row(uni, qqq, cfg, session, last), **indexes}
         status("Pre-market breadth: saved")
         lines = breadth.premarket_lines(pm_row, last)
-        return {"breadth_pm": pd.DataFrame([pm_row])}, lines + heat.push_lines(
-            stats, pm_row.get("scan_count")
-        )
+        light, *qqq_ma = breadth.short_lines(pm_row, breadth.premarket_suffix(pm_row), last)
+        head = [light, *heat.short_line(stats, pm_row.get("scan_count")), *qqq_ma]
+        count = pm_row.get("scan_count")
+        return {"breadth_pm": pd.DataFrame([pm_row])}, lines + heat.push_lines(stats, count), head
     row = {**breadth.breadth_row(uni, qqq, cfg, data_dir, session), **indexes}
     status(f"Breadth: saved ({row['ratio_days_available']} of 10 days for the ratios)")
     status("Market Light: " + ("computed" if row["light"] else "waiting for inputs"))
     lines = breadth.push_lines(row) + heat.push_lines(stats, row.get("scan_count"))
-    return {"breadth": pd.DataFrame([row])}, lines
+    light, *qqq_ma = breadth.short_lines(row)
+    head = [light, *heat.short_line(stats, row.get("scan_count")), *qqq_ma]
+    return {"breadth": pd.DataFrame([row])}, lines, head
 
 
 def _epstudy(cfg, candidates: pd.DataFrame) -> None:

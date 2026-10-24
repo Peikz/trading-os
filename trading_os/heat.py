@@ -126,6 +126,17 @@ def tag(stats: Mapping[str, Any] | None, count: Any, scan: str) -> str | None:
     return f"🌡 {band_name}: {word} · {_pair(row)}R (n {n})"
 
 
+def short_line(stats: Mapping[str, Any] | None, count: Any) -> list[str]:
+    """`🌡 Warm market (count 70, 45-80)`: the push's one heat line (Emil, 23 Oct 2026)."""
+    if not stats:
+        return []
+    heat = band(count, stats["bands"])
+    if heat is None:
+        return []
+    label = stats.get("band_labels", {}).get(heat, "")
+    return [f"🌡 {heat.capitalize()} market (count {int(float(count))}, {label})"]
+
+
 def push_lines(stats: Mapping[str, Any] | None, count: Any) -> list[str]:
     """The heat band of today's count, how the graded setups did in it, and the other setups
     that held in both periods."""

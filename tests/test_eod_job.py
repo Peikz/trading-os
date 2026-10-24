@@ -164,12 +164,17 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     assert "EP-PM: 1 hits (1 alert), saved" in out
     [message] = sent
     assert message.title.startswith("Pre-market ")
-    assert "⚪ Market Light n/a (needs an EOD run)" in message.body
-    assert "SPY pre-market 🟢 +0.3% · VIX 18.6 -7.1%" in message.body  # stubbed quotes
-    assert "Pre-market 4%: 🟢1 🔴0" in message.body
+    # The push starts with the Light and QQQ against its MAs, then the stocks (Emil, 23 Oct
+    # 2026); the breadth, movers and index lines stay in the report.
+    head = message.body.split("\n\n")[0].split("\n")
+    assert head == ["⚪ Market Light n/a (needs an EOD run)", "QQQ below 10, 20, 50, 200"]
+    assert "Pre-market 4%" not in message.body and "SPY pre-market" not in message.body
     assert f"▸ {GAPPER}  +12.0% PM  vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"
+    report = "".join(p.read_text(encoding="utf-8") for p in run_dir.rglob("*.md"))
+    assert "SPY pre-market 🟢 +0.3% · VIX 18.6 -7.1%" in report  # stubbed quotes
+    assert "Pre-market 4%: 🟢1 🔴0" in report
 
 
 def test_weekly_run_fetches_history_and_stores_no_arrays(tmp_path, capsys, sent, monkeypatch):
