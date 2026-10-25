@@ -249,7 +249,7 @@ of yes/no points a setup has. EP and EP9M: an earnings release (EP9M: in the las
 1–2 months sideways, a market that isn't hot (fewer than 45 stocks up 50 % in a quarter),
 revenue growth accelerating, EPS up year on year, within 20 % of the 52-week high; 5–6 points =
 A+; 4 points or fewer is C for both (saved, not pushed as a trade: an EP with 4 is about
-break-even, and EP9M with 4 as a B trade halved the account's result in the study). Luk flush: a market that isn't hot and a tight 5-day range = A. MA-surf (since 23 Oct 2026): SPY closed over its 200-day average on the signal day = A at 0.75 % risk, else C. The push says
+break-even, and EP9M with 4 as a B trade halved the account's result in the study). Luk flush: a market that isn't hot and a tight 5-day range = A. MA-surf (since 23 Oct 2026): SPY closed over its 200-day average on the signal day = A at 0.75 % risk, else C. Since 25 Oct 2026, any A+ or A in a stock with 5 or more days to cover (FINRA's twice-monthly short interest) is shown as C, "heavily shorted", and every hit at 5+ days, C included, gets a ⚠️ heavily shorted line: in the study those trades lagged, and skipping them raised the account's return in both periods. The push says
 "N of M quality points" and shows the history of that grade at that entry:
 
 | Push | When to buy |

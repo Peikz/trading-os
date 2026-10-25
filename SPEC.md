@@ -406,7 +406,12 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    the Luk flush A when the market isn't hot and the
    5-day range is tight (bought the next session ~10:30), and MA-surf A when SPY closed over its
    200-day MA on the signal day (Emil, 23 Oct 2026; its own plan: buy-stop at the pivot from 10:00,
-   the order stop, trail the 20-day MA; `stop: order`, `exit: trail_ma20` in the quality rule). An EP 10:30 gap that the 16:50 check pushed
+   the order stop, trail the 20-day MA; `stop: order`, `exit: trail_ma20` in the quality rule).
+   Heavily shorted (Emil, 25 Oct 2026): an A+/A hit with 5 or more days to cover in FINRA's latest
+   short-interest report (`grading.heavily_shorted_dtc`; `short_interest.py`, cached in
+   `data/short_interest/`, not used when older than 30 days) becomes C, and every hit at 5+ days
+   carries a ⚠️ line. Skipping them raised the account's return in 2018-21 and 2022-26 and lowered
+   the drawdown (data repo docs/research/2026-10-23-new-data.md). An EP 10:30 gap that the 16:50 check pushed
    the evening before shows "flagged last evening" instead of a second buy (one position per stock).
    Each grade shows its own entry's 2016–26 history (`grade_stats.json`, `quality`). Caveats, stated
    with the grades: the points were partly chosen with 2022–26 in view; rules picked blind on 2016–21

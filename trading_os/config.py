@@ -253,6 +253,7 @@ SEC_BULK_KEYS = {
 
 GRADING_KEYS = {
     "enabled",
+    "heavily_shorted_dtc",
     "stats_file",
     "risk_mult",
     "push",

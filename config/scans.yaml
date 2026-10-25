@@ -430,7 +430,10 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
                                             # 10-year grading study, walk-forward by year:
                                             # data repo docs/research/2026-10-20-grading-research.md
   enabled: true
-  stats_file: data/grading/grade_stats.json # per-grade history (private, data repo)
+  stats_file: data/grading/grade_stats.json
+  heavily_shorted_dtc: 5                    # A+/A at 5+ days to cover (FINRA) -> C, and a
+                                            # warning on every hit (Emil, 25 Oct 2026: skipping
+                                            # them raised the account in 2018-21 and 2022-26) # per-grade history (private, data repo)
   risk_mult: {"A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
   push: {"A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
   ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard

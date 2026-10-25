@@ -594,6 +594,9 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     heat_tag = row.get("heat_tag")
     if isinstance(heat_tag, str) and heat_tag:
         out.append(Line("plan", INDENT + heat_tag))
+    si_tag = row.get("si_tag")  # days to cover >= 5 (Emil, 25 Oct 2026)
+    if isinstance(si_tag, str) and si_tag:
+        out.append(Line("plan", INDENT + si_tag))
     pm = premarket_line(row)
     if pm:
         out.append(Line("plan", INDENT + pm))

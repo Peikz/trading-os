@@ -171,6 +171,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status(f"Watchlists: {len(events)} events")
     results = _with_sizing(results, args.data_dir, cfg)
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
+    results = _with_short_interest(results, args.data_dir, cfg, session)
     results = _with_heat_tags(results, args.data_dir, session)
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
@@ -360,6 +361,25 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
     except Exception as exc:  # noqa: BLE001 - extra lines in the push; the run goes on
         status(f"Last close's watch: FAILED ({type(exc).__name__}), left out")
         return {}
+
+
+def _with_short_interest(results: dict, data_dir: Path, cfg, session) -> dict:
+    """Days to cover on every hit; A+/A heavily shorted become C (`short_interest`).
+    Auxiliary: hits go out as they were on a problem."""
+    from trading_os import short_interest
+
+    dtc_max = cfg.grading.get("heavily_shorted_dtc")
+    if not cfg.grading["enabled"] or not dtc_max or not any(len(h) for h in results.values()):
+        return results
+    try:
+        table = short_interest.latest(data_dir, session)
+        out = short_interest.attach(results, table, float(dtc_max))
+        n = sum(int(h["si_tag"].notna().sum()) for h in out.values() if "si_tag" in h)
+        status(f"Short interest: {n} hits heavily shorted")
+        return out
+    except Exception as exc:  # noqa: BLE001
+        status(f"Short interest: FAILED ({type(exc).__name__}), left out")
+        return results
 
 
 def _with_heat_tags(results: dict, data_dir: Path, session) -> dict:
