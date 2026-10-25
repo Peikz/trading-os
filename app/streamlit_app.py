@@ -2413,7 +2413,11 @@ elif page == "How it was tested":
 
 elif page == "Study notes":
     # Every write-up in the dashboard, not only on GitHub (Emil, 25 Oct 2026).
-    notes = sorted((data_dir / "docs" / "research").glob("*.md"), reverse=True)
+    notes = sorted(  # dated studies newest first, then the overview
+        (data_dir / "docs" / "research").glob("*.md"),
+        key=lambda p: (p.stem[:1].isdigit(), p.stem),
+        reverse=True,
+    )
     if not notes:
         st.info("The write-ups live in the private data repo (docs/research): Pull latest.")
     else:
