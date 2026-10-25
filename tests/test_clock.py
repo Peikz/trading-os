@@ -147,3 +147,7 @@ def test_previous_session_takes_any_day(schedule):
     assert previous_session(schedule, dt.date(2026, 11, 26)) == dt.date(
         2026, 11, 25
     )  # Thanksgiving
+
+
+def test_sessions_back_reaches_2005(schedule):
+    assert sessions_back(schedule, dt.date(2006, 1, 10), 260)[0].year == 2005

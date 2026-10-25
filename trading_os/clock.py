@@ -21,7 +21,9 @@ _LOOKAROUND = dt.timedelta(days=14)
 
 @cache
 def _calendar(name: str) -> xcals.ExchangeCalendar:
-    return xcals.get_calendar(name)
+    # From 2004: the default reaches back only 20 years, and the 2006-2015 history needs
+    # its lead-in sessions (Emil, 25 Oct 2026).
+    return xcals.get_calendar(name, start="2004-01-02")
 
 
 NEW_YORK = ZoneInfo("America/New_York")
