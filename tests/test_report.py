@@ -40,7 +40,10 @@ def test_report_has_market_tables_and_relative_chart_links(tmp_path):
         report_path,
         25,
     )
-    assert text.startswith("# Trading OS · EOD 2026-10-19")
+    assert text.startswith('<a name="top"></a>\n# Trading OS · EOD 2026-10-19')
+    assert "Jump to: [Market](#market) · [EP-Day (2)](#scan-ep_day) · " in text
+    assert '<a name="scan-ep_day"></a>\n### EP-Day' in text
+    assert text.count("[↑ Top](#top)") == 2
     assert "- Breadth: up 10 / down 5" in text
     assert "### EP-Day — 2 hits (1 alert)" in text
     assert "| 1 | AAA | alert | +25.0 | +20.0 | 6.0 | $42M | $1.2B | yes |" in text

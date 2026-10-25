@@ -209,6 +209,23 @@ def fact_lines(scan: str, hits: pd.DataFrame) -> list[str]:
     return lines
 
 
+# Jump links on GitHub, so a long report needs no scrolling (Emil, 25 Oct 2026). GitHub keeps
+# `name` anchors (as user-content-…) and still scrolls to `#name`.
+TOP_ANCHOR = '<a name="top"></a>'
+BACK_TO_TOP = "[↑ Top](#top)"
+
+
+def _anchor(scan: str) -> str:
+    return f'<a name="scan-{scan}"></a>'
+
+
+def jump_list(results: Mapping[str, pd.DataFrame], names: list[str], market: bool) -> list[str]:
+    """`Jump to: Market · EP-Day (3) · …`, in the order the scans appear."""
+    links = ["[Market](#market)"] if market else []
+    links += [f"[{SCAN_LABELS.get(n, n)} ({len(results[n])})](#scan-{n})" for n in names]
+    return [f"Jump to: {' · '.join(links)}"] if links else []
+
+
 def build(
     ctx: RunContext,
     results: Mapping[str, pd.DataFrame],
@@ -221,11 +238,13 @@ def build(
     title = f"# Trading OS · {SLOT_LABELS[ctx.slot]} {ctx.session.isoformat()}"
     kind = f"{ctx.run_kind}{', forced' if ctx.forced else ''}"
     when = clock.both_times(ctx.run_ts).replace("NY", "New York").replace("CPH", "Copenhagen")
-    lines = [title, "", f"_Run {ctx.run_ts:%Y-%m-%d %H:%M} UTC ({when}) · {kind}_", ""]
-    if header_lines:
-        lines += ["## Market", "", *[f"- {line}" for line in header_lines], ""]
+    run_line = f"_Run {ctx.run_ts:%Y-%m-%d %H:%M} UTC ({when}) · {kind}_"
+    lines = [TOP_ANCHOR, title, "", run_line, ""]
     pushed = [n for n in results if n in selected]
     logged = [n for n in results if n not in selected]
+    lines += [*jump_list(results, pushed + logged, bool(header_lines)), ""]
+    if header_lines:
+        lines += ["## Market", "", *[f"- {line}" for line in header_lines], ""]
     for heading, names in (("Pushed scans", pushed), ("Saved only", logged)):
         if not names:
             continue
@@ -234,9 +253,9 @@ def build(
             hits = results[name]
             label = SCAN_LABELS.get(name, name)
             alert = int((hits["tier"] == "alert").sum()) if len(hits) and "tier" in hits else 0
-            lines += [f"### {label} — {len(hits)} hits ({alert} alert)", ""]
+            lines += [_anchor(name), f"### {label} — {len(hits)} hits ({alert} alert)", ""]
             if hits.empty:
-                lines += ["_No hits._", ""]
+                lines += ["_No hits._", "", BACK_TO_TOP, ""]
                 continue
             lines += [*scan_table(name, hits, max_rows), ""]
             facts = fact_lines(name, selected.get(name, hits.iloc[:0]))
@@ -247,6 +266,7 @@ def build(
                 if chart is not None:
                     link = Path(os.path.relpath(chart, report_path.parent)).as_posix()
                     lines += [f"![{row['ticker']} {label}]({link})", ""]
+            lines += [BACK_TO_TOP, ""]
     return "\n".join(lines).rstrip() + "\n"
 
 
