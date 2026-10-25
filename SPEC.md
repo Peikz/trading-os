@@ -154,7 +154,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 | Trend Template (Minervini; Emil, 22 Oct 2026) | Every alert-tier stock passing Minervini's Trend Template at the close, ranked by RS (within the alert tier) | 2 | Log |
 | MA-surf (Emil, 21 Oct 2026) | Qullamaggie's breakout from a base surfing the rising 10- or 20-day MA (rules in config `qm_surf:`, all proposed, unchanged from the study), alert tier, from 160 sessions of daily bars. Graded since 23 Oct 2026 (Emil, §11.17): **A (0.75 % risk) when SPY closed over its 200-day MA on the signal day**, else C (still pushed, `push_ungraded`). Added as A to the live package it raised the account in both periods (14.4 → 18.1 %/yr on 2022-26, 26.2 → 32.2 % on 2016-21; data repo docs/research/2026-10-23-heat-grades.md). The plan for the next session: from 10:00 ET over the pivot buy, under it a buy-stop at the pivot; the order stop under the base's right side; out on a close under the 20-day MA. A is sized at the account's risk x 1.5, C at the account's risk like the breakouts | 2 | Push |
 | Breadth (Stockbee Market Monitor style) | MB up count, MB down count, 5- and 10-day up/down ratios, stocks up ≥ 25% in a quarter vs down ≥ 25% in a quarter, % above MA20 / MA50 / MA40. Universe: price ≥ $5, volume ≥ 100K. Extended 19 Oct 2026 (Emil) with the rest of Stockbee's Market Monitor: up/down ≥ 25% and ≥ 50% in a month (22 sessions), up/down ≥ 13% in 34 sessions (needs daily history); plus SPY and VIX next to QQQ; 20 Oct 2026 (Emil): QQQ shown like SPY (change, MA position), and the QQQ trend's SMA20 from 5 sessions ago taken from the daily bars until EOD runs have stored it | 1 | Push (top lines) |
-| Market Light (yours) | See §6.5. Computed daily; the scan count input only changes on Sundays | 1 | Push (one line) |
+| Market Light (yours) | See §6.5. Computed daily; the scan count input only changes on Sundays | 1 | Report and dashboard; the push shows the QQQ light (§6.5) since 25 Oct 2026 |
 | Universe snapshot | Every stock in the logged tier with all metrics | 1 | Log |
 | Breakout B1–B4 (yours) | See 6.4 | 2 | Push (BO-Watch) |
 | Breakout B5 trigger (yours) | See 6.4 | 2 | Log since 21 Oct 2026 (Emil; grade C) |
@@ -192,6 +192,15 @@ The study grade (§11.17) is separate and labelled as such.
 Reference implementation for contraction detection: `phuazz/vcp-screener` (check license before copying).
 
 ### 6.5 Market Light (from TRADING-OS.md — owner's rules, do not change)
+
+**QQQ light (Emil, 25 Oct 2026; the push's light from then on).** Qullamaggie's Nasdaq rule from
+his streams: GREEN when QQQ's 10- and 20-day SMAs both rise (over 5 sessions) and the 10 is over
+the 20; RED when both fall and the 10 is under the 20; YELLOW otherwise (`breadth.qqq_light`,
+stored as `qqq_light` in the EOD breadth row). It measures momentum opportunity, not a stop: in
+the study GREEN days held the most 10R+ breakouts (2-3 a day) and RED the fewest, while the A
+setups did as well or better on RED, and every "stop on red" rule lowered the account's return
+(data repo docs/research/2026-10-23-new-data.md). The breadth Light below stays in the report
+and on the dashboard as information.
 
 **1. QQQ trend** (daily, 10/20/50 SMA), checked in this order:
 - **up** = close > SMA20 AND SMA10 > SMA20

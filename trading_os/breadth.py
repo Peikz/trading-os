@@ -166,24 +166,56 @@ def latest_scan_count(data_dir: Path, session: dt.date) -> tuple[int | None, dt.
     return int(row["scan_count"]), best_day
 
 
-def stored_qqq_sma20(data_dir: Path, session: dt.date) -> float:
+def stored_qqq_sma20(data_dir: Path, session: dt.date, window: int = 20) -> float:
     name = f"{session.isoformat()}_eod.parquet"
     path = Path(data_dir) / "data" / "breadth" / str(session.year) / name
+    column = f"qqq_sma{window}"
     if not path.exists():
         return float("nan")
-    return float(pd.read_parquet(path, columns=["qqq_sma20"]).iloc[0]["qqq_sma20"])
+    row = pd.read_parquet(path)
+    return float(row.iloc[0][column]) if column in row else float("nan")
 
 
-def qqq_sma20_from_bars(data_dir: Path, schedule, session: dt.date, symbol: str) -> float:
-    """QQQ's 20-day SMA on `session` from the daily bars in the data repo: the slope input of
-    the QQQ trend before five EOD runs have stored it (Emil, 20 Oct 2026)."""
+def qqq_sma20_from_bars(
+    data_dir: Path, schedule, session: dt.date, symbol: str, window: int = 20
+) -> float:
+    """QQQ's `window`-day SMA on `session` from the daily bars in the data repo: the slope
+    inputs of the QQQ trend and the QQQ light before five EOD runs have stored them."""
     ticker = symbol.split(":")[-1]
-    sessions = clock.sessions_back(schedule, session, 20)
+    sessions = clock.sessions_back(schedule, session, window)
     bars = history.load_bars(Path(data_dir), sessions)
     closes = bars.loc[bars["ticker"] == ticker, ["session_date", "close"]].drop_duplicates(
         "session_date"
     )
-    return float(closes["close"].mean()) if len(closes) == 20 else float("nan")
+    return float(closes["close"].mean()) if len(closes) == window else float("nan")
+
+
+def qqq_light_from_bars(data_dir: Path, schedule, session: dt.date, symbol: str, lookback: int):
+    """The QQQ light at `session`'s close from the stored daily bars (a pre-market run after an
+    EOD row stored before the light existed)."""
+    before = clock.sessions_back(schedule, session, lookback + 1)[0]
+    smas = [
+        qqq_sma20_from_bars(data_dir, schedule, day, symbol, window)
+        for day, window in ((session, 10), (session, 20), (before, 10), (before, 20))
+    ]
+    return qqq_light(*smas)
+
+
+def qqq_light(sma10: float, sma20: float, sma10_before: float, sma20_before: float) -> str | None:
+    """Qullamaggie's Nasdaq light (his streams; Emil, 25 Oct 2026): GREEN when QQQ's 10- and
+    20-day SMAs both rise and the 10 is over the 20, RED when both fall and the 10 is under the
+    20, else YELLOW. In the study GREEN days held the most 10R+ breakouts (2-3 a day) and RED
+    the fewest; it says how much momentum opportunity there is, not "stop trading": the A
+    setups did as well or better on RED (data repo docs/research/2026-10-23-new-data.md)."""
+    values = (sma10, sma20, sma10_before, sma20_before)
+    if any(v is None or pd.isna(v) for v in values):
+        return None
+    up10, up20 = sma10 > sma10_before, sma20 > sma20_before
+    if up10 and up20 and sma10 > sma20:
+        return "GREEN"
+    if not up10 and not up20 and sma10 < sma20:
+        return "RED"
+    return "YELLOW"
 
 
 def breadth_row(
@@ -219,6 +251,9 @@ def breadth_row(
     sma20_before = stored_qqq_sma20(data_dir, before)
     if np.isnan(sma20_before):
         sma20_before = qqq_sma20_from_bars(data_dir, cfg.schedule, before, ml["qqq"]["symbol"])
+    sma10_before = stored_qqq_sma20(data_dir, before, 10)
+    if np.isnan(sma10_before):
+        sma10_before = qqq_sma20_from_bars(data_dir, cfg.schedule, before, ml["qqq"]["symbol"], 10)
     trend = qqq_trend(qqq["close"], qqq["sma10"], qqq["sma20"], qqq["sma50"], sma20_before)
     state = breadth_state(ratios[10], ratios[5], up25, down25, ml["breadth"])
     count, count_date = latest_scan_count(data_dir, session)
@@ -242,6 +277,8 @@ def breadth_row(
         "qqq_sma20": qqq["sma20"],
         "qqq_sma50": qqq["sma50"],
         "qqq_sma20_5ago": sma20_before,
+        "qqq_sma10_5ago": sma10_before,
+        "qqq_light": qqq_light(qqq["sma10"], qqq["sma20"], sma10_before, sma20_before),
         "qqq_trend": trend,
         "breadth_state": state,
         "scan_count": count,
@@ -368,6 +405,22 @@ def index_lines(row: Mapping[str, Any], premarket: bool = False) -> list[str]:
     return lines
 
 
+QQQ_LIGHT_TEXT = {
+    "GREEN": "momentum market: the most breakout chances",
+    "YELLOW": "mixed",
+    "RED": "few breakout winners: momentum mostly off",
+}
+
+
+def qqq_light_line(row: Mapping[str, Any], suffix: str = "") -> str:
+    """`🟢 QQQ light GREEN · momentum market: the most breakout chances` (the push's light
+    since 25 Oct 2026; the A setups trade in every colour)."""
+    color = row.get("qqq_light")
+    if not color or (isinstance(color, float) and pd.isna(color)):
+        return f"⚪ QQQ light n/a{suffix}"
+    return f"{LIGHT_ICONS.get(color, '')} QQQ light {color}{suffix} · {QQQ_LIGHT_TEXT[color]}"
+
+
 def light_lines(row: Mapping[str, Any], suffix: str = "") -> list[str]:
     """`🟡 Market Light YELLOW` and its three inputs, or why it's missing."""
     if not row.get("light"):
@@ -400,7 +453,7 @@ def short_lines(
     """The push's market head (Emil, 23 Oct 2026: only the Light, the heat and QQQ against its
     averages, then the stocks): the Light line and QQQ's MA line (from `index_row`, the last
     close's row before the open). The full header stays in the report and on the dashboard."""
-    lines = light_lines(row, suffix)[:1]
+    lines = [qqq_light_line(row, suffix)]
     source = index_row if index_row is not None else row
     if _known(source.get("qqq_close")):
         side = _ma_side(source, "qqq")
@@ -410,8 +463,9 @@ def short_lines(
 
 
 def push_lines(row: Mapping[str, Any]) -> list[str]:
-    """EOD market header (push, report, dashboard): light, breadth, SPY and VIX."""
-    return [*light_lines(row), *breadth_lines(row), *index_lines(row)]
+    """EOD market header (report, dashboard): the QQQ light, the breadth Light, breadth, SPY
+    and VIX."""
+    return [qqq_light_line(row), *light_lines(row), *breadth_lines(row), *index_lines(row)]
 
 
 # --- pre-market (Emil, 19 Oct 2026: breadth also runs pre-market; SPEC §6.1)
@@ -450,6 +504,7 @@ def premarket_row(
         "qqq_pm_change_pct": qqq.get("pm_change_pct", float("nan")),
         "last_eod_session": pd.Timestamp(last_session).date() if last_session is not None else None,
         "light": last.get("light"),
+        "qqq_light": last.get("qqq_light"),
         "light_missing": last.get("light_missing", "an EOD run"),
         "qqq_trend": last.get("qqq_trend"),
         "breadth_state": last.get("breadth_state"),
@@ -465,7 +520,10 @@ def premarket_suffix(row: Mapping[str, Any]) -> str:
 
 def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> list[str]:
     """Light for today's orders, last close's breadth, and the pre-market movers."""
-    lines = light_lines(row, suffix=premarket_suffix(row))
+    lines = [
+        qqq_light_line(row, premarket_suffix(row)),
+        *light_lines(row, suffix=premarket_suffix(row)),
+    ]
     if last:
         lines.append(f"Last close {breadth_lines(last)[0]}")
     qqq = row["qqq_pm_change_pct"]

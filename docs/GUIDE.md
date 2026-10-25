@@ -209,7 +209,14 @@ triggers as one line each.
 and in a month, ≥ 50 % in a month, ≥ 13 % in 34 sessions, and the share above the 20/40/50-day
 MAs.
 
-**The Market Light** (your rules, SPEC §6.5), from three inputs:
+**The QQQ light** (Qullamaggie's rule; the push's first line since 25 Oct 2026): 🟢 GREEN when
+QQQ's 10- and 20-day both rise and the 10 is over the 20, 🔴 RED when both fall and the 10 is
+under the 20, 🟡 YELLOW otherwise. GREEN = a momentum market, the most breakout chances (2-3
+breakouts a day went 10R+ in the study); RED = few breakout winners, momentum mostly off. It is
+not a stop: EP, EP9M and Luk flush did as well or better on RED, and stopping on red cost money
+in every test.
+
+**The Market Light** (your rules, SPEC §6.5; since 25 Oct 2026 in the report and on the dashboard only), from three inputs:
 
 - **QQQ trend**: *up* when the close is over the 20-day MA and the 10-day is over the 20-day;
   *down* when the close is under the 50-day MA and the 20-day is lower than 5 sessions ago;

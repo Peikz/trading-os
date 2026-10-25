@@ -865,7 +865,19 @@ def industry_files(folder: str) -> list[str]:
 
 
 LIGHT_TEXT = """
-**How the Market Light is set** (your rules, SPEC §6.5), from three inputs:
+**The QQQ light** (Qullamaggie's Nasdaq rule; the push's light since 25 Oct 2026):
+
+- 🟢 **GREEN**: QQQ's 10- and 20-day both rising, the 10 over the 20. A momentum market: the
+  most 10R+ breakouts a day (2-3 in the study).
+- 🟡 **YELLOW**: anything else. Mixed.
+- 🔴 **RED**: both falling, the 10 under the 20. Few breakout winners (2022-26: breakouts
+  -0.32R a trade); momentum mostly off.
+
+It says how much momentum opportunity there is, not "stop trading": the A setups (EP, EP9M,
+Luk flush) did as well or better on RED, and stopping them on any red light cost money in every
+test. Read it with the heat: cool markets were the best for nearly every setup.
+
+**How the breadth Light is set** (your rules, SPEC §6.5, now information only), from three inputs:
 
 - **QQQ trend**: *up* = close over its 20-day and the 10-day over the 20-day; *down* = close
   under its 50-day and the 20-day lower than 5 sessions ago; *sideways* = anything else.

@@ -690,6 +690,17 @@ def _breadth_and_light(data_dir: Path, cfg, session, slot: str, uni: pd.DataFram
     if slot == "pm":
         last = breadth.latest_eod_row(data_dir, session)
         pm_row = {**breadth.premarket_row(uni, qqq, cfg, session, last), **indexes}
+        if last and not pm_row.get("qqq_light"):  # an EOD row from before the QQQ light
+            try:
+                pm_row["qqq_light"] = breadth.qqq_light_from_bars(
+                    data_dir,
+                    cfg.schedule,
+                    pm_row["last_eod_session"],
+                    cfg.market_light["qqq"]["symbol"],
+                    cfg.market_light["qqq"]["slope_lookback"],
+                )
+            except Exception:  # noqa: BLE001 - the light shows n/a
+                pm_row["qqq_light"] = None
         status("Pre-market breadth: saved")
         lines = breadth.premarket_lines(pm_row, last)
         light, *qqq_ma = breadth.short_lines(pm_row, breadth.premarket_suffix(pm_row), last)

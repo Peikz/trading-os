@@ -159,7 +159,7 @@ def test_breadth_row_from_snapshot_history(cfg, tmp_path):
     assert not math.isnan(row["ratio_10d"])
     assert row["qqq_trend"] == "up"
     assert row["scan_count_basis"] == "eod-bootstrap"
-    lines = breadth.push_lines(row)
+    lines = breadth.push_lines(row)[1:]  # [0] is the QQQ light (tests below)
     assert lines[0] == "⛔ Market Light STOP"  # today's bootstrap count of 1 stock
     assert lines[1].startswith("QQQ up · breadth ")
     assert lines[2].startswith("4%: 🟢")
@@ -204,6 +204,7 @@ def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
     assert (row["pm_up4"], row["pm_down4"], row["pm_breadth_n"]) == (1, 1, 3)
     lines = breadth.premarket_lines(row, last)
     assert lines == [
+        "⚪ QQQ light n/a (from the 10-16 close)",
         "🟡 Market Light YELLOW (from the 10-16 close)",
         "QQQ sideways · breadth neutral · count 30",
         "Last close 4%: 🟢22 🔴203 · 5d 0.50 · 10d 0.80",
@@ -215,7 +216,32 @@ def test_premarket_lines_before_any_eod(cfg):
     uni = pd.DataFrame([stock("A", pm_change_pct=5.0)])
     row = breadth.premarket_row(uni, {}, cfg, dt.date(2026, 10, 19), None)
     lines = breadth.premarket_lines(row, None)
-    assert lines == ["⚪ Market Light n/a (needs an EOD run)", "Pre-market 4%: 🟢1 🔴0"]
+    assert lines == [
+        "⚪ QQQ light n/a",
+        "⚪ Market Light n/a (needs an EOD run)",
+        "Pre-market 4%: 🟢1 🔴0",
+    ]
+
+
+@pytest.mark.parametrize(
+    "sma10, sma20, sma10_before, sma20_before, expected",
+    [
+        (101, 100, 99, 98, "GREEN"),  # both rising, 10 over 20
+        (99, 100, 101, 102, "RED"),  # both falling, 10 under 20
+        (101, 100, 102, 98, "YELLOW"),  # the 10 falling
+        (99, 100, 98, 99, "YELLOW"),  # both rising, 10 under 20
+        (101, 100, float("nan"), 98, None),
+    ],
+)
+def test_qqq_light_is_qullamaggies_10_20_rule(sma10, sma20, sma10_before, sma20_before, expected):
+    assert breadth.qqq_light(sma10, sma20, sma10_before, sma20_before) == expected
+
+
+def test_the_push_head_starts_with_the_qqq_light():
+    row = {"qqq_light": "RED", "light": "STOP", "qqq_close": 500.0, "qqq_sma10": 510.0}
+    head = breadth.short_lines(row)
+    assert head[0] == "🔴 QQQ light RED · few breakout winners: momentum mostly off"
+    assert not any("Market Light" in line for line in head)
 
 
 def test_market_monitor_counts_month_and_34_day_moves():
