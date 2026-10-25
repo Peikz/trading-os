@@ -2,6 +2,8 @@
 # calendar year, in parallel. Each reads the years around it from the data repo's
 # "bars-alpaca" release and uploads strategy_<year>.parquet and ep_<year>.parquet to its
 # "history-10y" release (not git). Manual runs only. This repo is public: counts only.
+# Inputs `bars` / `out` (Emil, 25 Oct 2026) run the same code on the free 2005-2015 Yahoo
+# bars (survivors only) into a separate release, a third test period.
 
 name: History 10y
 
@@ -11,6 +13,12 @@ on:
       years:
         description: "JSON list of years"
         default: "[2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]"
+      bars:
+        description: "bars release (bars-yahoo-2005: the free 2005-2015 Yahoo bars, survivors only; Alpaca fills 2016+)"
+        default: "bars-alpaca"
+      out:
+        description: "release for the output (history-10y, or history-yahoo for the 2006-2015 check)"
+        default: "history-10y"
 
 permissions:
   contents: read
@@ -52,7 +60,7 @@ jobs:
           REPO="${{ github.repository_owner }}/trading-os-data"
           Y=${{ matrix.year }}
           for y in $((Y-2)) $((Y-1)) $Y $((Y+1)) $((Y+2)); do
-            gh release download bars-alpaca -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null || true
+            gh release download "${{ inputs.bars }}" -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null               || gh release download bars-alpaca -R "$REPO" -D bars -p "$y.parquet" 2>/dev/null || true
           done
           echo "bar files: $(ls bars | wc -l)"
 
@@ -64,6 +72,6 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
-          gh release view history-10y -R "$REPO" >/dev/null 2>&1 || gh release create history-10y -R "$REPO" --title "Histories, 10 years" --notes "Strategy and EP histories over Alpaca daily bars since 2016, one file per year." >/dev/null 2>&1 || true
-          gh release upload history-10y out/*.parquet -R "$REPO" --clobber
+          gh release view "${{ inputs.out }}" -R "$REPO" >/dev/null 2>&1 || gh release create "${{ inputs.out }}" -R "$REPO" --title "Histories (${{ inputs.bars }})" --notes "Strategy and EP histories over daily bars (${{ inputs.bars }}), one file per year." >/dev/null 2>&1 || true
+          gh release upload "${{ inputs.out }}" out/*.parquet -R "$REPO" --clobber
           echo "uploaded: $(ls out | wc -l) files"
