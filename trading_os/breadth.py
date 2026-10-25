@@ -353,6 +353,8 @@ def index_fields(quotes: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
         out[f"{name}_pm_change_pct"] = q["pm_change_pct"]
         for w in INDEX_MAS:
             out[f"{name}_sma{w}"] = q[f"sma{w}"]
+        for field in ("low", "volume"):  # SPY's bar for the IBD market state (`ibd`)
+            out[f"{name}_{field}"] = q.get(field, float("nan"))
     return out
 
 

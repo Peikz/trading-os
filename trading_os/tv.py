@@ -144,6 +144,7 @@ def fetch_index(symbol: str) -> dict[str, float]:
     """Close, change, pre-market change and SMA10/20/50/200 for an ETF or index (SPY, VIX).
     Fields an index lacks (VIX has no pre-market) come back as NaN."""
     fields = ["close", "change", "premarket_change", "SMA10", "SMA20", "SMA50", "SMA200"]
+    fields += ["low", "volume"]  # the IBD market state (`ibd`, Emil 25 Oct 2026)
     query = Query().select(*fields).set_tickers(symbol)
     query.query.pop("filter2", None)
     query.query["filter"] = []
@@ -153,6 +154,7 @@ def fetch_index(symbol: str) -> dict[str, float]:
         raise TruncatedResult(f"expected 1 row for the quote, got {len(raw)}")
     row = raw.iloc[0]
     names = ["close", "chg_pct", "pm_change_pct", "sma10", "sma20", "sma50", "sma200"]
+    names += ["low", "volume"]
     return {
         name: float(row[field])
         if row.get(field) is not None and not pd.isna(row[field])

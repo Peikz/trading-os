@@ -202,6 +202,24 @@ setups did as well or better on RED, and every "stop on red" rule lowered the ac
 (data repo docs/research/2026-10-23-new-data.md). The breadth Light below stays in the report
 and on the dashboard as information.
 
+**IBD market state (Emil, 25 Oct 2026; tracked, not a rule).** O'Neil's distribution and
+follow-through days on SPY (`ibd`):
+- A distribution day is SPY down at least 0.2 % on more volume than the day before.
+- 6 of them in 25 sessions start a correction. Only days after the last follow-through day count.
+- A follow-through day is day 4 or later of a rally off the correction low, SPY up at least 1.25 % on more volume. It starts an uptrend.
+
+Every hit carries `ibd_state`, `ibd_dist` and `ibd_tag` (the state at the last close before the
+entry; at EOD, today's). The report has a one-line market header and an IBD column. The dashboard
+scan tables show it too, and the push leaves it out. The monthly live check splits the closed
+A+ / A trades by state.
+
+Grades don't change. In the study, MA-surf A and EP9M A+ did better in an uptrend, but that was
+found with both periods in view and 2006-15 did not confirm it (data repo
+docs/research/2026-10-25-third-period-2006-2015.md).
+
+SPY's bars come from `data/market/spy_daily_seed.parquet` (Yahoo, 2024 to 23 Oct 2026) and,
+after it, the EOD breadth rows (`spy_close`, `spy_low`, `spy_volume`).
+
 **1. QQQ trend** (daily, 10/20/50 SMA), checked in this order:
 - **up** = close > SMA20 AND SMA10 > SMA20
 - **down** = close < SMA50 AND SMA20 lower than 5 sessions ago

@@ -25,6 +25,7 @@ from trading_os import (
     epstudy,
     heat,
     history,
+    ibd,
     industries,
     metrics,
     notify,
@@ -173,6 +174,10 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
     results = _with_short_interest(results, args.data_dir, cfg, session)
     results = _with_heat_tags(results, args.data_dir, session)
+    ibd_info = _ibd_state(args.data_dir, session, slot, extras)
+    results = _with_ibd(results, ibd_info)
+    if slot in ("pm", "eod"):  # the report only: the push stays market head + stocks
+        header = [*header, *ibd.line(ibd_info)]
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
     selected = notify.select_for_push(results, cfg, slot)
@@ -380,6 +385,32 @@ def _with_short_interest(results: dict, data_dir: Path, cfg, session) -> dict:
     except Exception as exc:  # noqa: BLE001
         status(f"Short interest: FAILED ({type(exc).__name__}), left out")
         return results
+
+
+def _ibd_state(data_dir: Path, session, slot: str, extras: dict) -> dict | None:
+    """The IBD market state (`ibd`) at the last SPY close: today's at EOD (its breadth row is
+    in `extras`, not written yet), else the last stored one before `session`. Tracked, not a
+    rule. Auxiliary: None on a problem."""
+    try:
+        if slot == "eod" and "breadth" in extras and len(extras["breadth"]):
+            return ibd.state_at(data_dir, session, extras["breadth"].iloc[0].to_dict())
+        return ibd.state_at(data_dir, session - dt.timedelta(days=1))
+    except Exception as exc:  # noqa: BLE001
+        status(f"IBD state: FAILED ({type(exc).__name__}), left out")
+        return None
+
+
+def _with_ibd(results: dict, info: dict | None) -> dict:
+    """`ibd_state`, `ibd_dist` and `ibd_tag` on every hit, for the live check's split."""
+    if not info:
+        return results
+    text = ibd.tag(info)
+    return {
+        name: hits.assign(ibd_state=info["state"], ibd_dist=info["dist_count"], ibd_tag=text)
+        if len(hits)
+        else hits
+        for name, hits in results.items()
+    }
 
 
 def _with_heat_tags(results: dict, data_dir: Path, session) -> dict:

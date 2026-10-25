@@ -95,6 +95,7 @@ def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
         "r_net",
         "study_mean_r",
         "study_win_pct",
+        "ibd_state",
     ]
     if signals.empty or "grade" not in signals:
         return pd.DataFrame(columns=cols)
@@ -146,6 +147,34 @@ def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
                 "r_net": r - cost if r == r else r,
                 "study_mean_r": _num(rec.get("grade_stat_mean_r")),
                 "study_win_pct": _num(rec.get("grade_stat_win_pct")),
+                "ibd_state": rec.get("ibd_state"),
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)
+
+
+def by_market(results: pd.DataFrame) -> pd.DataFrame:
+    """Closed live A+ / A trades per strategy and grade, split by the IBD market state at the
+    signal (`ibd`; Emil, 25 Oct 2026: tracked, not a rule). Signals from before the state was
+    stored count as "unknown"."""
+    cols = ["grade_strategy", "grade", "ibd_state", "closed", "live_mean_r", "live_win_pct"]
+    if results.empty:
+        return pd.DataFrame(columns=cols)
+    done = results[results["status"] == "closed"].copy()
+    if done.empty:
+        return pd.DataFrame(columns=cols)
+    state = done["ibd_state"] if "ibd_state" in done else pd.Series(index=done.index, dtype=object)
+    done["ibd_state"] = state.where(state.notna(), "unknown")
+    rows = []
+    keys = ["grade_strategy", "grade", "ibd_state"]
+    for key, part in done.groupby(keys, dropna=False):
+        r = part["r_net"].dropna()
+        rows.append(
+            dict(zip(keys, key, strict=True))
+            | {
+                "closed": len(part),
+                "live_mean_r": r.mean() if len(r) else math.nan,
+                "live_win_pct": (r > 0).mean() * 100 if len(r) else math.nan,
             }
         )
     return pd.DataFrame(rows, columns=cols)

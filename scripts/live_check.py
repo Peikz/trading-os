@@ -89,6 +89,16 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
             ],
         ),  # fmt: skip
         "",
+        "## By IBD market state (tracked, not a rule)",
+        "",
+        "In the 2016-26 study MA-surf A and EP9M A+ did better in an IBD uptrend than in a "
+        "correction, but that was found with both periods in view. This split decides it.",
+        "",
+        *table_md(
+            lt.by_market(res),
+            ["grade_strategy", "grade", "ibd_state", "closed", "live_mean_r", "live_win_pct"],
+        ),
+        "",
         "## Your trades against the plan",
         "",
         *(
