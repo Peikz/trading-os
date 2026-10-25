@@ -1,0 +1,65 @@
+# Job openings log (Emil, 25 Oct 2026): once a day, the open-job count of ~480 listed
+# companies' public job boards, saved to the data repo (data/jobs/), so hiring growth can be
+# tested as an EP variable once there is history. One request per board, sequential with a
+# pause. This repo is public: the log prints counts only.
+
+name: Jobs log
+
+on:
+  schedule:
+    - cron: "23 11 * * *"   # once a day; the exact time doesn't matter
+  workflow_dispatch:
+
+concurrency:
+  group: data-repo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  jobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo (jobs folder only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/jobs
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Snapshot
+        run: uv run --frozen --no-dev python scripts/jobs_log.py --data-dir data-repo
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add data/jobs
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "jobs $(date -u +%F): data (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
