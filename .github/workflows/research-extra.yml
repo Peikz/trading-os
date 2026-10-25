@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "insiders = SEC Form 345; events8k = every 8-K with its items; news = headlines"
+        description: "insiders = SEC Form 345; events8k = 8-K items; news = headlines; flow = order flow"
         type: choice
-        options: [insiders, events8k, news]
+        options: [insiders, events8k, news, flow]
         default: insiders
 
 concurrency:
@@ -34,13 +34,13 @@ jobs:
 
       - run: uv sync --frozen --no-dev
 
-      - name: The news request list
-        if: ${{ inputs.mode == 'news' }}
+      - name: The request list (news, flow)
+        if: ${{ inputs.mode == 'news' || inputs.mode == 'flow' }}
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           mkdir -p work
-          gh release download research-extra -R "${{ github.repository_owner }}/trading-os-data" -D work -p news_requests.parquet
+          gh release download research-extra -R "${{ github.repository_owner }}/trading-os-data" -D work -p "${{ inputs.mode }}_requests.parquet"
           echo "request files: $(ls work | wc -l)"
 
       - name: Fetch
@@ -48,7 +48,7 @@ jobs:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
-        run: uv run --frozen --no-dev python -m trading_os.research_extra --mode ${{ inputs.mode }} --out out --requests work/news_requests.parquet
+        run: uv run --frozen --no-dev python -m trading_os.research_extra --mode ${{ inputs.mode }} --out out --requests work/${{ inputs.mode }}_requests.parquet
 
       - name: Upload
         env:

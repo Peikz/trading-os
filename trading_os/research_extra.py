@@ -7,6 +7,11 @@
 - `events8k`: every 8-K since 2015 with its item codes (1.01 a material agreement, 2.02
   results, 5.02 a management change, 8.01 other events...) and acceptance time, from SEC's
   bulk submissions.zip.
+- `flow`: order flow from Alpaca's trade history (SIP) for a list of (ticker, start, end)
+  windows, the study's A+ EP / EP9M mornings from the open to the entry. Only the totals are
+  kept: buyer- vs seller-initiated volume (tick test), retail buys and sells by sub-penny
+  price improvement off-exchange (Boehmer, Jones, Zhang & Zhang 2021), and large-block
+  imbalance.
 - `news`: Alpaca's news headlines (Benzinga) for a list of (ticker, window end) requests, the
   study's EP / EP9M trades, each for the 4 days up to its entry. Headlines only, no article text.
 
@@ -187,9 +192,72 @@ def events_8k(zip_path: Path, since: str = "2015-01-01") -> pd.DataFrame:
     return pd.DataFrame(cols)
 
 
+TRADES_URL = "https://data.alpaca.markets/v2/stocks/{symbol}/trades"
+FLOW_COLUMNS = [
+    "ticker", "session_date", "trades", "volume", "buy_vol", "sell_vol",
+    "retail_buy", "retail_sell", "block_buy", "block_sell",
+]  # fmt: skip
+BLOCK = 10_000  # shares
+
+
+def flow_totals(trades: list[dict], last_price: float | None = None) -> dict:
+    """Totals of a run of trades (oldest first). Tick test: a trade above the last different
+    price is a buy, below it a sell. Retail (BJZZ 2021): off-exchange prints (exchange D) with
+    sub-penny prices, fraction of a cent above 0.6 a buy, below 0.4 a sell."""
+    out = dict.fromkeys(FLOW_COLUMNS[2:], 0.0)
+    side = 0
+    for t in trades:
+        p, s = float(t["p"]), float(t["s"])
+        if last_price is not None and p != last_price:
+            side = 1 if p > last_price else -1
+        last_price = p
+        out["trades"] += 1
+        out["volume"] += s
+        if side > 0:
+            out["buy_vol"] += s
+            out["block_buy"] += s if s >= BLOCK else 0
+        elif side < 0:
+            out["sell_vol"] += s
+            out["block_sell"] += s if s >= BLOCK else 0
+        if t.get("x") == "D":
+            frac = round(p * 100 % 1, 4)
+            if 0.6 < frac < 1:
+                out["retail_buy"] += s
+            elif 0 < frac < 0.4:
+                out["retail_sell"] += s
+    return out
+
+
+def flow(client, requests_file: Path, out: Path) -> int:
+    asks = pd.read_parquet(requests_file)
+    rows, failed = [], 0
+    for k, ask in enumerate(asks.itertuples(index=False), 1):
+        params = {"start": ask.start_utc, "end": ask.end_utc, "limit": 10000, "feed": "sip"}
+        trades: list[dict] = []
+        try:
+            while True:
+                body = client._get(TRADES_URL.format(symbol=ask.ticker), params)
+                trades += body.get("trades") or []
+                token = body.get("next_page_token")
+                if not token:
+                    break
+                params = {**params, "page_token": token}
+            rows.append(
+                {"ticker": ask.ticker, "session_date": ask.session_date, **flow_totals(trades)}
+            )
+        except Exception:  # noqa: BLE001 - counted; the message could carry a symbol
+            failed += 1
+        if k % 200 == 0:
+            status(f"Flow: {k} of {len(asks)} windows, {failed} failed")
+    out.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=FLOW_COLUMNS).to_parquet(out / "flow.parquet", index=False)
+    status(f"Flow: {len(rows)} windows, {failed} failed")
+    return 0 if rows else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
-    parser.add_argument("--mode", choices=["insiders", "events8k", "news"], required=True)
+    parser.add_argument("--mode", choices=["insiders", "events8k", "news", "flow"], required=True)
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--requests", type=Path, help="news: the (ticker, until_utc) list")
     parser.add_argument("--first-year", type=int, default=2015)
@@ -222,7 +290,10 @@ def main(argv: list[str] | None = None) -> int:
     if not key or not secret:
         status("News: ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY not set")
         return 1
-    return news(AlpacaClient(key, secret, per_minute=150), args.requests, args.out)
+    client = AlpacaClient(key, secret, per_minute=150)
+    if args.mode == "flow":
+        return flow(client, args.requests, args.out)
+    return news(client, args.requests, args.out)
 
 
 if __name__ == "__main__":

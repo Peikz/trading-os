@@ -67,3 +67,18 @@ def test_events_8k_keeps_8ks_with_their_items(tmp_path):
     want = {"cik": 123, "accession": "x1", "filed": "2024-03-05",
             "accepted": "2024-03-05T16:05:00.000Z", "items": "1.01,9.01"}  # fmt: skip
     assert t.to_dict("records") == [want]
+
+
+def test_flow_totals_tick_test_retail_and_blocks():
+    trades = [
+        {"p": 10.00, "s": 100, "x": "Q"},
+        {"p": 10.05, "s": 20_000, "x": "Q"},  # uptick: a buy, a block
+        {"p": 10.05, "s": 300, "x": "D"},  # same price: still a buy; whole cents, not retail
+        {"p": 10.0472, "s": 50, "x": "D"},  # downtick: a sell; 0.72 of a cent: a retail buy
+        {"p": 10.0131, "s": 40, "x": "D"},  # downtick: a sell; 0.31 of a cent: a retail sell
+    ]
+    t = rx.flow_totals(trades)
+    assert t["trades"] == 5 and t["volume"] == 20_490
+    assert t["buy_vol"] == 20_300 and t["sell_vol"] == 90
+    assert t["block_buy"] == 20_000 and t["block_sell"] == 0
+    assert t["retail_buy"] == 50 and t["retail_sell"] == 40
