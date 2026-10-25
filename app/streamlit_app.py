@@ -127,6 +127,10 @@ RESEARCH = {
         "Market regime",
         "Whether skipping trades in a weak market would have helped.",
     ),
+    "Study notes": (
+        "Study notes",
+        "Every research write-up from the data repo (docs/research), newest first.",
+    ),
 }
 LIVE = {
     "Grades live vs study": "Live grades",
@@ -2406,6 +2410,15 @@ elif page == "How it was tested":
             "The write-up with the results lives in the private data repo "
             "(docs/research/how-we-test.md): Pull latest (sidebar) to get it."
         )
+
+elif page == "Study notes":
+    # Every write-up in the dashboard, not only on GitHub (Emil, 25 Oct 2026).
+    notes = sorted((data_dir / "docs" / "research").glob("*.md"), reverse=True)
+    if not notes:
+        st.info("The write-ups live in the private data repo (docs/research): Pull latest.")
+    else:
+        pick = st.selectbox("Study", notes, format_func=lambda p: p.stem, key="study_note")
+        st.markdown(pick.read_text(encoding="utf-8"))
 
 elif page == "Study grades":
     st.subheader("Study grades")
