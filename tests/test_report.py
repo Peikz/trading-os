@@ -100,3 +100,11 @@ def test_fact_lines_link_the_headline_and_skip_rows_without_facts():
         r"  - [Wins \[big\] contract](https://example.com/a) (PR, 10-16 12:05 ET)",
     ]
     assert report.fact_lines("mb_up", hits) == []
+
+
+def test_scan_table_shows_the_heavily_shorted_tag():
+    hits = ep_hits().assign(si_tag=["⚠️ heavily shorted · 6.2 days to cover (09-30)", None])
+    lines = report.scan_table("ep_day", hits, 25)
+    assert "| Short |" in lines[0]
+    assert "heavily shorted" in lines[2] and "heavily shorted" not in lines[3]
+    assert "Short" not in report.scan_table("ep_day", ep_hits(), 25)[0]

@@ -342,6 +342,7 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
     columns = [("Rank", "rank", "int"), ("Ticker", "ticker", "text")]
     columns += [("Study grade", "grade", "text"), ("Why", "grade_why", "text")]
     columns += [("Pred. R", "grade_score", "+.2f")]
+    columns += [("Short", "si_tag", "text")]  # heavily shorted, as in the push (Emil, 25 Oct 2026)
     columns += [("Chart", "tradingview", "link"), ("Tier", "tier", "text")]
     columns += report.COLUMNS.get(scan, [])
     # Only the columns the table shows (and the sort needs), before sorting: a run file

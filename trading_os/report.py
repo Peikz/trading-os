@@ -164,6 +164,8 @@ def scan_table(scan: str, hits: pd.DataFrame, max_rows: int) -> list[str]:
             columns.append(("Points", "grade_points", "text"))
     if "heat_tag" in hits:
         columns.append(("Heat", "heat_tag", "text"))
+    if "si_tag" in hits and hits["si_tag"].notna().any():  # Emil, 25 Oct 2026
+        columns.append(("Short", "si_tag", "text"))
     columns += COLUMNS.get(scan, [])
     lines = [
         "| " + " | ".join(h for h, _, _ in columns) + " |",
