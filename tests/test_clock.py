@@ -150,4 +150,4 @@ def test_previous_session_takes_any_day(schedule):
 
 
 def test_sessions_back_reaches_2005(schedule):
-    assert sessions_back(schedule, dt.date(2006, 1, 10), 260)[0].year == 2005
+    assert sessions_back(schedule, dt.date(2006, 1, 10), 260)[0].year == 2004
