@@ -12,6 +12,9 @@
   kept: buyer- vs seller-initiated volume (tick test), retail buys and sells by sub-penny
   price improvement off-exchange (Boehmer, Jones, Zhang & Zhang 2021), and large-block
   imbalance.
+- `openbars`: volume in the first 5, 15 and 30 minutes of each EP day (Alpaca 1-minute SIP bars,
+  09:30-10:00 New York), and the 5/15/30-minute opening-range highs and lows, to test
+  Qullamaggie's volume rule at his entry times.
 - `news`: Alpaca's news headlines (Benzinga) for a list of (ticker, window end) requests, the
   study's EP / EP9M trades, each for the 4 days up to its entry. Headlines only, no article text.
 
@@ -255,9 +258,62 @@ def flow(client, requests_file: Path, out: Path) -> int:
     return 0 if rows else 1
 
 
+MINUTE_URL = "https://data.alpaca.markets/v2/stocks/{symbol}/bars"
+OPEN_COLUMNS = [
+    "ticker", "session_date", "vol_5m", "vol_15m", "vol_30m",
+    "orh_5m", "orh_15m", "orh_30m", "orl_5m", "orl_15m", "orl_30m",
+]  # fmt: skip
+
+
+def open_totals(bars: list[dict], start: pd.Timestamp) -> dict:
+    """Volume and range of the first 5, 15 and 30 minutes from 1-minute bars (t, h, l, v)."""
+    out: dict = {}
+    for n in (5, 15, 30):
+        end = start + pd.Timedelta(minutes=n)
+        part = [b for b in bars if start <= pd.Timestamp(b["t"]) < end]
+        out[f"vol_{n}m"] = float(sum(b["v"] for b in part))
+        out[f"orh_{n}m"] = max((b["h"] for b in part), default=float("nan"))
+        out[f"orl_{n}m"] = min((b["l"] for b in part), default=float("nan"))
+    return out
+
+
+def openbars(client, requests_file: Path, out: Path) -> int:
+    asks = pd.read_parquet(requests_file)
+    rows, failed = [], 0
+    for k, ask in enumerate(asks.itertuples(index=False), 1):
+        start = pd.Timestamp(ask.start_utc)
+        params = {
+            "timeframe": "1Min",
+            "start": ask.start_utc,
+            "end": (start + pd.Timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "limit": 1000,
+            "feed": "sip",
+            "adjustment": "raw",
+        }
+        try:
+            body = client._get(MINUTE_URL.format(symbol=ask.ticker), params)
+            rows.append(
+                {
+                    "ticker": ask.ticker,
+                    "session_date": ask.session_date,
+                    **open_totals(body.get("bars") or [], start),
+                }
+            )
+        except Exception:  # noqa: BLE001 - counted; the message could carry a symbol
+            failed += 1
+        if k % 2000 == 0:
+            status(f"Open bars: {k} of {len(asks)}, {failed} failed")
+    out.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=OPEN_COLUMNS).to_parquet(out / "openbars.parquet", index=False)
+    status(f"Open bars: {len(rows)} days, {failed} failed")
+    return 0 if rows else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
-    parser.add_argument("--mode", choices=["insiders", "events8k", "news", "flow"], required=True)
+    parser.add_argument(
+        "--mode", choices=["insiders", "events8k", "news", "flow", "openbars"], required=True
+    )
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--requests", type=Path, help="news: the (ticker, until_utc) list")
     parser.add_argument("--first-year", type=int, default=2015)
@@ -293,6 +349,8 @@ def main(argv: list[str] | None = None) -> int:
     client = AlpacaClient(key, secret, per_minute=150)
     if args.mode == "flow":
         return flow(client, args.requests, args.out)
+    if args.mode == "openbars":
+        return openbars(client, args.requests, args.out)
     return news(client, args.requests, args.out)
 
 

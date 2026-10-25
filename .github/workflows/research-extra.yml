@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "insiders = SEC Form 345; events8k = 8-K items; news = headlines; flow = order flow"
+        description: "insiders, events8k, news, flow (order flow), openbars (first 5/15/30 minutes)"
         type: choice
-        options: [insiders, events8k, news, flow]
+        options: [insiders, events8k, news, flow, openbars]
         default: insiders
 
 concurrency:
@@ -35,7 +35,7 @@ jobs:
       - run: uv sync --frozen --no-dev
 
       - name: The request list (news, flow)
-        if: ${{ inputs.mode == 'news' || inputs.mode == 'flow' }}
+        if: ${{ inputs.mode == 'news' || inputs.mode == 'flow' || inputs.mode == 'openbars' }}
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |

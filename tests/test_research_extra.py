@@ -82,3 +82,16 @@ def test_flow_totals_tick_test_retail_and_blocks():
     assert t["buy_vol"] == 20_300 and t["sell_vol"] == 90
     assert t["block_buy"] == 20_000 and t["block_sell"] == 0
     assert t["retail_buy"] == 50 and t["retail_sell"] == 40
+
+
+def test_open_totals_first_5_15_30_minutes():
+    import pandas as pd
+
+    start = pd.Timestamp("2024-03-05T14:30:00Z")
+    bars = [
+        {"t": f"2024-03-05T14:{30 + m:02d}:00Z", "h": 10 + m, "l": 9 - m * 0.01, "v": 100}
+        for m in range(30)
+    ]
+    t = rx.open_totals(bars, start)
+    assert (t["vol_5m"], t["vol_15m"], t["vol_30m"]) == (500, 1500, 3000)
+    assert t["orh_5m"] == 14 and t["orh_30m"] == 39
