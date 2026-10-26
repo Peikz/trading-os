@@ -38,6 +38,7 @@ from trading_os import (
     health,
     heat,
     history,
+    ibd,
     intraday_study,
     journal,
     live_tracking,
@@ -365,8 +366,8 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
     # Only the columns the table shows (and the sort needs), before sorting: a run file
     # carries every scan's fields.
     wanted = {c for _, c, _ in columns} | {"grade", "grade_score", "rank", "ticker"}
-    wanted |= {f"b{i}" for i in range(1, 6)}
-    hits = hits[[c for c in hits.columns if c in wanted]]
+    wanted |= {f"b{i}" for i in range(1, 6)} | {"ibd_state", "ibd_dist"}
+    hits = ibd.relabel(hits[[c for c in hits.columns if c in wanted]])
     view = notify.best_first(hits).copy()  # best quality on top (Emil, 22 Oct 2026)
     view["tradingview"] = [tradingview_url(t, (exchanges or {}).get(t)) for t in view["ticker"]]
     if scan.startswith("breakout_"):  # from the five flag columns, not whole rows
@@ -2782,14 +2783,20 @@ elif page == "Market":
         if states.empty:
             st.caption("Needs SPY's daily bars (data/market/spy_daily_seed.parquet).")
         else:
+            recent = states.tail(30).iloc[::-1]
+            recent = recent.assign(
+                market=[
+                    ibd.words(s, n)
+                    for s, n in zip(recent["state"], recent["dist_count"], strict=True)
+                ]
+            )
             st.dataframe(
-                states.tail(30)
-                .iloc[::-1][["session_date", "close", "dist", "dist_count", "state"]]
+                recent[["session_date", "market", "close", "dist", "dist_count"]]
                 .rename(
                     columns={
                         "close": "SPY",
-                        "dist": "distribution day",
-                        "dist_count": "dist. days (25)",
+                        "dist": "sell day",
+                        "dist_count": "sell days (25)",
                     }
                 )
                 .round(2),
@@ -2797,7 +2804,9 @@ elif page == "Market":
                 width="stretch",
             )
         st.caption(
-            "O'Neil: a distribution day is SPY down 0.2 %+ on more volume; 6 in 25 sessions start "
+            "🟢 Healthy uptrend: 0-3 sell days. 🟡 Uptrend under pressure: 4-5, a correction is "
+            "1-2 sell days away. 🔴 Correction: 6 or more, until a follow-through day. "
+            "O'Neil: a sell (distribution) day is SPY down 0.2 %+ on more volume; 6 in 25 start "
             "a correction, a follow-through day (day 4+ of a rally, SPY +1.25 % on more volume) "
             "starts an uptrend. Every signal carries the state; the monthly live check splits "
             "the live trades by it. Grades don't use it (it wasn't proven blind)."

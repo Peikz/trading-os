@@ -77,8 +77,26 @@ def test_spy_daily_joins_the_seed_and_the_breadth_rows(tmp_path):
     assert len(spy) == 32 and spy["close"].iloc[-1] == 98.0
     info = ibd.state_at(tmp_path, after + dt.timedelta(days=1), today)
     assert info["state"] == "uptrend" and info["dist_count"] == 2
-    assert ibd.tag(info) == "IBD uptrend (2 dist.)"
+    assert ibd.tag(info) == "IBD 🟢 Healthy uptrend (2 of 6 sell days)"
     assert ibd.line(None) == [] and ibd.state_at(tmp_path, START) is None
+
+
+def test_plain_words_for_the_state():
+    assert ibd.words("uptrend", 3) == "🟢 Healthy uptrend"
+    assert ibd.words("uptrend", 4) == "🟡 Uptrend under pressure"
+    assert ibd.words("correction", 7) == "🔴 Correction"
+    assert ibd.words(None, 0) is None
+    assert ibd.sell_days("correction", 7) == "7 sell days"
+    old = pd.DataFrame(
+        {
+            "ibd_state": ["uptrend", None],
+            "ibd_dist": [5, None],
+            "ibd_tag": ["IBD uptrend (5 dist.)", None],
+        }
+    )
+    new = ibd.relabel(old)["ibd_tag"]
+    assert new.iloc[0] == "IBD 🟡 Uptrend under pressure (5 of 6 sell days)"
+    assert pd.isna(new.iloc[1])
 
 
 def test_live_check_splits_closed_trades_by_state():

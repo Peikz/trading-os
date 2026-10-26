@@ -66,6 +66,14 @@ def test_candidates_layout_and_pushed_flag():
     assert (out["run_kind"] == "scheduled").all()
 
 
+def test_the_tags_are_saved():
+    tagged = hits().assign(ibd_state="correction", ibd_dist=7, si_tag=["⚠️ shorted", None])
+    out = store.build_candidates({"ep_day": tagged}, CTX, {})
+    assert out["ibd_state"].tolist() == ["correction", "correction"]
+    assert out["ibd_dist"].tolist() == [7, 7] and out["si_tag"].iloc[0] == "⚠️ shorted"
+    assert out["heat_tag"].isna().all()
+
+
 def test_empty_results_still_have_schema():
     out = store.build_candidates({"ep_day": hits().iloc[0:0]}, CTX, {})
     assert out.empty

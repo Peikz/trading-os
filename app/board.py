@@ -15,7 +15,7 @@ from collections.abc import Callable
 import pandas as pd
 import streamlit as st
 
-from trading_os import clock, notify, plans, report, ticket
+from trading_os import clock, ibd, notify, plans, report, ticket
 
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
@@ -66,7 +66,7 @@ def collect(
             )
     if not frames:
         return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
+    out = ibd.relabel(pd.concat(frames, ignore_index=True))
     out = out.drop_duplicates(["ticker", "scan"], keep="first")
     if "grade" not in out:
         out["grade"] = "C"
@@ -536,8 +536,8 @@ def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None)
         ("Market heat", heat_text or "n/a", None),
         (
             "IBD market",
-            (ibd_info or {}).get("state", "n/a"),
-            f"{ibd_info['dist_count']} dist. days" if ibd_info else None,
+            ibd.words(ibd_info["state"], ibd_info["dist_count"]) if ibd_info else "n/a",
+            ibd.sell_days(ibd_info["state"], ibd_info["dist_count"]) if ibd_info else None,
         ),
     ]
     for name in ("spy", "qqq", "vix"):

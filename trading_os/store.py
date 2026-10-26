@@ -152,6 +152,13 @@ AUDIT_COLUMNS = [
     "luk_level",
     "luk_avwap",
     "base_days",
+    # The tags on each hit (Emil, 26 Oct 2026: they reached the push but were never saved, so
+    # the dashboard and the live check's IBD split could not see them)
+    "si_tag",
+    "heat_tag",
+    "ibd_state",
+    "ibd_dist",
+    "ibd_tag",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

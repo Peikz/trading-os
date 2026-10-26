@@ -30,6 +30,7 @@ import pandas as pd
 DIST_DROP_PCT = 0.2
 DIST_WINDOW = 25
 CORRECTION_DIST = 6
+PRESSURE_DIST = 4  # the label "under pressure" only (`words`), not a state
 FTD_MIN_DAY = 4
 FTD_GAIN_PCT = 1.25
 SEED = Path("data") / "market" / "spy_daily_seed.parquet"
@@ -114,18 +115,54 @@ def state_at(
     }
 
 
+def words(state: str | None, dist_count) -> str | None:
+    """The state in plain words with a colour (Emil, 26 Oct 2026: easier to remember than
+    "uptrend (4 dist.)"). Under pressure: an uptrend 1-2 sell days from a correction. A label
+    only; the state itself is unchanged and nothing trades on it."""
+    if state not in ("uptrend", "correction"):
+        return None
+    if state == "correction":
+        return "🔴 Correction"
+    return "🟡 Uptrend under pressure" if dist_count >= PRESSURE_DIST else "🟢 Healthy uptrend"
+
+
+def sell_days(state: str, dist_count) -> str:
+    """`2 of 6 sell days` in an uptrend (6 start a correction), `7 sell days` in a correction."""
+    n = int(dist_count)
+    return f"{n} of {CORRECTION_DIST} sell days" if state == "uptrend" else f"{n} sell days"
+
+
 def tag(info: Mapping[str, Any] | None) -> str | None:
-    """`IBD uptrend (2 dist.)` / `IBD correction (6 dist.)`."""
+    """`IBD 🟢 Healthy uptrend (2 of 6 sell days)` / `IBD 🔴 Correction (7 sell days)`."""
     if not info:
         return None
-    return f"IBD {info['state']} ({info['dist_count']} dist.)"
+    state, n = info["state"], info["dist_count"]
+    return f"IBD {words(state, n)} ({sell_days(state, n)})"
+
+
+def relabel(hits: pd.DataFrame) -> pd.DataFrame:
+    """`ibd_tag` from `ibd_state` / `ibd_dist`, so runs saved before the plain words read the
+    same (the Parquet stays as saved)."""
+    if hits.empty or "ibd_state" not in hits or "ibd_dist" not in hits:
+        return hits
+    tags = [
+        tag({"state": s, "dist_count": d}) if s in ("uptrend", "correction") and d == d else None
+        for s, d in zip(hits["ibd_state"], hits["ibd_dist"], strict=True)
+    ]
+    return hits.assign(ibd_tag=tags)
 
 
 def line(info: Mapping[str, Any] | None) -> list[str]:
     """The report's market line: tracked, not a rule."""
     if not info:
         return []
+    state, n = info["state"], info["dist_count"]
+    what = (
+        f"{n} of the {CORRECTION_DIST} sell days that turn it into a correction"
+        if state == "uptrend"
+        else f"{n} sell days; it turns up on a follow-through day (a strong up day, more volume)"
+    )
     return [
-        f"📊 IBD market: {info['state']} · {info['dist_count']} distribution days in 25 "
-        f"(SPY close {info['session_date']:%d %b}; tracked, not a rule)"
+        f"📊 IBD market: {words(state, n)} · {what} (SPY close {info['session_date']:%d %b}; "
+        "tracked, not a rule)"
     ]

@@ -222,7 +222,9 @@ in every test.
 **The IBD market state** (O'Neil; since 26 Oct 2026, tracked, not a rule): a distribution day is
 SPY down at least 0.2 % on more volume than the day before; 6 of them in 25 sessions start a
 correction, and a follow-through day (day 4 or later of a rally off the low, SPY up 1.25 % on more
-volume) starts an uptrend. Every signal carries the state (the report's IBD column and market
+volume) starts an uptrend. It reads in plain words: **🟢 Healthy uptrend** (0–3 sell days),
+**🟡 Uptrend under pressure** (4–5: a correction is 1–2 sell days away) and **🔴 Correction** (until
+a follow-through day), with the count next to it ("2 of 6 sell days"). Every signal carries the state (the report's IBD column and market
 line, the dashboard's tiles and tables; the push leaves it out), and the monthly live check
 splits the live trades by it. In the study MA-surf A and EP9M A+ did better in an uptrend, but
 that was found with both periods in view and 2006–15 didn't confirm it, so grades don't use it.
