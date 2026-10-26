@@ -89,19 +89,16 @@ DEFAULT_DATA = Path(
     _args.data_dir
     or os.environ.get("TRADING_OS_DATA", Path(__file__).resolve().parents[2] / "trading-os-data")
 )
-PAGES = [
-    "Today",
-    "Screens",
-    "Scans",
-    "Chart",
-    "Watchlists",
-    "Journal",
-    "Market",
-    "Research",
-    "Live results",
-    "System health",
-    "Guide",
-]
+# Ordered by the trading day (Emil, 26 Oct 2026): before the open, live, after the close, then
+# research and settings out of the way. Each page shows its group's icon.
+PAGE_GROUPS = {
+    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screens"],
+    "⚡ Live": ["Positions", "Chart", "Scans"],
+    "🌙 After the close": ["Journal", "Live results"],
+    "🔬 Research & settings": ["Research", "System health", "Guide"],
+}
+PAGES = [p for pages in PAGE_GROUPS.values() for p in pages]
+PAGE_ICON = {p: g.split()[0] for g, pages in PAGE_GROUPS.items() for p in pages}
 # Research and Live results gather the history pages. One section runs at a time: tabs would
 # run every section's code (and its downloads) on each click.
 RESEARCH = {
@@ -154,7 +151,14 @@ with st.sidebar:
     query = st.text_input(
         "🔎 Search", key="search", placeholder="A ticker, or words in your notes and the guide"
     )
-    page = st.radio("Page", PAGES, label_visibility="collapsed", key="page")
+    page = st.radio(
+        "Page",
+        PAGES,
+        label_visibility="collapsed",
+        key="page",
+        format_func=lambda p: f"{PAGE_ICON[p]} {p}",
+    )
+    st.caption("☀️ before the open · ⚡ live · 🌙 after the close · 🔬 research")
     data_dir = Path(st.text_input("Data repo folder", str(DEFAULT_DATA)))
     include_manual = st.toggle("Show manual test runs", value=True)
     left, right = st.columns(2)
@@ -1405,39 +1409,105 @@ if page == "Today":
     )
     st.divider()
     st.subheader("Market")
-    if (
-        latest_pm is not None
-        and latest_pm.breadth_pm is not None
-        and (latest_eod is None or latest_pm.session > latest_eod.session)
-    ):
-        pm_row = read_parquet(str(latest_pm.breadth_pm)).iloc[0].to_dict()
-        last = breadth.latest_eod_row(data_dir, latest_pm.session)
-        for line in breadth.premarket_lines(pm_row, last):
-            st.markdown(f"- {line}")
-    else:
-        market_lines(latest_eod)
+    tile_run = latest_pm if latest_pm is not None and latest_pm.breadth_pm is not None else None
+    tile_row = None
+    if latest_eod is not None and latest_eod.breadth is not None:
+        tile_row = read_parquet(str(latest_eod.breadth)).iloc[0].to_dict()
+    if tile_run is not None and (latest_eod is None or tile_run.session > latest_eod.session):
+        tile_row = {**(tile_row or {}), **read_parquet(str(tile_run.breadth_pm)).iloc[0].to_dict()}
+    try:
+        from trading_os import ibd
+
+        tile_ibd = ibd.state_at(data_dir, dt.date.today())
+    except Exception:  # noqa: BLE001 - the tile shows n/a
+        tile_ibd = None
+    tile_heat = heat.short_line(heat.load(data_dir), (tile_row or {}).get("scan_count"))
+    board.market_tiles(tile_row, tile_ibd, tile_heat[0].replace("🌡 ", "") if tile_heat else None)
+    with st.expander("Market details"):
+        if (
+            latest_pm is not None
+            and latest_pm.breadth_pm is not None
+            and (latest_eod is None or latest_pm.session > latest_eod.session)
+        ):
+            pm_row = read_parquet(str(latest_pm.breadth_pm)).iloc[0].to_dict()
+            last = breadth.latest_eod_row(data_dir, latest_pm.session)
+            for line in breadth.premarket_lines(pm_row, last):
+                st.markdown(f"- {line}")
+        else:
+            market_lines(latest_eod)
     latest_am = next((r for r in runs if r.slot == "am"), None)
     latest_mid = next((r for r in runs if r.slot == "mid"), None)
     latest = [r for r in (latest_pm, latest_am, latest_mid, latest_eod) if r is not None]
+    st.subheader("All scans")
     for run in sorted(latest, key=runs.index):  # newest first
-        st.subheader(run.label)
-        for scan, hits in scan_frames(str(run.candidates)).items():
-            if scan not in CFG.scans or CFG.scans[scan].action != "push":
-                continue
-            shown = hits[hits["tier"] == "alert"] if "push_tier" in CFG.scans[scan].params else hits
-            label = report.SCAN_LABELS.get(scan, scan)
-            st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
-            show_table(scan, shown, exchanges_of(str(run.universe)))
-            grade_blocks(shown)
-            facts = report.fact_lines(scan, shown)
-            if facts:
-                st.markdown("\n".join(facts))
-            charts = [(t, dashboard.chart_for(run, scan, t)) for t in shown["ticker"].head(10)]
-            charts = [(t, p) for t, p in charts if p is not None]
-            if charts:
-                cols = st.columns(min(3, len(charts)))
-                for i, (ticker, path) in enumerate(charts):
-                    cols[i % len(cols)].image(str(path), caption=ticker)
+        exp = st.expander(f"{run.label} · every pushed scan's table")
+        with exp:
+            for scan, hits in scan_frames(str(run.candidates)).items():
+                if scan not in CFG.scans or CFG.scans[scan].action != "push":
+                    continue
+                alert_only = "push_tier" in CFG.scans[scan].params
+                shown = hits[hits["tier"] == "alert"] if alert_only else hits
+                label = report.SCAN_LABELS.get(scan, scan)
+                st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
+                show_table(scan, shown, exchanges_of(str(run.universe)))
+                grade_blocks(shown)
+                facts = report.fact_lines(scan, shown)
+                if facts:
+                    st.markdown("\n".join(facts))
+                charts = [(t, dashboard.chart_for(run, scan, t)) for t in shown["ticker"].head(10)]
+                charts = [(t, p) for t, p in charts if p is not None]
+                if charts:
+                    cols = st.columns(min(3, len(charts)))
+                    for i, (ticker, path) in enumerate(charts):
+                        cols[i % len(cols)].image(str(path), caption=ticker)
+
+elif page == "Positions":
+    # The positions cockpit (Emil, 26 Oct 2026): each open position with its price, open R, the
+    # distance to its stop and what its plan says today. Live prices when the Alpaca keys are
+    # set on this PC (scripts/set_local_secrets.ps1), else the newest close in the data repo.
+    st.header("Positions")
+    positions = dashboard.latest_positions(data_dir)
+    if positions.empty:
+        st.info("No open positions. Your fills come in through the Journal (import or log).")
+        st.stop()
+    account = sizing.load_account(data_dir)
+    usd_rate = fx_rate(str(data_dir), account.currency if account else "USD")
+    account_usd = account.size_usd(usd_rate) if account and usd_rate else None
+    last = recent_bars(str(data_dir), tuple(sorted(positions["ticker"])))
+    view = review.open_risk(positions, last, account_usd)
+    prices, source = {}, "the newest daily close in the data repo (not live)"
+    if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY"):
+        try:
+            from trading_os.alpaca import AlpacaClient
+
+            client = AlpacaClient(
+                os.environ["ALPACA_API_KEY_ID"], os.environ["ALPACA_API_SECRET_KEY"], per_minute=60
+            )
+            prices = client.latest_prices(view["ticker"])
+            source = "live (Alpaca IEX, last trade) where it has one, else the last close"
+        except Exception:  # noqa: BLE001 - falls back to the close
+            prices = {}
+    a, b, c = st.columns(3)
+    a.metric("Open positions", len(view))
+    b.metric("Open P&L (at the close)", f"${view['open_pnl'].sum():,.0f}")
+    c.metric("At risk to stops", f"${view['at_risk_usd'].sum():,.0f}")
+    plan_check = pd.DataFrame()
+    eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    if eod_runs:
+        from trading_os import manage
+
+        snap = read_parquet(str(eod_runs[0].universe))
+        plan_day = eod_runs[0].session
+        around = [
+            *clock.sessions_back(CFG.schedule, plan_day, 400),
+            *clock.sessions_after(CFG.schedule, plan_day, 10, plan_day + dt.timedelta(days=30)),
+        ]
+        plan_check = manage.review(positions, snap, plan_day, around, CFG.grading, "eod")
+    board.position_cards(view, plan_check, prices, source, open_chart)
+    st.caption(
+        "Exits are the plan's facts, not advice: hold = sell at the close after N sessions; "
+        "trail = out on a close under the 20-day MA. Fills and stops come from the Journal."
+    )
 
 elif page == "Screens":
     st.header("Screens")

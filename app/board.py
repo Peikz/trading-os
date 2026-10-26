@@ -251,3 +251,91 @@ def show(runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart)
         chart(str(row["ticker"]))
     with right:
         card(row, i, cfg, data_dir, account, usd_rate, open_chart, inline=True)
+
+
+def _signed(v) -> str | None:
+    return None if v is None or pd.isna(v) else f"{v:+.1f}%"
+
+
+def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None) -> None:
+    """The market as tiles (Emil, 26 Oct 2026: tiles, not bullet text): the QQQ light, the heat,
+    the IBD state, SPY, QQQ and VIX. The full lines stay in 'Market details' below."""
+    if not row:
+        st.info("No market row yet.")
+        return
+    icons = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}
+    light = row.get("qqq_light")
+    tiles = [
+        ("QQQ light", f"{icons.get(light, '⚪')} {light or 'n/a'}", None),
+        ("Market heat", heat_text or "n/a", None),
+        (
+            "IBD market",
+            (ibd_info or {}).get("state", "n/a"),
+            f"{ibd_info['dist_count']} dist. days" if ibd_info else None,
+        ),
+    ]
+    for name in ("spy", "qqq", "vix"):
+        close = row.get(f"{name}_close")
+        if close is not None and not pd.isna(close):
+            tiles.append((name.upper(), f"{close:,.2f}", _signed(row.get(f"{name}_chg_pct"))))
+    cols = st.columns(3)
+    for i, (label, value, delta) in enumerate(tiles):
+        cols[i % 3].metric(
+            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
+        )
+
+
+def position_cards(
+    view: pd.DataFrame, plan_check: pd.DataFrame, prices: dict, source: str, open_chart
+) -> None:
+    """The positions cockpit: one card per open position, with the price (live when the Alpaca
+    keys are set), open R and P&L, the distance to the stop, and what the plan says today."""
+    plan = plan_check.set_index("ticker") if len(plan_check) else pd.DataFrame()
+    st.caption(f"Prices: {source}")
+    for n, p in enumerate(view.to_dict("records")):
+        t = p["ticker"]
+        price = prices.get(t, p.get("last_close"))
+        sign = 1 if p.get("direction") == "long" else -1
+        entry, stop, qty = p.get("entry_avg"), p.get("order_stop"), abs(p.get("open_quantity") or 0)
+        risk = (entry - stop) * sign if stop == stop and stop is not None else float("nan")
+        r_now = (price - entry) * sign / risk if risk and risk > 0 else float("nan")
+        pnl = (price - entry) * sign * qty
+        to_stop = (price - stop) * sign / price * 100 if risk == risk else float("nan")
+        info = plan.loc[t] if t in plan.index else {}
+        with st.container(border=True):
+            st.markdown(
+                f"<b style='font-size:1.15em'>{t}</b> &nbsp;·&nbsp; {p.get('setup') or ''}"
+                f" &nbsp;<span style='opacity:.6'>{p.get('direction')} · {qty:,.0f} sh"
+                f" · in {p.get('entry_date')}</span>",
+                unsafe_allow_html=True,
+            )
+            a, b, c = st.columns(3)
+            a.metric("Price", f"{price:,.2f}", f"{(price / entry - 1) * 100 * sign:+.1f}%")
+            b.metric("Open R", f"{r_now:+.2f}R" if r_now == r_now else "n/a", f"${pnl:,.0f}")
+            c.metric(
+                "To stop",
+                f"{to_stop:.1f}%" if to_stop == to_stop else "no stop",
+                f"stop {stop:,.2f}" if stop == stop and stop is not None else None,
+                delta_color="off",
+            )
+            facts = []
+            if len(info):
+                rule, held, hold = info.get("rule"), info.get("held"), info.get("hold")
+                if rule == "hold" and hold == hold and hold:
+                    facts.append(
+                        f"Plan: sell at the close after {int(hold)} sessions · day "
+                        f"{int(held)} of {int(hold)}"
+                    )
+                elif rule == "trail_ma20":
+                    facts.append("Plan: trail the 20-day MA, out on a close under it")
+                elif rule == "cover_ma20":
+                    facts.append("Plan: cover on a close over the 20-day MA")
+                action = info.get("action")
+                if isinstance(action, str) and action:
+                    facts.append(f"**⚠️ {action}**")
+                earn = info.get("earnings")
+                if earn is not None and not pd.isna(earn):
+                    facts.append(f"📅 Earnings {earn}")
+            if facts:
+                st.markdown("\n".join(f"- {f}" for f in facts))
+            st.button("📈 Chart", key=f"pos_{n}_chart", on_click=open_chart, args=(t,))
