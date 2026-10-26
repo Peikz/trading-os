@@ -6,3 +6,6 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"   # no Deploy button (Emil, 26 Oct 2026: the dashboard as a trading tool)

@@ -20,6 +20,7 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import board  # app/board.py: Today's candidate board and Saxo ticket
 import pandas as pd
 import streamlit as st
 from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
@@ -65,6 +66,12 @@ from trading_os.config import DEFAULT_PATH as CONFIG_PATH
 from trading_os.config import ConfigError, load_config
 
 st.set_page_config(page_title="Trading OS", page_icon="📈", layout="wide")
+# Less empty space at the top, so the first card shows without scrolling (phone and PC).
+st.markdown(
+    "<style>.block-container{padding-top:2.2rem;padding-bottom:2rem}"
+    "h1{margin-bottom:.2rem}</style>",
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_resource(show_spinner=False)
@@ -1383,6 +1390,20 @@ if page == "Today":
         st.stop()
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
+    board_account = sizing.load_account(data_dir)
+    board.show(
+        runs,
+        CFG,
+        data_dir,
+        board_account,
+        fx_rate(str(data_dir), board_account.currency if board_account else "USD"),
+        scan_frames,
+        open_chart,
+        lambda t: stock_chart(
+            t, overlays=["MA10", "MA20", "MA50"], sessions=150, show_hits=False, key="focus_chart"
+        ),
+    )
+    st.divider()
     st.subheader("Market")
     if (
         latest_pm is not None
