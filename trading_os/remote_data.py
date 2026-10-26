@@ -9,6 +9,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -67,15 +68,21 @@ def fetch(repo: str, tag: str, pattern: str, cache: Path = CACHE) -> list[Path]:
     missing = [n for n in wanted if not (folder / n).exists()]
     # Download beside the cache and move each finished file in: a page reading a file while
     # it was still being written saw a broken file ("Parquet magic bytes not found").
-    partial = folder / ".partial"
-    partial.mkdir(exist_ok=True)
-    for k in range(0, len(missing), 100):  # one call per hundred files (each call costs ~1 s)
-        batch = [arg for name in missing[k : k + 100] for arg in ("-p", name)]
-        _gh(["release", "download", tag, "-R", repo, "-D", str(partial), "--clobber", *batch])
-        for name in missing[k : k + 100]:
-            done = partial / name
-            if done.exists():
-                done.replace(folder / name)
+    # A fresh folder each call (Emil, 26 Oct 2026): a reused `.partial` folder got into a state
+    # where every gh download into it failed ("too many levels of symbolic links") and charts
+    # showed "No daily bars".
+    if missing:
+        partial = Path(tempfile.mkdtemp(prefix=".partial-", dir=folder))
+        try:
+            for k in range(0, len(missing), 100):  # one call per hundred files (~1 s a call)
+                batch = [arg for name in missing[k : k + 100] for arg in ("-p", name)]
+                _gh(["release", "download", tag, "-R", repo, "-D", str(partial), *batch])
+                for name in missing[k : k + 100]:
+                    done = partial / name
+                    if done.exists():
+                        done.replace(folder / name)
+        finally:
+            shutil.rmtree(partial, ignore_errors=True)
     paths = [folder / n for n in wanted if (folder / n).exists()]
     now = time.time()
     for p in paths:  # used just now: the last to be pruned
