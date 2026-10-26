@@ -151,3 +151,12 @@ def test_previous_session_takes_any_day(schedule):
 
 def test_sessions_back_reaches_2005(schedule):
     assert sessions_back(schedule, dt.date(2006, 1, 10), 260)[0].year == 2004
+
+
+def test_early_window_is_copenhagen_time_on_trading_days(schedule):
+    from trading_os.job import early_window
+
+    # Mon 26 Oct 2026: Copenhagen on winter time, New York still on summer time
+    assert early_window(schedule, dt.datetime(2026, 10, 26, 10, 30, tzinfo=dt.UTC))  # 11:30
+    assert not early_window(schedule, dt.datetime(2026, 10, 26, 12, 0, tzinfo=dt.UTC))  # 13:00
+    assert not early_window(schedule, dt.datetime(2026, 10, 25, 10, 30, tzinfo=dt.UTC))  # Sunday

@@ -1,4 +1,5 @@
-# Pre-market job (SPEC §3): target 07:30 New York.
+# Pre-market job (SPEC §3): target 07:30 New York. The cron-job.org timer also starts an early
+# push at 11:30 Copenhagen time (input `early`; Emil, 26 Oct 2026).
 # Two crons, one per US DST state; scripts/premarket.py exits unless New York time is in
 # 07:15-07:55 on a trading day, and skips a session that is already saved.
 # This repo is public and so are these logs: the job prints counts and status only.
@@ -17,6 +18,10 @@ on:
         default: false
       force:
         description: "Skip the time guard (output goes to data/manual/, never counts as the session run)"
+        type: boolean
+        default: false
+      early:
+        description: "The early push, 11:00-12:30 Copenhagen (saved under data/manual/)"
         type: boolean
         default: false
 
@@ -52,8 +57,9 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           FORCE: ${{ inputs.force && '--force' || '' }}
+          EARLY: ${{ inputs.early && '--early' || '' }}
           RUN_TRIGGER: ${{ inputs.timer && 'timer' || '' }}
-        run: uv run --frozen --no-dev python scripts/premarket.py --data-dir data-repo $FORCE
+        run: uv run --frozen --no-dev python scripts/premarket.py --data-dir data-repo $FORCE $EARLY
 
       - name: Commit data
         if: always()

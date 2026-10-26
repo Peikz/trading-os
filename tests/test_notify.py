@@ -288,3 +288,17 @@ def test_b5_only_shown_under_a_section_without_full_setups():
         f"B: move {DOT} base {DOT} trend {DOT} tight {DOT} trigger",
         f"B5 only {DOT} top 3 of 3:",
     ]
+
+
+def test_early_premarket_title():
+    import datetime as dt
+
+    import pandas as pd
+
+    from trading_os import notify
+    from trading_os.store import RunContext
+
+    ctx = RunContext(dt.date(2026, 10, 27), "pm", pd.Timestamp("2026-10-27 10:30", tz="UTC"),
+                     "scheduled", forced=True, early=True)  # fmt: skip
+    title = notify._title(ctx, [], "")
+    assert title.startswith("Pre-market early Tue 27 Oct") and "manual" not in title

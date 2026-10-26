@@ -148,3 +148,14 @@ def test_the_daily_job_line_names_missed_and_failed_runs():
     assert "am ❌ failed" in line and "mid ❌ missed" in line and "weekly" not in line
     rows = [run(j) for j in jobs if j.key != "weekly"]
     assert timer.health_line(pd.DataFrame(rows), WINDOWS, now).startswith("🩺 All ")
+
+
+def test_early_premarket_fires_at_1130_copenhagen():
+    import datetime as dt
+
+    job = by_title("pm_early")
+    assert job.title.endswith("11:30 CPH") and job.inputs == {"early": "true"}
+    assert timer.payload(job, "t")["schedule"]["timezone"] == "Europe/Copenhagen"
+    # Tue 27 Oct 2026, 12:00 Copenhagen (UTC+1): it last fired at 11:30 Copenhagen = 10:30 UTC
+    fired = timer.last_fire(job, dt.datetime(2026, 10, 27, 11, 0, tzinfo=dt.UTC))
+    assert fired == dt.datetime(2026, 10, 27, 10, 30, tzinfo=dt.UTC)

@@ -120,6 +120,8 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 
 ### 6.1 Pre-market (13:30 CET)
 
+An early push comes at 11:30 Copenhagen time (Emil, 26 Oct 2026; `--early`, timer job `pm_early`). It runs the same pre-market job, titled "Pre-market early", with last night's setups, the market head and any gappers that already have the volume. It is saved under `data/manual/`, so the 07:17 New York run stays the session's full pre-market run: its volume floors need the later time.
+
 | Scan | Filters | Phase | Action |
 |---|---|---|---|
 | EP-PM (yours) | Pre-market change ≥ 10%, price ≥ $1, pre-market volume ≥ 50K, market cap ≥ $50M; earnings/news flag as column | 1 | Push |

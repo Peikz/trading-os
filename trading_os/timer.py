@@ -39,15 +39,28 @@ class TimerJob:
     days: tuple[int, ...]
     inputs: dict = field(default_factory=dict)
     retry: bool = False  # the second start, in case the first run failed
+    tz: str = TIMEZONE  # the clock `at` is on (the early pre-market: Copenhagen)
 
     @property
     def title(self) -> str:
-        return f"{PREFIX}{self.key}{' retry' if self.retry else ''} {self.at} ET"
+        zone = "ET" if self.tz == TIMEZONE else "CPH"
+        return f"{PREFIX}{self.key}{' retry' if self.retry else ''} {self.at} {zone}"
 
 
 JOBS = (
     TimerJob("backfill", "backfill.yml", "Backfill", "05:30", TUE_SAT),
     TimerJob("bars-pack", "bars-pack.yml", "Bars pack", "06:15", TUE_SAT),
+    # The early pre-market push (Emil, 26 Oct 2026): 11:30 in Copenhagen whatever the US
+    # clocks do; the 07:17 New York run stays the full one (its volume floors need the time).
+    TimerJob(
+        "pm_early",
+        "premarket.yml",
+        "Pre-market",
+        "11:30",
+        WEEKDAYS,
+        {"early": "true"},
+        tz="Europe/Copenhagen",
+    ),  # fmt: skip
     TimerJob("pm", "premarket.yml", "Pre-market", "07:17", WEEKDAYS),
     TimerJob("pm", "premarket.yml", "Pre-market", "07:35", WEEKDAYS, retry=True),
     TimerJob("am", "intraday.yml", "Intraday", "10:17", WEEKDAYS, {"slot": "am"}),
@@ -84,7 +97,7 @@ def payload(job: TimerJob, token: str) -> dict:
         "saveResponses": False,
         "requestMethod": 1,  # POST
         "schedule": {
-            "timezone": TIMEZONE,
+            "timezone": job.tz,
             "expiresAt": 0,
             "hours": [hour],
             "minutes": [minute],
@@ -119,11 +132,11 @@ def plan(existing: list[dict]):
 
 def last_fire(job: TimerJob, now: dt.datetime) -> dt.datetime:
     """When the timer last started `job` at or before `now` (both UTC)."""
-    ny = now.astimezone(ZoneInfo(TIMEZONE))
+    ny = now.astimezone(ZoneInfo(job.tz))
     hour, minute = _hm(job.at)
     for back in range(8):
         day = ny.date() - dt.timedelta(days=back)
-        fire = dt.datetime.combine(day, dt.time(hour, minute), tzinfo=ZoneInfo(TIMEZONE))
+        fire = dt.datetime.combine(day, dt.time(hour, minute), tzinfo=ZoneInfo(job.tz))
         if (day.weekday() + 1) % 7 in job.days and fire <= ny:
             return fire.astimezone(dt.UTC)
     raise ValueError(f"{job.title} has no day to run on")

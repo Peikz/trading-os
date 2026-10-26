@@ -186,6 +186,7 @@ class RunContext:
     run_ts: dt.datetime  # UTC
     run_kind: str  # scheduled | manual
     forced: bool = False
+    early: bool = False  # the early pre-market push (saved like a forced run, under data/manual)
 
 
 def signal_id(session: dt.date, slot: str, scan: str, ticker: str) -> str:

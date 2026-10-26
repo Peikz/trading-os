@@ -674,9 +674,11 @@ def _quiet(label: str, hits: pd.DataFrame, scan) -> str:
 
 def _title(ctx: RunContext, counts: list[str], icon: str) -> str:
     day = ctx.session
-    title = f"{SLOT_LABELS[ctx.slot]} {day:%a} {day.day} {day:%b} {clock.both_times(ctx.run_ts)}"
+    early = getattr(ctx, "early", False)
+    label = "Pre-market early" if early else SLOT_LABELS[ctx.slot]
+    title = f"{label} {day:%a} {day.day} {day:%b} {clock.both_times(ctx.run_ts)}"
     title += " · " + (" · ".join(counts) if counts else "no alerts")
-    if ctx.forced:
+    if ctx.forced and not early:
         title += " (manual run)"
     return f"{icon} {title}" if icon else title
 

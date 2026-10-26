@@ -11,6 +11,7 @@ import argparse
 import datetime as dt
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -66,10 +67,27 @@ def parse_args(description: str, argv: list[str] | None = None) -> argparse.Name
         help="skip the time guard; output goes to data/manual/ and never counts as the session run",
     )
     parser.add_argument("--no-push", action="store_true", help="don't send the ntfy message")
+    parser.add_argument(
+        "--early",
+        action="store_true",
+        help="the early pre-market push: 11:00-12:30 Copenhagen time, saved under data/manual/",
+    )
     args = parser.parse_args(argv)
     if args.data_dir is None:
         parser.error("--data-dir or DATA_DIR is required")
     return args
+
+
+EARLY_WINDOW_CPH = (dt.time(11, 0), dt.time(12, 30))
+
+
+def early_window(schedule, now: dt.datetime) -> bool:
+    """The early pre-market push's window (Emil, 26 Oct 2026): 11:00-12:30 in Copenhagen on a
+    US trading day (US pre-market from 04:00 New York; the market opens at 09:30)."""
+    cph = now.astimezone(ZoneInfo("Europe/Copenhagen"))
+    start, end = EARLY_WINDOW_CPH
+    day = clock.ny_time(schedule, now).date()
+    return start <= cph.time() <= end and clock.is_session(schedule, day)
 
 
 def run_kind() -> str:
@@ -83,6 +101,12 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     cfg = load_config()
     now = dt.datetime.now(dt.UTC)
 
+    early = getattr(args, "early", False)
+    if early:
+        if not early_window(cfg.schedule, now):
+            status(f"{label}: outside the early window (11:00-12:30 Copenhagen), nothing to do")
+            return 0
+        args.force = True  # saved apart, so the 07:17 run still counts as the session's
     if not args.force and not clock.in_window(cfg.schedule, slot, now):
         status(f"{label}: outside its New York window or day, nothing to do")
         return 0
@@ -101,6 +125,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         run_ts=now,
         run_kind=run_kind(),
         forced=args.force,
+        early=early,
     )
     status(f"{label}: session {session}, run_kind {ctx.run_kind}, forced {ctx.forced}")
 
