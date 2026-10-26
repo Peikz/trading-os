@@ -1401,20 +1401,42 @@ elif page == "System health":
     page = HEALTH[section]
 
 
-def focus_chart(ticker: str, row: dict | None = None) -> None:
-    """The focus view's chart: the fast Lightweight Chart with the plan's levels (drawing and the
-    other tools on the Chart page)."""
+def focus_chart(
+    ticker: str,
+    row: dict | None = None,
+    timeframe: str = "1D",
+    picked: list[str] | None = None,
+    height: int = 520,
+) -> None:
+    """The focus view's chart: the fast Lightweight Chart, daily or weekly, with the picked
+    indicators (the anchored VWAP from the signal day, the RS line against QQQ) and the plan's
+    levels. Drawing and the other tools are on the Chart page."""
     bars = bars_for(str(data_dir), ticker, "2y")
     if bars.empty:
         st.caption(f"No daily bars for {ticker} in the data repo.")
         return
     row = row or {}
+    picked = lwchart.DEFAULT if picked is None else picked
+    bench = bars_for(str(data_dir), "QQQ", "2y") if "RS vs QQQ" in picked else None
+    if timeframe == "1W":
+        bars = lwchart.weekly(bars)
+        bench = lwchart.weekly(bench) if bench is not None and len(bench) else bench
     levels = {"entry": row.get("plan_entry"), "stop": row.get("plan_stop") or row.get("grade_stop")}
     if row.get("pivot") == row.get("pivot") and row.get("pivot"):
         levels["pivot"] = row.get("pivot")
     exchange = row.get("exchange")
     where = f" · {exchange}" if isinstance(exchange, str) and exchange else ""
-    lwchart.show(bars, levels, title=f"{ticker} · 1D{where}")
+    anchor = row.get("avwap_anchor") or row.get("run_session")
+    lwchart.show(
+        bars,
+        levels,
+        height,
+        title=f"{ticker} · {timeframe}{where}",
+        picked=picked,
+        anchor=anchor,
+        bench=bench,
+        show_bars=130 if timeframe == "1D" else 80,
+    )
 
 
 if page == "Today":

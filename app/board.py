@@ -30,9 +30,17 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd
             latest.append(run)
     # The exchange per ticker from the newest run with a universe file (intraday runs have none)
     listing: dict = {}
-    if exchanges is not None:
-        with_universe = next((r for r in runs if r.universe.exists()), None)
-        listing = exchanges(str(with_universe.universe)) if with_universe else {}
+    info = pd.DataFrame()
+    with_universe = next((r for r in runs if r.universe.exists()), None)
+    if exchanges is not None and with_universe is not None:
+        listing = exchanges(str(with_universe.universe))
+    if with_universe is not None:
+        want = ["ticker", "sector", "industry", "float_shares", "earnings_date_next"]
+        try:
+            info = pd.read_parquet(with_universe.universe, columns=want).drop_duplicates("ticker")
+            info = info.set_index("ticker")
+        except Exception:  # noqa: BLE001 - the stats strip shows dashes
+            info = pd.DataFrame()
     frames = []
     for run in sorted(latest, key=runs.index):
         for scan, hits in scan_frames(str(run.candidates)).items():
@@ -43,6 +51,9 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd
                 continue
             if listing and "exchange" not in shown:
                 shown = shown.assign(exchange=shown["ticker"].map(listing))
+            for column in info.columns:
+                if column not in shown:
+                    shown = shown.assign(**{column: shown["ticker"].map(info[column])})
             frames.append(
                 shown.assign(
                     scan=scan, run_label=run.label, run_slot=run.slot, run_session=run.session
@@ -198,19 +209,178 @@ def _step(n: int, by: int) -> None:
     st.session_state["board_i"] = (st.session_state.get("board_i", 0) + by) % n
 
 
+def _jump(i: int) -> None:
+    st.session_state["board_i"] = i
+
+
+def _flip_timeframe() -> None:
+    st.session_state["fc_tf"] = "1W" if st.session_state.get("fc_tf", "1D") == "1D" else "1D"
+
+
+def _toggle(key: str) -> None:
+    st.session_state[key] = not st.session_state.get(key, False)
+
+
+def _money(x) -> str:
+    if x is None or pd.isna(x):
+        return "–"
+    x = float(x)
+    return f"${x / 1e9:.1f}B" if x >= 1e9 else f"${x / 1e6:.0f}M" if x >= 1e6 else f"${x:,.0f}"
+
+
+def stats_strip(row) -> None:
+    """The key stats under the chart (Emil, 26 Oct 2026: like TradingView's data panel and what
+    Qullamaggie reads out): market cap, ADR, dollar volume, float, % from the 52-week high, RS,
+    the industry, earnings."""
+
+    def num(k):
+        v = row.get(k)
+        return None if v is None or (isinstance(v, float) and pd.isna(v)) else v
+
+    chips = [("Mkt cap", _money(num("market_cap")))]
+    adr = num("adr20_pct")
+    chips.append(("ADR", f"{adr:.1f}%" if adr is not None else "–"))
+    chips.append(("$ vol 20d", _money(num("avg_dollar_volume_20d"))))
+    fl = num("float_shares")
+    chips.append(("Float", f"{fl / 1e6:,.0f}M" if fl is not None else "–"))
+    hi = num("pct_from_52w_high")
+    chips.append(("From 52w high", f"{hi:+.0f}%" if hi is not None else "–"))
+    rs = num("rs_pct")
+    chips.append(("RS", f"{rs:.0f}" if rs is not None else "–"))
+    rank, of = num("industry_rank"), num("industry_of")
+    ind = row.get("industry") if isinstance(row.get("industry"), str) else ""
+    chips.append(("Industry", f"{ind} #{int(rank)}/{int(of)}" if rank and of else ind or "–"))
+    soon = num("earnings_in_sessions")
+    nxt = row.get("earnings_date_next")
+    if soon is not None:
+        chips.append(("Earnings", f"in {int(soon)} sessions"))
+    elif nxt is not None and not pd.isna(nxt):
+        chips.append(("Earnings", f"{pd.Timestamp(nxt):%d %b}"))
+    html = " ".join(
+        f"<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;"
+        f"border:1px solid #30363d;border-radius:6px;font-size:.85em'>"
+        f"<span style='opacity:.6'>{k}</span> <b>{v}</b></span>"
+        for k, v in chips
+    )
+    st.html(html.replace("$", "&#36;"))  # plain HTML: a $ would start math in markdown
+
+
+FLAGS = {"🟥": "Flag red", "🟨": "Flag yellow", "🟩": "Flag green"}
+
+
+def notes_and_alerts(row, data_dir) -> None:
+    """Flags (to the matching watchlist), a note, and a price alert for the stock in focus."""
+    from trading_os import alerts, my_watchlists, stock_notes
+
+    t = str(row["ticker"])
+    cols = st.columns(3)
+    for col, (icon, name) in zip(cols, FLAGS.items(), strict=True):
+        if col.button(icon, key=f"flag_{name}_{t}", help=f"Add to '{name}'", width="stretch"):
+            my_watchlists.add(data_dir, name, [t])
+            st.toast(f"{t} → {name}")
+    st.caption("F flags green. The flags are watchlists (Watchlists page).")
+    with st.form(f"note_{t}", clear_on_submit=True):
+        text = st.text_area(
+            "Note",
+            key=f"note_text_{t}",
+            height=80,
+            placeholder="N jumps here. What you see in this chart…",
+        )
+        if st.form_submit_button("Save note") and text.strip():
+            stock_notes.add(data_dir, t, text.strip())
+            st.toast("Note saved")
+    mine = stock_notes.current(data_dir, t)
+    for n in mine.tail(3).to_dict("records")[::-1] if len(mine) else []:
+        st.caption(f"{n.get('note_date')}: {n.get('text')}")
+    levels = {k: row.get(k) for k in ("pivot", "plan_entry", "plan_stop")}
+    default = next((float(v) for v in levels.values() if v is not None and v == v and v), 0.0)
+    with st.form(f"alert_{t}", clear_on_submit=False):
+        a, b = st.columns(2)
+        level = a.number_input(
+            "Alert price", min_value=0.0, value=default, step=0.01, format="%.2f", key=f"al_lvl_{t}"
+        )
+        side = b.selectbox("When", alerts.DIRECTIONS, key=f"al_dir_{t}")
+        if st.form_submit_button("🔔 Add price alert") and level > 0:
+            alerts.add(data_dir, t, float(level), side, "from the focus view")
+            st.toast(f"Alert: {t} {side} {level:.2f} (pushed to your phone when hit)")
+    own = alerts.current(data_dir)
+    own = own[own["ticker"] == t] if len(own) else own
+    for a_ in own.to_dict("records") if len(own) else []:
+        st.caption(f"🔔 {a_['direction']} {a_['level']:.2f}")
+
+
+def candidate_list(rows: list[dict], i: int) -> None:
+    """The queue, TradingView watchlist style: click to jump."""
+    for k, r in enumerate(rows):
+        label = report.SCAN_LABELS.get(r["scan"], r["scan"])
+        chg = r.get("chg_pct")
+        move = f" {chg:+.1f}%" if chg is not None and chg == chg else ""
+        st.button(
+            f"{r.get('grade', 'C')} · {r['ticker']} · {label}{move}",
+            key=f"jump_{k}",
+            on_click=_jump,
+            args=(k,),
+            type="primary" if k == i else "secondary",
+            width="stretch",
+        )
+
+
+def toolbar() -> tuple[str, list[str]]:
+    """Bars and indicators for the focus and grid charts, remembered for the session."""
+    from lwchart import DEFAULT, INDICATORS
+
+    a, b = st.columns([1, 4])
+    tf = a.segmented_control(
+        "Bars", ["1D", "1W"], default="1D", key="fc_tf", label_visibility="collapsed"
+    )
+    picked = b.pills(
+        "Indicators",
+        list(INDICATORS),
+        selection_mode="multi",
+        default=DEFAULT,
+        key="fc_ind",
+        label_visibility="collapsed",
+    )
+    return tf or "1D", list(picked or [])
+
+
+def hotkeys(row, data_dir) -> None:
+    """Hidden-ish buttons that carry the keyboard shortcuts: W bars, F green flag, N note,
+    T ticket (the arrows are on ◀ ▶)."""
+    from trading_os import my_watchlists
+
+    cols = st.columns(4)
+    cols[0].button("W · 1D/1W", key="hk_w", shortcut="W", on_click=_flip_timeframe, width="stretch")
+    if cols[1].button("F · 🟩 flag", key="hk_f", shortcut="F", width="stretch"):
+        my_watchlists.add(data_dir, FLAGS["🟩"], [str(row["ticker"])])
+        st.toast(f"{row['ticker']} → {FLAGS['🟩']}")
+    cols[2].button(
+        "N · note", key="hk_n", shortcut="N", on_click=_toggle, args=("fc_notes",), width="stretch"
+    )
+    cols[3].button(
+        "T · ticket",
+        key="hk_t",
+        shortcut="T",
+        on_click=_toggle,
+        args=("fc_ticket",),
+        width="stretch",
+    )
+
+
 def show(
     runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart, exchanges=None
 ) -> None:
-    """The board, best first: a focus view (the chart of one candidate, its card and ticket,
-    flipped with the arrow keys) or the list of cards."""
+    """The board, best first: a focus view (one candidate's chart, its key stats, its card and
+    ticket, the queue, notes and alerts; arrows and hotkeys), a 2x2 grid, or the list of cards."""
     hits = collect(runs, cfg, scan_frames, exchanges)
-    head, view, more = st.columns([2, 1, 1])
+    head, view, more = st.columns([2, 2, 1])
     head.subheader("Candidates")
-    focus = view.toggle(
-        "Focus view",
-        value=True,
-        key="board_focus",
-        help="One candidate at a time with its chart; ◀ ▶ or the arrow keys",
+    mode = view.segmented_control(
+        "View",
+        ["Focus", "Grid", "List"],
+        default="Focus",
+        key="board_mode",
+        label_visibility="collapsed",
     )
     with_c = more.toggle("Show C", value=False, key="board_c", help="C: no edge after costs")
     if hits.empty:
@@ -222,28 +392,31 @@ def show(
         st.info("No A+ / A / B today. Flip 'Show C' to see the rest (no edge after costs).")
         return
     rows = shown.to_dict("records")
-    if not focus:
-        st.caption(
-            f"{len(graded)} graded A+ / A / B · {len(hits) - len(graded)} C hidden"
-            if not with_c
-            else f"{len(hits)} signals"
-        )
+    hidden = "" if with_c else f" · {len(hits) - len(graded)} C hidden"
+    if mode == "List":
+        st.caption(f"{len(rows)} signals{hidden}")
         for n, row in enumerate(rows):
             card(row, n, cfg, data_dir, account, usd_rate, open_chart)
         return
-    i = st.session_state.get("board_i", 0) % len(rows)
+    per_page = 4 if mode == "Grid" else 1
+    pages = (len(rows) + per_page - 1) // per_page
+    page_i = st.session_state.get("board_i", 0) % (pages if mode == "Grid" else len(rows))
     prev, where, nxt = st.columns([1, 2, 1])
     prev.button(
         "◀ Previous",
         key="board_prev",
         shortcut="Left",
         on_click=_step,
-        args=(len(rows), -1),
+        args=(pages if mode == "Grid" else len(rows), -1),
         width="stretch",
     )
+    if mode == "Grid":
+        first = page_i * 4
+        where_text = f"{first + 1}-{min(first + 4, len(rows))} of {len(rows)}{hidden}"
+    else:
+        where_text = f"{page_i + 1} of {len(rows)}{hidden}"
     where.markdown(
-        f"<div style='text-align:center;padding-top:.4rem'>{i + 1} of {len(rows)}"
-        f"{'' if with_c else f' · {len(hits) - len(graded)} C hidden'}</div>",
+        f"<div style='text-align:center;padding-top:.4rem'>{where_text}</div>",
         unsafe_allow_html=True,
     )
     nxt.button(
@@ -251,15 +424,47 @@ def show(
         key="board_next",
         shortcut="Right",
         on_click=_step,
-        args=(len(rows), 1),
+        args=(pages if mode == "Grid" else len(rows), 1),
         width="stretch",
     )
-    row = rows[i]
+    tf, picked = toolbar()
+    if mode == "Grid":
+        group = rows[page_i * 4 : page_i * 4 + 4]
+        for pair in (group[:2], group[2:]):
+            cols = st.columns(2)
+            for col, row in zip(cols, pair, strict=False):
+                with col:
+                    grade = row.get("grade", "C")
+                    label = report.SCAN_LABELS.get(row["scan"], row["scan"])
+                    st.markdown(f"**{grade} · {row['ticker']}** · {label}")
+                    chart(str(row["ticker"]), row, tf, picked, 330)
+                    stats_strip(row)
+        return
+    row = rows[page_i]
     left, right = st.columns([5, 2])
     with left:
-        chart(str(row["ticker"]), row)
+        chart(str(row["ticker"]), row, tf, picked, 520)
+        stats_strip(row)
+        hotkeys(row, data_dir)
     with right:
-        card(row, i, cfg, data_dir, account, usd_rate, open_chart, inline=True)
+        plan_tab, list_tab, notes_tab = st.tabs(["Plan", f"List ({len(rows)})", "Notes & alerts"])
+        with plan_tab:
+            card(
+                row,
+                page_i,
+                cfg,
+                data_dir,
+                account,
+                usd_rate,
+                open_chart,
+                inline=st.session_state.get("fc_ticket", True),
+            )
+        with list_tab:
+            candidate_list(rows, page_i)
+        with notes_tab:
+            notes_and_alerts(row, data_dir)
+        if st.session_state.get("fc_notes"):
+            st.info("Notes & alerts: the third tab above.")
 
 
 def _signed(v) -> str | None:

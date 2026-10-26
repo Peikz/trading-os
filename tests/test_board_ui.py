@@ -57,3 +57,15 @@ def test_lightweight_chart_page_has_the_data_and_levels():
     page = lwchart.html(bars, {"entry": 10.6, "stop": 9.4, "pivot": None}, 400)
     assert "lightweight-charts@4.1.3" in page and '"title": "stop"' in page
     assert '"title": "pivot"' not in page and page.count('"open": 10.0') == 60
+    bench = bars.assign(close=5.0)
+    lines = lwchart.indicator_lines(
+        bars.assign(time=bars.session_date.dt.strftime("%Y-%m-%d")),
+        ["MA 10", "AVWAP (signal day)", "RS vs QQQ"],
+        anchor=bars.session_date.iloc[30],
+        bench=bench,
+    )
+    names = {line["name"]: line for line in lines}
+    assert len(names["MA 10"]["pts"]) == 51 and len(names["AVWAP (signal day)"]["pts"]) == 30
+    assert names["RS vs QQQ"]["scale"] == "rs" and names["RS vs QQQ"]["pts"][0]["value"] == 2.1
+    week = lwchart.weekly(bars)  # 1 Jan 2026 is a Thursday: a 2-day first week
+    assert len(week) == 13 and week["volume"].iloc[0] == 2e6
