@@ -1493,11 +1493,17 @@ if page == "Today":
     for run in sorted(latest, key=runs.index):  # newest first
         exp = st.expander(f"{run.label} · every pushed scan's table")
         with exp:
+            tables = []
             for scan, hits in scan_frames(str(run.candidates)).items():
                 if scan not in CFG.scans or CFG.scans[scan].action != "push":
                     continue
                 alert_only = "push_tier" in CFG.scans[scan].params
                 shown = hits[hits["tier"] == "alert"] if alert_only else hits
+                ranks = shown["grade"].map(notify.GRADE_RANK) if "grade" in shown else None
+                best = ranks.min() if ranks is not None and ranks.notna().any() else 9
+                tables.append((best, scan, hits, shown))
+            # The scan with the best grade first (A+ on top, C last; Emil, 26 Oct 2026)
+            for _, scan, hits, shown in sorted(tables, key=lambda x: x[0]):
                 label = report.SCAN_LABELS.get(scan, scan)
                 st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
                 show_table(scan, shown, exchanges_of(str(run.universe)))
@@ -1655,6 +1661,14 @@ elif page == "Scans":
                 "key": name,
             }
         )
+
+    def best_grade(text: str) -> int:
+        # Best grade a scan can give first, C last, lists and unpushed scans after (Emil,
+        # 26 Oct 2026)
+        found = re.findall(r"A\+|\bA\b|\bB\b|\bC\b", text)
+        return min((notify.GRADE_RANK[g] for g in found), default=4 if text != "-" else 5)
+
+    rows.sort(key=lambda r: best_grade(r["grade"]))  # stable: config order within a grade
     st.dataframe(
         pd.DataFrame(rows),
         hide_index=True,
