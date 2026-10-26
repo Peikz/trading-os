@@ -1981,15 +1981,44 @@ elif page == "Watchlists":
             if export is not None:
                 text = export.getvalue().decode("utf-8", errors="replace")
                 tickers += [t for t in my_watchlists.parse_tickers(text) if t not in tickers]
+            # Check each ticker (Emil, 26 Oct 2026: no confirmation it was a valid one): the
+            # newest scan universe first, then the daily bars (ETFs like QQQ are only there).
+            eod_now = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+            known = set(read_parquet(str(eod_now[0].universe))["ticker"]) if eod_now else set()
+            valid = [t for t in tickers if t in known or len(ticker_bars(str(data_dir), t))]
+            unknown = [t for t in tickers if t not in valid]
+            on_list = my_watchlists.current(my_watchlists.load(data_dir))
+            already = set(on_list.loc[on_list["list"] == name, "ticker"]) if name else set()
+            fresh = [t for t in valid if t not in already]
             try:
-                added = my_watchlists.add(data_dir, name or "", tickers, note)
-                if added:
-                    st.success(f"Added {added} to {name}.")
+                if not tickers:
+                    st.session_state["wl_msg"] = ("warning", "No tickers to add.")
+                elif not (name or "").strip():
+                    st.session_state["wl_msg"] = ("error", "Give the new list a name first.")
                 else:
-                    st.warning("No tickers to add.")
+                    if fresh:
+                        my_watchlists.add(data_dir, name, fresh, note)
+                    parts = []
+                    if fresh:
+                        parts.append(f"✅ Added to **{name}**: {', '.join(fresh)}")
+                    if valid and len(fresh) < len(valid):
+                        dup = [t for t in valid if t in already]
+                        parts.append(f"Already on the list: {', '.join(dup)}")
+                    if unknown:
+                        parts.append(f"❌ Not found, not added: {', '.join(unknown)}")
+                    kind = "success" if fresh and not unknown else "warning"
+                    if not valid:
+                        kind = "error"
+                    st.session_state["wl_msg"] = (kind, "  \n".join(parts))
                 st.cache_data.clear()
             except ValueError as exc:
-                st.error(str(exc))
+                st.session_state["wl_msg"] = ("error", str(exc))
+            st.rerun()
+    if "wl_msg" in st.session_state:
+        kind, text = st.session_state.pop("wl_msg")
+        getattr(st, kind)(text)
+        if kind == "success":
+            st.toast("Watchlist updated")
     members = my_watchlists.current(my_watchlists.load(data_dir))
     members = members[members["list"] == name] if name else members.iloc[0:0]
     if members.empty:
