@@ -2515,7 +2515,7 @@ elif page == "Live grades":
     )
     if graded_live.empty:
         st.info(
-            "No live A+ / A signals yet. Each one shows here as it comes, with what its plan "
+            "No live A+ / A / B signals yet. Each one shows here as it comes, with what its plan "
             "made, next to the history its grade carried."
         )
     else:
@@ -2527,7 +2527,7 @@ elif page == "Live grades":
         results = live_tracking.plan_results(graded_live, live_bars)
         st.dataframe(live_tracking.compare(results).round(2), hide_index=True, width="stretch")
         st.caption(
-            "Each live A+ / A signal played out by its study plan: bought at the plan's price, "
+            "Each live A+ / A / B signal played out by its study plan: bought at the plan's price, "
             "out at the stop (checked from the next session) or at the close after the plan's "
             "sessions, net of the study's cost. 'Below the study' needs "
             f"{live_tracking.MIN_TRADES}+ closed trades and both the mean R and the win rate "

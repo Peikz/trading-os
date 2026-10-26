@@ -13,7 +13,7 @@ from trading_os.store import RunContext
 A = "".join(["S", "R", "F"])
 LATER = ("breakout_watch", "ma_surf", "parabolic_long", "parabolic_short")
 # Luk flush: pushed at EOD and again pre-market; the momentum scans since 22 Oct 2026.
-CARRIED = (*LATER, "luk_flush", "mb_up", "luk_pullback", "vcp")
+CARRIED = (*LATER, "luk_flush", "ep9m_avwap", "mb_up", "luk_pullback", "vcp")
 
 
 def hit(**kw):

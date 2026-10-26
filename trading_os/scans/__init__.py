@@ -20,6 +20,7 @@ from trading_os.scans.ep import (
 from trading_os.scans.history_scans import (
     breakout_trigger,
     breakout_watch,
+    ep9m_avwap,
     luk_flush,
     luk_pullback,
     ma_surf,
@@ -57,6 +58,7 @@ REGISTRY: dict[str, ScanFn] = {
     "growth_bucket_2": growth_bucket_2,
     "tight_bases": tight_bases,
     "luk_flush": luk_flush,
+    "ep9m_avwap": ep9m_avwap,
     "ma_surf": ma_surf,
     "luk_pullback": luk_pullback,
     "vcp": vcp,

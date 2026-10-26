@@ -1,4 +1,4 @@
-"""Monthly live check (Emil, 21 Oct 2026): how the live A+ / A signals did by their study plan,
+"""Monthly live check (Emil, 21 Oct 2026): how the live A+ / A / B signals did by their study plan,
 against the history each grade carried, and how Emil's own trades did against the plan of the
 signal they came from. Writes `docs/live-tracking/<date>.md` in the data repo (private) and
 pushes one summary. Public logs: counts only.
@@ -41,7 +41,7 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     live = cands[cands["grade"].isin(lt.LIVE_GRADES)] if "grade" in cands else cands.iloc[0:0]
     head = [f"# Live check, {today:%d %B %Y}", ""]
     if live.empty:
-        line = "No live A+ / A signals yet."
+        line = "No live A+ / A / B signals yet."
         return [*head, line], [line], {"signals": 0}
     sessions = [
         s
@@ -65,8 +65,9 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
         )
     lines = [
         *head,
-        "How the live A+ / A signals did by their study plan (bought at the plan's price, out at "
-        "the stop or at the close after the plan's sessions, net of the study's cost), against "
+        "How the live A+ / A / B signals did by their study plan (bought at the plan's price, "
+        "out at the stop or at the close after the plan's sessions, net of the study's cost), "
+        "against "
         "the history each grade carried. 'Below the study' needs at least "
         f"{lt.MIN_TRADES} closed trades and both the mean R and the win rate clearly under the "
         "study's. Facts, not advice.",
@@ -107,7 +108,7 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
                 ["ticker", "signal_session", "grade", "entry_rule", "plan_r", "your_r", "gap_r"],
             )
             if len(gaps)
-            else ["No closed journal trades matched to a live A+ / A signal yet."]
+            else ["No closed journal trades matched to a live A+ / A / B signal yet."]
         ),
         "",
         "## Every live signal",

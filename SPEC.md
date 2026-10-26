@@ -434,6 +434,14 @@ EP gappers enter EP-Watch; when B1–B4 pass, they move to BO-Watch.
    5-day range is tight (bought the next session ~10:30), and MA-surf A when SPY closed over its
    200-day MA on the signal day (Emil, 23 Oct 2026; its own plan: buy-stop at the pivot from 10:00,
    the order stop, trail the 20-day MA; `stop: order`, `exit: trail_ma20` in the quality rule).
+   EP9M AVWAP re-entry, graded B (half the A+ size; Emil, 26 Oct 2026; `avwap_live.py`, scan
+   `ep9m_avwap`):
+   - The setup: a stock that was an EP9M A+ comes back, 2-15 sessions later, to the VWAP anchored at that day's open. The low touches it and the close holds over it, on the first such day only.
+   - The AVWAP uses each day's typical price, because the stored bars have no VWAP. The study gave the same result both ways.
+   - The plan: buy at the next open, stop under the signal day's low (at most 2 ADR; `stop: signal_low`), out at the close after 21 sessions (`exit: hold_21`).
+   - In the 2016-26 study it made +0.4-0.6R a trade in every version, far over random second entries.
+   - Its gain on top of the A+ package was not robust: real VWAP vs typical price flipped 2016-21 from +2 % to -4 % a year. Hence B, not A.
+   - B is now in the monthly live check, which decides A or C after 20+ closed trades (data repo docs/research/2026-10-25-third-period-2006-2015.md).
    Heavily shorted (Emil, 25 Oct 2026): an A+/A hit with 5 or more days to cover in FINRA's latest
    short-interest report (`grading.heavily_shorted_dtc`; `short_interest.py`, cached in
    `data/short_interest/`, not used when older than 30 days) becomes C, and every hit at 5+ days

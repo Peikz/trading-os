@@ -83,6 +83,7 @@ def test_run_scans_picks_enabled_scans_per_slot():
         "parabolic_short",
         "parabolic_long",
         "luk_flush",
+        "ep9m_avwap",
         "luk_pullback",
         "vcp",
         "minervini_tt",

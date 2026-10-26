@@ -72,6 +72,15 @@ def entry_price(rec: Mapping[str, Any], scan: str) -> float | None:
     return None if price is None or pd.isna(price) else float(price)
 
 
+def signal_low_stop(entry, low, adr_usd, max_adr: float = 2.0) -> float:
+    """Under the signal day's low, at most `max_adr` ADR below the entry (the EP9M AVWAP plan);
+    NaN without the inputs."""
+    vals = [entry, low, adr_usd]
+    if any(v is None or pd.isna(v) for v in vals) or not entry > low:
+        return float("nan")
+    return float(max(low, entry - max_adr * adr_usd))
+
+
 def market_features(row: Mapping[str, Any] | None) -> dict[str, Any]:
     """`mkt_*` from a breadth row (None: all missing, scored as such)."""
     if not row:
@@ -212,6 +221,10 @@ def grade_hits(
         adr_pct = rec.get("adr20_pct")
         if rule.get("stop") == "order":  # its own plan: buy-stop at the pivot, its order stop
             entry, stop, basis = sizing.plan(rec, scan, cfg.sizing)
+        elif rule.get("stop") == "signal_low":  # EP9M AVWAP: under the signal day's low
+            entry = entry_price(rec, scan)
+            stop = signal_low_stop(entry, rec.get("low"), rec.get("adr20_usd"))
+            basis = "under the signal day's low (at most 2 ADR)"
         else:
             entry = entry_price(rec, scan)
             min_stop = cfg.intraday_study["min_stop_pct"]
@@ -237,7 +250,8 @@ def grade_hits(
                 "grade_entry_rule": rule.get("entries", {}).get(
                     f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
                 ),
-                "grade_hold_sessions": rule.get("hold_sessions"),
+                "grade_hold_sessions": rule.get("hold_sessions")
+                or (21 if rule.get("exit") == "hold_21" else None),
                 "grade_exit": rule.get("exit", "hold"),
                 "grade_risk_mult": g.risk_mult,
                 "grade_stop": stop,

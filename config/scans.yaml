@@ -134,6 +134,11 @@ scans:
                                             # rules in `luk:`, bought the next session (grading)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
      push_slot: [eod, pm]}                  # EOD, and again pre-market with its move (Emil)
+  ep9m_avwap:                               # EP9M anchored-VWAP re-entry, live (Emil, 26 Oct
+                                            # 2026): an EP9M A+ back at the VWAP anchored at
+                                            # its day, 2-15 sessions later (`avwap_live.py`);
+                                            # graded A, bought at the next open
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: [eod, pm]}
   luk_pullback:                             # Martin Luk's pullback, live (Emil, 22 Oct
                                             # 2026): rules in `luk:`; C, pushed pre-market
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
@@ -476,6 +481,13 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
       entries: {luk_flush: next_1030}
       stop_adr: 1.0
       hold_sessions: 21
+    ep9m_avwap:                             # EP9M AVWAP re-entry (Emil, 26 Oct 2026): B, an edge
+      parts: []                             # per trade (+0.4-0.6R in every version, far over
+      grades: [[0, "B"]]                    # random entries) whose gain on top of the A+ package
+      live_scans: [ep9m_avwap]              # wasn't robust (VWAP vs typical price flipped
+      entries: {ep9m_avwap: next_open}      # 2016-21); B = half the A+ size. The live check
+      stop: signal_low                      # decides A or C. Stop under the signal day's low
+      exit: hold_21                         # (at most 2 ADR), out after 21 sessions
     qm_surf:                                # Qullamaggie's MA-surf (Emil, 23 Oct 2026: A at
       parts: [spy_over_ma200]               # 0.75 % risk): A only with SPY over its 200-day at
       grades: [[1, "A"]]                    # the signal close. Added to the live package: 14.4 ->

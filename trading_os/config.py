@@ -267,7 +267,7 @@ GRADING_KEYS = {
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
 # A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
-QUALITY_OWN_PLAN = {"stop": {"order"}, "exit": {"trail_ma20"}}
+QUALITY_OWN_PLAN = {"stop": {"order", "signal_low"}, "exit": {"trail_ma20", "hold_21"}}
 CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
 GRADING_COST_KEYS = {
     "commission_pct",
@@ -377,6 +377,7 @@ SCAN_PARAM_KEYS: dict[str, set[str]] = {
     },
     "breakout_watch": {"push_tier", "push_slot", "push_ungraded"},
     "luk_flush": {"push_tier", "push_slot"},
+    "ep9m_avwap": {"push_tier", "push_slot"},
     "ma_surf": {"push_tier", "push_ungraded", "push_slot"},
     "breakout_trigger": {"push_tier", "push_if_all", "partial_top_n"},
     "universe_snapshot": set(),

@@ -27,7 +27,7 @@ EARNINGS_WARN_SESSIONS = 2
 TRAIL_SETUPS = ("ma_surf", "breakout_watch", "breakout_trigger", "pivot_watch", "qm_surf")
 COVER_SETUPS = ("parabolic_short",)
 HOLD_SETUPS = (
-    "ep_am", "ep_ah", "ep_close", "ep_day", "ep9m", "ep9m_pace", "luk_flush",
+    "ep_am", "ep_ah", "ep_close", "ep_day", "ep9m", "ep9m_pace", "luk_flush", "ep9m_avwap",
     "luk_avwap_flush", "parabolic_long",
 )  # fmt: skip
 COLUMNS = [

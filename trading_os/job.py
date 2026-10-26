@@ -133,6 +133,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         uni = _with_minervini(uni, args.data_dir, cfg, session)
     if slot == "eod" and cfg.scans["ma_surf"].enabled:
         uni = _with_surf(uni, args.data_dir, cfg, session)
+    if slot == "eod" and cfg.scans["ep9m_avwap"].enabled:
+        uni = _with_avwap(uni, args.data_dir, cfg, session)
 
     state = watchlists.current(watchlists.load_events(args.data_dir))
     for name in watchlists.LISTS:
@@ -445,6 +447,19 @@ def _with_minervini(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataF
         return out
     except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
         status(f"Minervini: FAILED ({type(exc).__name__}), scans empty")
+        return uni
+
+
+def _with_avwap(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:
+    """EP9M anchored-VWAP re-entry flags (EOD). A problem leaves the scan empty, never fails."""
+    from trading_os import avwap_live
+
+    try:
+        out = avwap_live.attach(uni, data_dir, cfg, session)
+        status(f"EP9M AVWAP: {int(out['ep9m_avwap'].sum())} flagged")
+        return out
+    except Exception as exc:  # noqa: BLE001 - one scan's inputs; the run goes on
+        status(f"EP9M AVWAP: FAILED ({type(exc).__name__}), scan empty")
         return uni
 
 

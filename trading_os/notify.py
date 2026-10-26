@@ -54,6 +54,7 @@ SCAN_LABELS = {
     "growth_bucket_2": "Growth 2",
     "tight_bases": "Tight bases",
     "luk_flush": "Luk flush",
+    "ep9m_avwap": "EP9M AVWAP",
     "ma_surf": "MA-surf",
     "luk_pullback": "Luk pullback",
     "vcp": "VCP",
@@ -66,6 +67,7 @@ SECTION_ICONS = {
     "ep_am": "⚡",
     "ep_ah": "🌙",
     "luk_flush": "🌊",
+    "ep9m_avwap": "⚓",
     "ma_surf": "🏄",
     "luk_pullback": "↩️",
     "vcp": "🌀",
@@ -122,8 +124,10 @@ ENTRY_TEXT = {
     "t_1030": "buy ~10:30 NY (16:30 CPH)",
     "ah_1645": "buy after hours now, before 17:00 NY (23:00 CPH, Saxo's cutoff)",
     "pivot_1000": "buy-stop at the pivot from 10:00 NY (16:00 CPH)",
+    "next_open": "buy at the next open, 09:30 NY (15:30 CPH)",
 }
-EXIT_TEXT = {"trail_ma20": "trail the 20-day MA: out on a close under it"}
+EXIT_TEXT = {"trail_ma20": "trail the 20-day MA: out on a close under it",
+             "hold_21": "out at the close after 21 sessions"}  # fmt: skip
 AH_CARRIED_TEXT = "found after hours last night: the study bought at 16:45 NY, before 17:00"
 GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
 

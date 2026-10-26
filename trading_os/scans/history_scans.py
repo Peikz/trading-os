@@ -156,6 +156,14 @@ def minervini_tt(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     return ranked(df, _mask(df["minervini_tt"]), "mm_rs")
 
 
+def ep9m_avwap(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
+    """EP9M anchored-VWAP re-entry (Emil, 26 Oct 2026): the rows `avwap_live.attach` marked.
+    Ranked by dollar volume, largest first."""
+    if "ep9m_avwap" not in df:
+        return df.iloc[0:0].assign(rank=pd.Series(dtype=int))
+    return ranked(df, _mask(df["ep9m_avwap"]), "dollar_volume")
+
+
 def luk_flush(df: pd.DataFrame, scan: ScanConfig) -> pd.DataFrame:
     """Martin Luk's AVWAP flush (Emil, 20 Oct 2026): the rows `luk_live.attach` marked.
     Ranked by dollar volume, largest first."""

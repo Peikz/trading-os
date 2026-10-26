@@ -180,7 +180,9 @@ def quality_grade(scan: str, features: Mapping[str, Any], grading: Mapping[str, 
         tuple(sorted(reasons, key=lambda r: -r[2])),
         plan,
         float(grading["risk_mult"].get(label, 0.0)),
-        note=f"{int(points)} of {len(rule['parts'])} quality points",
+        note=f"{int(points)} of {len(rule['parts'])} quality points"
+        if rule["parts"]
+        else "the setup's own grade",  # a rule without points (EP9M AVWAP)
     )
 
 

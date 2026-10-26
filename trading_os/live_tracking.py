@@ -1,7 +1,7 @@
 """Live tracking (Emil, 21 Oct 2026): are the grades doing live what the grading study said,
 and are Emil's own trades doing what the plan would have? Facts, not advice.
 
-- Plan results: every live A+ / A signal played out by its study plan on daily bars: bought
+- Plan results: every live A+ / A / B signal played out by its study plan on daily bars: bought
   at the plan's entry price (`grade_entry`, else `plan_entry`), out at the stop, or at the
   close `grade_hold_sessions` sessions after the entry session. The stop is checked from the
   session after the entry (daily bars can't tell whether the entry day's low came before or
@@ -23,7 +23,7 @@ from collections.abc import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-LIVE_GRADES = ("A+", "A")
+LIVE_GRADES = ("A+", "A", "B")  # B: the EP9M AVWAP re-entry (26 Oct 2026)
 # The grading study's median cost in R per entry time (validated_trades_v3, quality plans).
 STUDY_COST_R = {
     "t_1030": 0.10,
@@ -76,7 +76,7 @@ def play_out(entry: float, stop: float, hold: int, path: pd.DataFrame) -> dict:
 
 
 def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
-    """One row per live A+ / A signal: its plan's result so far. `bars`: ticker, session_date,
+    """One row per live A+ / A / B signal: its plan's result so far. `bars`: ticker, session_date,
     open, low, close (daily)."""
     cols = [
         "signal_id",
@@ -154,7 +154,7 @@ def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
 
 
 def by_market(results: pd.DataFrame) -> pd.DataFrame:
-    """Closed live A+ / A trades per strategy and grade, split by the IBD market state at the
+    """Closed live A+ / A / B trades per strategy and grade, split by the IBD market state at the
     signal (`ibd`; Emil, 25 Oct 2026: tracked, not a rule). Signals from before the state was
     stored count as "unknown"."""
     cols = ["grade_strategy", "grade", "ibd_state", "closed", "live_mean_r", "live_win_pct"]
