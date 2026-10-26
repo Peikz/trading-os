@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 
 import pandas as pd
-import streamlit.components.v1 as components
+import streamlit as st
 
 LIB = "https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"
 MAS = {10: "#f2c94c", 20: "#f2994a", 50: "#9b51e0"}
@@ -22,9 +22,16 @@ def _series(bars: pd.DataFrame, column: str) -> list[dict]:
     ]
 
 
-def html(bars: pd.DataFrame, levels: dict[str, float], height: int, dark: bool = True) -> str:
+def html(
+    bars: pd.DataFrame,
+    levels: dict[str, float],
+    height: int,
+    dark: bool = True,
+    title: str = "",
+) -> str:
     """The page for one chart. `bars`: session_date, open, high, low, close, volume (oldest
-    first). `levels`: name -> price (entry, stop, pivot)."""
+    first). `levels`: name -> price (entry, stop, pivot). `title`: the legend's first words
+    (ticker · 1D · exchange), TradingView style, with O H L C and the indicators under it."""
     b = bars.sort_values("session_date").copy()
     b["time"] = pd.to_datetime(b["session_date"]).dt.strftime("%Y-%m-%d")
     candles = [
@@ -44,9 +51,20 @@ def html(bars: pd.DataFrame, levels: dict[str, float], height: int, dark: bool =
         if p is not None and p == p
     ]
     data = json.dumps(
-        {"candles": candles, "volume": volume, "mas": mas, "lines": lines, "ma_colours": MAS}
+        {
+            "candles": candles,
+            "volume": volume,
+            "mas": mas,
+            "lines": lines,
+            "ma_colours": MAS,
+            "title": title,
+        }
     )
-    return f"""<div id="c" style="width:100%;height:{height}px"></div>
+    return f"""<div style="position:relative;width:100%;height:{height}px">
+<div id="c" style="width:100%;height:{height}px"></div>
+<div id="lg" style="position:absolute;left:8px;top:6px;z-index:5;pointer-events:none;
+  font:12px -apple-system,Segoe UI,Roboto,sans-serif;color:{text};line-height:1.55"></div>
+</div>
 <script src="{LIB}"></script>
 <script>
 const d = {data};
@@ -76,8 +94,38 @@ for (const p of d.lines) {{
 }}
 const n = d.candles.length;
 chart.timeScale().setVisibleLogicalRange({{from: Math.max(0, n - 130), to: n + 3}});
+// The legend, TradingView style: the last bar, or the bar under the crosshair.
+const byTime = {{}};
+d.candles.forEach((c, i) => {{ byTime[c.time] = i; }});
+const maAt = {{}};
+for (const [k, pts] of Object.entries(d.mas)) {{
+  maAt[k] = {{}}; pts.forEach(p => {{ maAt[k][p.time] = p.value; }});
+}}
+const fmt = x => x == null ? '–' : x.toFixed(2);
+const vol = x => x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(0) + 'K' : x;
+function legend(i) {{
+  const c = d.candles[i], prev = d.candles[i - 1];
+  const chg = prev ? (c.close / prev.close - 1) * 100 : 0;
+  const col = c.close >= c.open ? '#26a69a' : '#ef5350';
+  let h = `<b style="font-size:14px">${{d.title}}</b> &nbsp;` +
+    `<span style="color:${{col}}">O ${{fmt(c.open)}} H ${{fmt(c.high)}} L ${{fmt(c.low)}} ` +
+    `C ${{fmt(c.close)}} ${{chg >= 0 ? '+' : ''}}${{chg.toFixed(2)}}%</span>`;
+  for (const k of Object.keys(d.mas)) {{
+    const ma = fmt(maAt[k][c.time]);
+    h += `<br><span style="color:${{d.ma_colours[k]}}">MA ${{k}} close ${{ma}}</span>`;
+  }}
+  const vv = d.volume[i];
+  h += `<br><span style="opacity:.8">Vol ${{vol(vv.value)}}</span>`;
+  document.getElementById('lg').innerHTML = h;
+}}
+legend(n - 1);
+chart.subscribeCrosshairMove(p => {{
+  const i = p && p.time !== undefined ? byTime[p.time] : undefined;
+  legend(i === undefined ? n - 1 : i);
+}});
 </script>"""
 
 
-def show(bars: pd.DataFrame, levels: dict[str, float], height: int = 520) -> None:
-    components.html(html(bars, levels, height), height=height + 10)
+def show(bars: pd.DataFrame, levels: dict[str, float], height: int = 520, title: str = "") -> None:
+    # Our own page from our own bars (st.iframe; components.html is deprecated)
+    st.iframe(html(bars, levels, height, title=title), height=height + 10)

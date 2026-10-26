@@ -20,7 +20,7 @@ from trading_os import clock, notify, plans, report, ticket
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
 
-def collect(runs, cfg, scan_frames: Callable[[str], dict]) -> pd.DataFrame:
+def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd.DataFrame:
     """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
     newest first, one row per ticker and scan."""
     latest = []
@@ -28,6 +28,11 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict]) -> pd.DataFrame:
         run = next((r for r in runs if r.slot == slot), None)
         if run is not None:
             latest.append(run)
+    # The exchange per ticker from the newest run with a universe file (intraday runs have none)
+    listing: dict = {}
+    if exchanges is not None:
+        with_universe = next((r for r in runs if r.universe.exists()), None)
+        listing = exchanges(str(with_universe.universe)) if with_universe else {}
     frames = []
     for run in sorted(latest, key=runs.index):
         for scan, hits in scan_frames(str(run.candidates)).items():
@@ -36,6 +41,8 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict]) -> pd.DataFrame:
             shown = hits[hits["tier"] == "alert"] if "tier" in hits else hits
             if shown.empty:
                 continue
+            if listing and "exchange" not in shown:
+                shown = shown.assign(exchange=shown["ticker"].map(listing))
             frames.append(
                 shown.assign(
                     scan=scan, run_label=run.label, run_slot=run.slot, run_session=run.session
@@ -191,10 +198,12 @@ def _step(n: int, by: int) -> None:
     st.session_state["board_i"] = (st.session_state.get("board_i", 0) + by) % n
 
 
-def show(runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart) -> None:
+def show(
+    runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart, exchanges=None
+) -> None:
     """The board, best first: a focus view (the chart of one candidate, its card and ticket,
     flipped with the arrow keys) or the list of cards."""
-    hits = collect(runs, cfg, scan_frames)
+    hits = collect(runs, cfg, scan_frames, exchanges)
     head, view, more = st.columns([2, 1, 1])
     head.subheader("Candidates")
     focus = view.toggle(

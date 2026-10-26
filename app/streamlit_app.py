@@ -1400,7 +1400,9 @@ def focus_chart(ticker: str, row: dict | None = None) -> None:
     levels = {"entry": row.get("plan_entry"), "stop": row.get("plan_stop") or row.get("grade_stop")}
     if row.get("pivot") == row.get("pivot") and row.get("pivot"):
         levels["pivot"] = row.get("pivot")
-    lwchart.show(bars, levels)
+    exchange = row.get("exchange")
+    where = f" · {exchange}" if isinstance(exchange, str) and exchange else ""
+    lwchart.show(bars, levels, title=f"{ticker} · 1D{where}")
 
 
 if page == "Today":
@@ -1420,6 +1422,7 @@ if page == "Today":
         scan_frames,
         open_chart,
         focus_chart,
+        exchanges_of,
     )
     st.divider()
     st.subheader("Market")
