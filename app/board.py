@@ -20,9 +20,12 @@ from trading_os import clock, notify, plans, report, ticket
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
 
-def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd.DataFrame:
+def collect(
+    runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
+) -> pd.DataFrame:
     """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
-    newest first, one row per ticker and scan."""
+    newest first, one row per ticker and scan. `everything`: every scan's hits, all tiers, one
+    row per ticker (its best grade)."""
     latest = []
     for slot in ("pm", "am", "mid", "eod"):
         run = next((r for r in runs if r.slot == slot), None)
@@ -44,9 +47,11 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd
     frames = []
     for run in sorted(latest, key=runs.index):
         for scan, hits in scan_frames(str(run.candidates)).items():
-            if scan not in cfg.scans or cfg.scans[scan].action != "push":
+            pushed = scan in cfg.scans and cfg.scans[scan].action == "push"
+            if not everything and not pushed:
                 continue
-            shown = hits[hits["tier"] == "alert"] if "tier" in hits else hits
+            alert_only = "tier" in hits and not everything
+            shown = hits[hits["tier"] == "alert"] if alert_only else hits
             if shown.empty:
                 continue
             if listing and "exchange" not in shown:
@@ -68,7 +73,38 @@ def collect(runs, cfg, scan_frames: Callable[[str], dict], exchanges=None) -> pd
     out["grade"] = out["grade"].fillna("C")
     out["_g"] = out["grade"].map(notify.GRADE_RANK).fillna(9)
     out["_s"] = pd.to_numeric(out.get("grade_score"), errors="coerce").fillna(-1e9)
-    return out.sort_values(["_g", "_s"], ascending=[True, False])
+    out = out.sort_values(["_g", "_s"], ascending=[True, False])
+    return out.drop_duplicates("ticker", keep="first") if everything else out
+
+
+def watchlist_rows(runs, data_dir, exchanges=None) -> pd.DataFrame:
+    """Your own watchlists' stocks as board rows, with the newest EOD snapshot's numbers."""
+    from trading_os import my_watchlists
+
+    members = my_watchlists.current(my_watchlists.load(data_dir))
+    if members.empty:
+        return pd.DataFrame()
+    name_col = "list_name" if "list_name" in members else members.columns[0]
+    with_universe = next((r for r in runs if r.universe.exists()), None)
+    uni = pd.DataFrame()
+    if with_universe is not None:
+        uni = pd.read_parquet(with_universe.universe).drop_duplicates("ticker").set_index("ticker")
+    rows = []
+    for m in members.to_dict("records"):
+        t = str(m["ticker"])
+        base = uni.loc[t].to_dict() if t in uni.index else {}
+        rows.append(
+            {
+                **base,
+                "ticker": t,
+                "scan": "watchlist",
+                "grade": "–",
+                "run_label": f"watchlist: {m.get(name_col)}",
+                "run_slot": "eod",
+                "run_session": with_universe.session if with_universe else None,
+            }
+        )
+    return pd.DataFrame(rows).drop_duplicates("ticker")
 
 
 def _tags(row) -> list[str]:
@@ -123,7 +159,7 @@ def ticket_view(row, key: str, cfg, data_dir, account, usd_rate) -> None:
     if mult is None or pd.isna(mult):
         mult = cfg.grading["risk_mult"].get(row.get("grade"), 0.0)
     if not mult:
-        st.caption("Grade C: no size (no edge after costs in the study).")
+        st.caption("Not graded A+ / A / B: sized as a B for reference (no study edge).")
         mult = cfg.grading["risk_mult"].get("B", 1.0)
     t = ticket.build(
         row,
@@ -179,7 +215,7 @@ def card(row, n: int, cfg, data_dir, account, usd_rate, open_chart, inline: bool
             f"&nbsp;<span style='opacity:.6'>{row['run_label']}</span>",
             unsafe_allow_html=True,
         )
-        lines = notify.grade_lines(row) if grade != "C" else []
+        lines = notify.grade_lines(row) if grade in ("A+", "A", "B") else []
         facts = [*lines[1:2], *notify.plan_lines(row), *_tags(row)]
         hist = _history(row)
         if hist:
@@ -329,15 +365,15 @@ def toolbar() -> tuple[str, list[str]]:
     """Bars and indicators for the focus and grid charts, remembered for the session."""
     from lwchart import DEFAULT, INDICATORS
 
+    # Defaults through session state (the W key sets fc_tf too; a widget default would clash)
+    st.session_state.setdefault("fc_tf", "1D")
+    st.session_state.setdefault("fc_ind", list(DEFAULT))
     a, b = st.columns([1, 4])
-    tf = a.segmented_control(
-        "Bars", ["1D", "1W"], default="1D", key="fc_tf", label_visibility="collapsed"
-    )
+    tf = a.segmented_control("Bars", ["1D", "1W"], key="fc_tf", label_visibility="collapsed")
     picked = b.pills(
         "Indicators",
         list(INDICATORS),
         selection_mode="multi",
-        default=DEFAULT,
         key="fc_ind",
         label_visibility="collapsed",
     )
@@ -372,8 +408,7 @@ def show(
 ) -> None:
     """The board, best first: a focus view (one candidate's chart, its key stats, its card and
     ticket, the queue, notes and alerts; arrows and hotkeys), a 2x2 grid, or the list of cards."""
-    hits = collect(runs, cfg, scan_frames, exchanges)
-    head, view, more = st.columns([2, 2, 1])
+    head, view, more = st.columns([2, 2, 2])
     head.subheader("Candidates")
     mode = view.segmented_control(
         "View",
@@ -382,14 +417,31 @@ def show(
         key="board_mode",
         label_visibility="collapsed",
     )
-    with_c = more.toggle("Show C", value=False, key="board_c", help="C: no edge after costs")
+    scopes = ["A+ / A / B", "Pushed, incl. C", "Every scan hit", "My watchlists"]
+    scope = more.selectbox(
+        "Show",
+        scopes,
+        key="board_scope",
+        label_visibility="collapsed",
+        help="C: no edge after costs. Every scan hit: all scans and tiers",
+    )
+    if scope == "My watchlists":
+        hits = watchlist_rows(runs, data_dir, exchanges)
+    else:
+        hits = collect(runs, cfg, scan_frames, exchanges, everything=scope == "Every scan hit")
+    with_c = scope != "A+ / A / B"
     if hits.empty:
-        st.info("No signals in the latest runs.")
+        st.info(
+            "No stocks in your watchlists yet: flag one here (F, or 🟥 🟨 🟩 under Notes & "
+            "alerts) or add lists on the Watchlists page (also from a TradingView export)."
+            if scope == "My watchlists"
+            else "No signals in the latest runs."
+        )
         return
     graded = hits[hits["grade"].isin(["A+", "A", "B"])]
     shown = hits if with_c else graded
     if shown.empty:
-        st.info("No A+ / A / B today. Flip 'Show C' to see the rest (no edge after costs).")
+        st.info("No A+ / A / B today. Pick 'Pushed, incl. C' or more in 'Show' for the rest.")
         return
     rows = shown.to_dict("records")
     hidden = "" if with_c else f" · {len(hits) - len(graded)} C hidden"
