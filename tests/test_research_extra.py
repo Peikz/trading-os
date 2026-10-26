@@ -95,3 +95,24 @@ def test_open_totals_first_5_15_30_minutes():
     t = rx.open_totals(bars, start)
     assert (t["vol_5m"], t["vol_15m"], t["vol_30m"]) == (500, 1500, 3000)
     assert t["orh_5m"] == 14 and t["orh_30m"] == 39
+
+
+def test_daymins_saves_every_bar_of_each_session(tmp_path):
+    import pandas as pd
+
+    from trading_os import research_extra
+
+    class Client:
+        def _get(self, url, params):
+            assert params["timeframe"] == "1Min" and params["adjustment"] == "all"
+            first = {"t": "2026-01-02T14:30:00Z", "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 9}
+            second = {"t": "2026-01-02T14:31:00Z", "o": 1.5, "h": 2, "l": 1, "c": 2, "v": 7}
+            return {"bars": [first, second]}
+
+    asks = pd.DataFrame(
+        {"ticker": ["AAA"], "session_date": ["2026-01-02"], "start_utc": ["2026-01-02T14:30:00Z"]}
+    )
+    asks.to_parquet(tmp_path / "req.parquet")
+    assert research_extra.daymins(Client(), tmp_path / "req.parquet", tmp_path / "out") == 0
+    got = pd.read_parquet(tmp_path / "out" / "daymins.parquet")
+    assert len(got) == 2 and got["c"].tolist() == [1.5, 2]

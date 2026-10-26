@@ -12,6 +12,8 @@
   kept: buyer- vs seller-initiated volume (tick test), retail buys and sells by sub-penny
   price improvement off-exchange (Boehmer, Jones, Zhang & Zhang 2021), and large-block
   imbalance.
+- `daymins`: every 1-minute bar (adjusted) of each A+ entry day, for intraday exits and
+  VWAP entries.
 - `openbars`: volume in the first 5, 15 and 30 minutes of each EP day (Alpaca 1-minute SIP bars,
   09:30-10:00 New York), and the 5/15/30-minute opening-range highs and lows, to test
   Qullamaggie's volume rule at his entry times.
@@ -309,10 +311,46 @@ def openbars(client, requests_file: Path, out: Path) -> int:
     return 0 if rows else 1
 
 
+DAY_COLUMNS = ["ticker", "session_date", "t", "o", "h", "l", "c", "v"]
+
+
+def daymins(client, requests_file: Path, out: Path) -> int:
+    """Every 1-minute bar of each requested session, 09:30-16:00 New York (split- and
+    dividend-adjusted, like the study's prices): the A+ entry days, for intraday exits and
+    intraday-VWAP entries (Emil, 26 Oct 2026)."""
+    asks = pd.read_parquet(requests_file)
+    rows, failed = [], 0
+    for k, ask in enumerate(asks.itertuples(index=False), 1):
+        start = pd.Timestamp(ask.start_utc)
+        params = {
+            "timeframe": "1Min",
+            "start": ask.start_utc,
+            "end": (start + pd.Timedelta(minutes=390)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "limit": 1000,
+            "feed": "sip",
+            "adjustment": "all",
+        }
+        try:
+            body = client._get(MINUTE_URL.format(symbol=ask.ticker), params)
+            for b in body.get("bars") or []:
+                bar = {k: b[k] for k in ("t", "o", "h", "l", "c", "v")}
+                rows.append({"ticker": ask.ticker, "session_date": ask.session_date, **bar})
+        except Exception:  # noqa: BLE001 - counted; the message could carry a symbol
+            failed += 1
+        if k % 500 == 0:
+            status(f"Day minutes: {k} of {len(asks)}, {failed} failed")
+    out.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=DAY_COLUMNS).to_parquet(out / "daymins.parquet", index=False)
+    status(f"Day minutes: {len(asks) - failed} sessions, {len(rows)} bars, {failed} failed")
+    return 0 if rows else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
     parser.add_argument(
-        "--mode", choices=["insiders", "events8k", "news", "flow", "openbars"], required=True
+        "--mode",
+        choices=["insiders", "events8k", "news", "flow", "openbars", "daymins"],
+        required=True,
     )
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--requests", type=Path, help="news: the (ticker, until_utc) list")
@@ -351,6 +389,8 @@ def main(argv: list[str] | None = None) -> int:
         return flow(client, args.requests, args.out)
     if args.mode == "openbars":
         return openbars(client, args.requests, args.out)
+    if args.mode == "daymins":
+        return daymins(client, args.requests, args.out)
     return news(client, args.requests, args.out)
 
 
