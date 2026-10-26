@@ -248,7 +248,7 @@ def show(runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart)
     row = rows[i]
     left, right = st.columns([5, 2])
     with left:
-        chart(str(row["ticker"]))
+        chart(str(row["ticker"]), row)
     with right:
         card(row, i, cfg, data_dir, account, usd_rate, open_chart, inline=True)
 

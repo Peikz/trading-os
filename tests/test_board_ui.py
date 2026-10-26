@@ -34,3 +34,26 @@ def test_market_tiles_render():
         " {'state': 'correction', 'dist_count': 7}, 'Warm market')\n"
     )
     assert {m.label for m in at.metric} == {"QQQ light", "Market heat", "IBD market", "SPY"}
+
+
+def test_lightweight_chart_page_has_the_data_and_levels():
+    import sys
+
+    import pandas as pd
+
+    sys.path.insert(0, "app")
+    import lwchart
+
+    bars = pd.DataFrame(
+        {
+            "session_date": pd.date_range("2026-01-01", periods=60, freq="B"),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.5,
+            "close": 10.5,
+            "volume": 1e6,
+        }
+    )
+    page = lwchart.html(bars, {"entry": 10.6, "stop": 9.4, "pivot": None}, 400)
+    assert "lightweight-charts@4.1.3" in page and '"title": "stop"' in page
+    assert '"title": "pivot"' not in page and page.count('"open": 10.0') == 60

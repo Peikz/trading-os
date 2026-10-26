@@ -21,6 +21,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 import board  # app/board.py: Today's candidate board and Saxo ticket
+import lwchart  # app/lwchart.py: the focus view's fast chart
 import pandas as pd
 import streamlit as st
 from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
@@ -1387,6 +1388,21 @@ elif page == "System health":
     )
     page = HEALTH[section]
 
+
+def focus_chart(ticker: str, row: dict | None = None) -> None:
+    """The focus view's chart: the fast Lightweight Chart with the plan's levels (drawing and the
+    other tools on the Chart page)."""
+    bars = bars_for(str(data_dir), ticker, "2y")
+    if bars.empty:
+        st.caption(f"No daily bars for {ticker} in the data repo.")
+        return
+    row = row or {}
+    levels = {"entry": row.get("plan_entry"), "stop": row.get("plan_stop") or row.get("grade_stop")}
+    if row.get("pivot") == row.get("pivot") and row.get("pivot"):
+        levels["pivot"] = row.get("pivot")
+    lwchart.show(bars, levels)
+
+
 if page == "Today":
     st.header("Today")
     if not runs:
@@ -1403,9 +1419,7 @@ if page == "Today":
         fx_rate(str(data_dir), board_account.currency if board_account else "USD"),
         scan_frames,
         open_chart,
-        lambda t: stock_chart(
-            t, overlays=["MA10", "MA20", "MA50"], sessions=150, show_hits=False, key="focus_chart"
-        ),
+        focus_chart,
     )
     st.divider()
     st.subheader("Market")
