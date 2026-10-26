@@ -50,13 +50,15 @@ the extra starts are harmless.
 |---|---|---|
 | Backfill | starts 05:30 Tue–Sat | Adds the previous session's daily bars (Massive) |
 | Bars pack | starts 06:15 Tue–Sat | Packs the last 2 years of daily bars into the dashboard's compact files |
+| Pre-market early (26 Oct 2026) | 11:00–12:30 **Copenhagen** (starts 11:30 Copenhagen) | The same pre-market push early ("Pre-market early"): last night's setups, the market head, and gappers that already have the volume. Saved under `data/manual/`, so the 07:17 run stays the full one |
 | Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
 | Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; EP gaps to buy around 10:30 (10:17 check only); BO-Watch names at their pivot |
 | EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report, push |
 | After-hours check | 16:40–17:10 (starts 16:50, again 16:56) | EP-AH: earnings movers after the close, to buy before 17:00 (Saxo's extended hours end) |
 | Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
 | Weekly | Sunday, starts 12:00 (18:00 Copenhagen) | QM gainers, growth buckets, tight bases, the Sunday scan count |
-| Live check | the 1st of each month | The live A+ / A signals against the grading study, and your trades against their plan (section 11, Live results) |
+| Live check | the 1st of each month | The live A+ / A / B signals against the grading study, split by the IBD market state too, and your trades against their plan (section 11, Live results) |
+| Jobs log (26 Oct 2026) | once a day | The open-job count of ~480 listed companies' job boards, saved to `data/jobs/`, to test hiring growth as an EP variable once there is history |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |
 
 **Price alerts** (since 22 Oct 2026): GitHub Actions (`alerts.yml`, started by the timer at 09:25 and 12:45 New York) checks every minute of the session (15:30–22:00 Copenhagen) and pushes once when a price is hit: 🎯 last close's BO-Watch and MA-surf names over their pivot (with the plan's stop), 🛑 an open position at its stop, 🔔 your own alerts from the Watchlists page (they end once fired). Prices come from Alpaca's free real-time IEX feed, so the alerts are on price only. It uses the repo's secrets, so nothing runs on your PC; what fired is saved to the data repo when each run ends. To run it on the PC instead: `scripts\set_local_secrets.ps1` once, then `scripts\start_alerts.ps1`. Nothing places orders.
@@ -161,6 +163,7 @@ ETFs or ETNs). Two tiers:
 | Parabolic long | Down ≥ 30 % within 10 days, 3+ down days in a row | logged |
 | **BO-Watch** | A base that passes B1–B4 (below) | yes |
 | **BO trigger** | B5 at the close over the pivot of the base that ended the day before | full setups yes |
+| **EP9M AVWAP** (26 Oct 2026, grade B) | A stock that was an EP9M A+ in the last 2–15 sessions comes back to the VWAP anchored at that day's open: the low touches it, the close holds over it (the first such day). Pushed at EOD and again pre-market; bought at the next open, stop under the signal day's low (at most 2 ADR), out after 21 sessions | yes |
 
 ### Intraday (10:15, 12:00 and 16:50)
 
@@ -216,6 +219,14 @@ breakouts a day went 10R+ in the study); RED = few breakout winners, momentum mo
 not a stop: EP, EP9M and Luk flush did as well or better on RED, and stopping on red cost money
 in every test.
 
+**The IBD market state** (O'Neil; since 26 Oct 2026, tracked, not a rule): a distribution day is
+SPY down at least 0.2 % on more volume than the day before; 6 of them in 25 sessions start a
+correction, and a follow-through day (day 4 or later of a rally off the low, SPY up 1.25 % on more
+volume) starts an uptrend. Every signal carries the state (the report's IBD column and market
+line, the dashboard's tiles and tables; the push leaves it out), and the monthly live check
+splits the live trades by it. In the study MA-surf A and EP9M A+ did better in an uptrend, but
+that was found with both periods in view and 2006–15 didn't confirm it, so grades don't use it.
+
 **The Market Light** (your rules, SPEC §6.5; since 25 Oct 2026 in the report and on the dashboard only), from three inputs:
 
 - **QQQ trend**: *up* when the close is over the 20-day MA and the 10-day is over the 20-day;
@@ -268,6 +279,14 @@ break-even, and EP9M with 4 as a B trade halved the account's result in the stud
 | 💥 MB up, ↩️ Luk pullback, 🌀 VCP (found at the close, pushed the next pre-market since 22 Oct 2026, grade C) | each with its study plan under the section and a 🌡 heat line: how that setup did at today's market heat on both test periods (held, mixed, lost or few trades). Minervini's Trend Template is saved as a daily list (Screens), not pushed |
 | 🎯 BO-Watch, 🏄 MA-surf, 🪂 Parabolic long, 🎢 Parabolic short (found at the close, pushed the next pre-market at 07:17 New York / 13:17 Copenhagen, grade C except MA-surf with SPY over its 200-day; since 21 Oct 2026) | each line shows the pre-market price and move, the move against the pivot, and ⚠️ when it is already up more than 1 ADR. The study plan sits under each section header. Parabolic long: buy at the open, stop 1 ADR under, out after 21 sessions. Parabolic short: short around 10:30, stop over the signal day's high, cover on a close over the 20-day MA |
 | 🏄 MA-surf (found at EOD, pushed the next pre-market; A when SPY is over its 200-day, else C, since 23 Oct 2026) | the next session from 10:00 New York (16:00 Copenhagen): over the pivot buy, under it a buy-stop at the pivot; stop under the base's right side; sell on a close under the 20-day MA |
+
+| ⚓ EP9M AVWAP (EOD, and again in the next pre-market push; grade B since 26 Oct 2026) | at the next open, 09:30 New York (15:30 Copenhagen); stop under the signal day's low (at most 2 ADR); out at the close after 21 sessions |
+
+**What the grades mean** (Emil, 26 Oct 2026): **A+ / A** raised the account's return in both test
+periods (full size: your risk × 2 / 1.5). **B** has an edge per trade but wasn't proven to add to
+the account on top of the A+ trades (half the A+ size: your risk × 1; EP9M AVWAP is the one B
+today). **C** had no edge after costs (saved and counted, not a buy). The monthly live check
+covers A+, A and B and decides whether a B moves to A or C.
 
 The points were partly chosen with 2022–26 in view, so they flatter those years; rules picked
 blind on 2016–21 do worse (research report §9, portfolio report §11–12).
@@ -363,22 +382,26 @@ runner can't carry a group; medians show the typical trade. No commissions or sl
 
 ## 11. The dashboard, page by page
 
-The sidebar has the page list, the data folder, "Show manual test runs", **Pull latest**
-(fetch the newest runs from GitHub) and **Save & push** (send your grades, notes, journal and
-watchlists to the private repo).
+The sidebar has the page list, ordered by the trading day (since 26 Oct 2026): ☀️ before the open
+(Today, Market, Watchlists, Screens), ⚡ live (Positions, Chart, Scans), 🌙 after the close
+(Journal, Live results), 🔬 research (Research, System health, Guide). Below it: the data folder,
+"Show manual test runs", **Pull latest** (fetch the newest runs from GitHub) and **Save & push**
+(send your grades, notes, journal and watchlists to the private repo). The dashboard has a dark
+theme.
 
 | Page | What it shows |
 |---|---|
-| **Today** | The market panel (Market Light, breadth, SPY/QQQ/VIX) and the newest run's pushed scans with their study grade, facts, charts and TradingView links; each A+, A or B hit also gets its block as in the push (when to buy, the exit, the history behind the grade, why, the plan) |
+| **Today** | The **candidate board** (26 Oct 2026): the newest runs' A+ / A / B signals first (C behind *Show C*). The *Focus view* shows one at a time with a fast TradingView-style chart (TradingView's free Lightweight Charts: candles, volume, MA 10/20/50, the plan's entry and stop; top left the ticker, 1D, the exchange, O H L C and the MA values, following the crosshair) next to its card: the grade, when to buy, entry, stop, shares, risk, its tags (heat, heavily shorted, IBD), its 2016–26 history and the **Saxo ticket**. Flip with ◀ ▶ or the **arrow keys**; switch the view off for a list of cards. The ticket starts with the plan's order type (market at the plan's time, a buy-stop at the pivot, an extended-hours limit, market on close) and can switch to limit, buy-stop or stop-limit or an own price; shares keep the grade's risk; every value has a copy button; *Placed in Saxo* saves it as a plan so your fill matches it. Under the board: the market as tiles (QQQ light, heat, IBD state, SPY, QQQ, VIX; the full lines under *Market details*) and every pushed scan's table, folded per run |
+| **Positions** (26 Oct 2026) | A card per open position: the price (live from Alpaca when its keys are on the PC, else the last close), open R and P&L, the distance to the stop, and what the plan says today (day k of 21, or a close under the 20-day MA), with earnings within two sessions flagged |
 | **Screens** | Any run, any scan, both tiers: the full table with each hit's study grade and the A+/A/B blocks, an interactive chart, Open in TradingView, and your own grading form (grade, notes, screenshots) |
 | **Chart** | Any stock, interactive (drag to pan, scroll or pinch to zoom): daily or weekly candles with volume, 2 or 10 years, MA 10/20/50/200 and EMA 9/21, the scans' past hits (amber triangles, hover for the scan), your buys and sells, today's pivot and stops; anchored VWAPs (from the highest high, the lowest low, the year start, the latest scan hit, or any day you save); trend lines, saved per stock in the data repo as you draw them on the daily bars (the line tool, top right; drag a line or its ends to move it, click it and use the eraser to delete it; a line drawn past the last bar keeps extending each day; or type one in through two points); and an intraday view of any day with minute bars (1/5/15-minute candles, VWAP from the open, pre-/post-market shaded) |
 | **Chart → Intraday → Live** (22 Oct 2026) | A recent session's 1/5/15-minute candles from Alpaca's real-time feed, with VWAP, the prior close, the stock's pivot, stops and plan entry, and a line at 10:30. Needs the Alpaca keys on the PC (`scripts\set_local_secrets.ps1`) |
 | **Scans** (22 Oct 2026) | Every scan: when it runs (New York · Copenhagen), when its hits are pushed, its grade and settings. *Edit a scan*: on/off, pushed or saved only, when it is pushed, its thresholds, and your own name and note for the push. Each edit is checked like the jobs check config, saved to `config/scans.yaml`, and used by GitHub's jobs after *Commit & push*. Run times live in the timer and change in code |
 | **Watchlists** | Your own lists (add by typing or a TradingView export; each ticker with close, change, RVOL, ADR, RS, distance to the high and pivot, earnings, today's scans) the scans' EP-Watch and BO-Watch, your price alerts (add, remove, what fired today), and *TradingView list (.txt)* to download a list (Screens has the same for a scan) for TradingView's Watchlist → Import list |
 | **Journal** | Tabs: *Open positions* (open P&L, open R, money at risk to the stops), *Log a trade*, *Plans*, *Closed trades* (stats, R curve, MFE/MAE, review chart, grading), *Real vs study* |
-| **Market** | Today's market heat and every setup at that heat (or any other heat): net R a trade on 2016–21 and 2022–26, trades, years up, held / lost / mixed. Then the breadth history: the 5- and 10-day ratios over time |
+| **Market** | The market tiles (QQQ light, heat, IBD state, SPY, QQQ, VIX) and the IBD state's last 30 sessions (distribution days, the count, the state). Today's market heat and every setup at that heat (or any other heat): net R a trade on 2016–21 and 2022–26, trades, years up, held / lost / mixed. Indexes, sectors and themes. Then the breadth history with the QQQ light and the Market Light: the 5- and 10-day ratios over time |
 | **Research** | The history of your rules, one section at a time, each saying what its numbers measure. *How it was tested*: the grade rules in config in words (points, grade per count, when to buy, stop, exit), then the write-up from the data repo (`docs/research/how-we-test.md`): the method, the best time of day, which market each setup likes, and why famous traders win with setups that test flat. *Grades* (net of costs, out of sample: the numbers to decide on): the grading rules per strategy (entry, stop, exit, the score bands, the points per feature, the trading costs), the size and push per grade, the history behind each grade, and the research report. *History* (the graded section net of costs, the tables gross): every strategy's history (2 or 10 years): win rate and median move after 1/5/21/63 sessions, R, the exits compared, splits by year/market/price (EP-Day adds its own filters), the events and their charts. *Entries & exits* (gross): the minute study: the best entry, stop and exit per strategy; every combination with any exit; splits; the trades (2 years) or the summaries and a by-year table (10 years). *Market regime*: how often each light occurred per year, and for any strategy every filter's effect on trades kept, mean R and win rate, overall and per year |
-| **Live results** | The live signals since launch. *Grades live vs study*: each live A+ / A signal played out by its study plan (the plan's price, its stop checked from the next session, out at the close after the plan's sessions, net of the study's cost), per strategy, entry time and grade next to the history that grade carried, and your journal trades next to the plan of the signal they came from. The verdict says "too few trades yet" until 20 trades have closed, and "below the study" only when both the mean R and the win rate are clearly under it. The same tables arrive as a monthly report (`docs/live-tracking/` in the data repo) and one push on the 1st. *All signals*: outcome statistics of the live signals per scan. *Signals you graded*: the signals you graded, with what happened after |
+| **Live results** | The live signals since launch. *Grades live vs study*: each live A+ / A / B signal played out by its study plan (the plan's price, its stop checked from the next session, out at the close after the plan's sessions, net of the study's cost), per strategy, entry time and grade next to the history that grade carried, and your journal trades next to the plan of the signal they came from. The verdict says "too few trades yet" until 20 trades have closed, and "below the study" only when both the mean R and the win rate are clearly under it. The same tables arrive as a monthly report (`docs/live-tracking/` in the data repo) and one push on the 1st. *All signals*: outcome statistics of the live signals per scan. *Signals you graded*: the signals you graded, with what happened after |
 | **System health** | *Jobs and data*: which scheduled job ran for which session, data freshness, failure logs, whether each timed job started on time (timer vs GitHub), and how late GitHub started each run. *Validation against TradingView*: compare a run with a TradingView screener export and record it in `docs/validation.md` |
 | **Guide** | This page |
 

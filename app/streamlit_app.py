@@ -451,7 +451,10 @@ def quality_rules(grading) -> pd.DataFrame:
             span = f"{floor}" if floor == top else f"{floor}-{top}"
             bands.append(f"{span} = {grade}")
             top = floor - 1
-        bands.append(f"0-{top} = C" if top > 0 else "0 = C")
+        if parts:
+            bands.append(f"0-{top} = C" if top > 0 else "0 = C")
+        else:  # a setup graded as a whole (EP9M AVWAP)
+            bands = [f"every hit = {rule['grades'][0][1]}"]
         buys = "; ".join(
             f"{report.SCAN_LABELS.get(scan, scan)}: {notify.ENTRY_TEXT.get(entry, entry)}"
             for scan, entry in rule["entries"].items()
@@ -465,6 +468,8 @@ def quality_rules(grading) -> pd.DataFrame:
                 "Stop": (
                     f"{rule['stop_adr']:g} ADR under the entry (at least 1 %)"
                     if "stop_adr" in rule
+                    else "under the signal day's low (at most 2 ADR)"
+                    if rule.get("stop") == "signal_low"
                     else "the scan's order stop"
                 ),
                 "Exit": (
@@ -1079,6 +1084,7 @@ STRATEGY_RULES = [
     ("EP-PM (pre-market gappers)", "scan:ep_pm", None, None),
     ("EP9M (Stockbee: 9 million shares)", "scan:ep9m", None, None),
     ("EP9M pace (EP9M during the session)", "scan:ep9m_pace", None, "ep9m_a"),
+    ("EP9M AVWAP re-entry (grade B)", "module:avwap_live", None, None),
     ("Momentum Burst up (Stockbee)", "scan:mb_up", None, "mb_up"),
     ("Momentum Burst down (Stockbee)", "scan:mb_down", None, "mb_down"),
     ("Parabolic long (Qullamaggie)", "scan:parabolic_long", None, "parabolic_long"),
@@ -1122,12 +1128,18 @@ def strategy_rules_view() -> None:
             "breakouts": "breakout_watch / breakout_trigger",
             "luk": "luk_flush and luk_pullback (not the inside day)",
             "minervini": "vcp and minervini_tt (the Trend Template list)",
+            "avwap_live": "ep9m_avwap (graded B: half the A+ size)",
         }.get(name)
         st.markdown(
             f"**{'Live scan ' + live if live else 'Tested in the study only, no live scan'}**"
         )
         doc = inspect.getdoc(importlib.import_module(f"trading_os.{name}")) or ""
-        settings = dict(getattr(CFG, conf_key, {}) or {})
+        if conf_key:
+            settings = dict(getattr(CFG, conf_key, {}) or {})
+        else:  # a live module without a config block of its own: its grade rule
+            settings = (
+                dict(CFG.grading["quality"].get("ep9m_avwap", {})) if name == "avwap_live" else {}
+            )
     st.markdown("**The rules**")
     st.markdown(doc.replace("\n- ", "\n\n- "))
     if settings:
@@ -2489,7 +2501,7 @@ elif page == "How it was tested":
             points = row["Points (one each)"].split("; ")
             lines = [
                 f"**{row['Setup']}** · {row['Grade by points']}",
-                "- **Points:** " + " · ".join(points),
+                *(["- **Points:** " + " · ".join(points)] if row["Points (one each)"] else []),
                 f"- **Buy:** {row['When to buy']}",
                 f"- **Stop:** {row['Stop']}",
                 f"- **Exit:** {row['Exit']}",
@@ -2687,6 +2699,44 @@ elif page == "Market":
     if history.empty:
         st.info("Breadth rows start with the first scheduled EOD run.")
         st.stop()
+    from trading_os import ibd
+
+    last_row = history.iloc[-1].to_dict()
+    try:
+        ibd_now = ibd.state_at(data_dir, dt.date.today())
+    except Exception:  # noqa: BLE001 - the tile shows n/a
+        ibd_now = None
+    heat_line = heat.short_line(heat.load(data_dir), last_row.get("scan_count"))
+    board.market_tiles(last_row, ibd_now, heat_line[0].replace("🌡 ", "") if heat_line else None)
+    with st.expander("The IBD market state (tracked, not a rule)", expanded=False):
+        try:
+            spy = ibd.spy_daily(data_dir, dt.date.today())
+            states = ibd.states(spy) if len(spy) > ibd.DIST_WINDOW else pd.DataFrame()
+        except Exception:  # noqa: BLE001
+            states = pd.DataFrame()
+        if states.empty:
+            st.caption("Needs SPY's daily bars (data/market/spy_daily_seed.parquet).")
+        else:
+            st.dataframe(
+                states.tail(30)
+                .iloc[::-1][["session_date", "close", "dist", "dist_count", "state"]]
+                .rename(
+                    columns={
+                        "close": "SPY",
+                        "dist": "distribution day",
+                        "dist_count": "dist. days (25)",
+                    }
+                )
+                .round(2),
+                hide_index=True,
+                width="stretch",
+            )
+        st.caption(
+            "O'Neil: a distribution day is SPY down 0.2 %+ on more volume; 6 in 25 sessions start "
+            "a correction, a follow-through day (day 4+ of a rally, SPY +1.25 % on more volume) "
+            "starts an uptrend. Every signal carries the state; the monthly live check splits "
+            "the live trades by it. Grades don't use it (it wasn't proven blind)."
+        )
     heat_stats = heat.load(data_dir)
     counts = history["scan_count"].dropna() if "scan_count" in history else pd.Series()
     if heat_stats and len(counts):
@@ -2730,6 +2780,7 @@ elif page == "Market":
         history[
             [
                 "session_date",
+                *(["qqq_light"] if "qqq_light" in history else []),
                 "light",
                 "qqq_trend",
                 "breadth_state",
