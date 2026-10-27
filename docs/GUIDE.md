@@ -50,13 +50,12 @@ the extra starts are harmless.
 |---|---|---|
 | Backfill | starts 05:30 Tue–Sat | Adds the previous session's daily bars (Massive) |
 | Bars pack | starts 06:15 Tue–Sat | Packs the last 2 years of daily bars into the dashboard's compact files |
-| Pre-market early (26 Oct 2026) | 11:00–12:30 **Copenhagen** (starts 11:30 Copenhagen) | The same pre-market push early ("Pre-market early"): last night's setups, the market head, and gappers that already have the volume. Saved under `data/manual/`, so the 07:17 run stays the full one |
-| Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM, early EP9M, watchlist gappers; today's Market Light from the last close |
+| Pre-market | 07:15–07:55 (starts 07:17, again 07:35) | EP-PM (pushed), early EP9M and watchlist gappers (saved); today's Market Light from the last close (report) |
 | Intraday checks | 10:10–11:30 and 11:55–13:30 (starts 10:17 and 12:03, again 10:40 and 12:30) | EP9M on pace for the day's volume; EP gaps to buy around 10:30 (10:17 check only); BO-Watch names at their pivot |
-| EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report, push |
-| After-hours check | 16:40–17:10 (starts 16:50, again 16:56) | EP-AH: earnings movers after the close, to buy before 17:00 (Saxo's extended hours end) |
+| EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report. No push of its own since 27 Oct 2026: its setups and the market line go out in the after-hours push (a close run that only finishes after it sends them itself) |
+| After-hours check | 16:40–17:10 (starts 16:50, again 16:56) | The evening push: the market line, EP-AH (earnings movers after the close, to buy before 17:00, Saxo's extended hours end), and the close's Luk flush, EP9M AVWAP, MA-surf and parabolics for tomorrow |
 | Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
-| Weekly | Sunday, starts 12:00 (18:00 Copenhagen) | QM gainers, growth buckets, tight bases, the Sunday scan count |
+| Weekly | **Saturday**, starts 09:00 Copenhagen (since 27 Oct 2026; was Sunday) | QM gainers, growth buckets, tight bases, the weekly scan count (market heat). Saved for the dashboard, no push |
 | Live check | the 1st of each month | The live A+ / A / B signals against the grading study, split by the IBD market state too, and your trades against their plan (section 11, Live results) |
 | Jobs log (26 Oct 2026) | once a day | The open-job count of ~480 listed companies' job boards, saved to `data/jobs/`, to test hiring growth as an EP variable once there is history |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |
@@ -245,6 +244,23 @@ breadth weak, or count < 15), **GREEN** (QQQ up, breadth not weak, count ≥ 50)
 **YELLOW**. The market panel also shows SPY and QQQ (change and MA position) and VIX.
 
 ## 7. Push messages
+
+**What pushes, and when** (Emil, 27 Oct 2026). Only what you trade reaches the phone; every
+other scan still runs and is saved, and the dashboard shows it (Today → Show: *Every scan hit*,
+*All scans*, *Screens*).
+
+| Push | New York | Copenhagen (from 2 Nov) | In it |
+|---|---|---|---|
+| ☀️ Pre-market | 07:17 | 13:17 | EP-PM, every grade |
+| ⚡ Morning | 10:17 | 16:17 | EP 10:30 (every grade), EP9M pace A+, a reminder of today's Luk flush buy |
+| ⚡ Midday | 12:03 | 18:03 | new EP9M pace A+ only; no push when nothing is new |
+| 🌙 After hours | 16:50 | 22:50 | the market line (QQQ light, heat, IBD), EP-AH (every grade), Luk flush A, EP9M AVWAP B, MA-surf, the parabolics |
+
+Saved for the dashboard, not pushed: EP9M early, watchlist gappers, Pivot watch, Momentum Burst,
+Luk pullback, VCP, BO-Watch, EP-Day, EP9M at the close, Trend Template, B5 trigger and the
+weekly lists. Your own price alerts still push the moment they hit. **Tapping a push** opens
+Today on that push's stocks ("From the push", with *Show everything this run found* one click
+away); the address is the `DASHBOARD_URL` secret, and without it a tap opens the report.
 
 Sent through ntfy to your phone after each run that has something (the intraday checks also
 send "no alerts" so you know they ran). Layout, top to bottom: the title with counts, the

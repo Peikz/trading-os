@@ -50,17 +50,8 @@ class TimerJob:
 JOBS = (
     TimerJob("backfill", "backfill.yml", "Backfill", "05:30", TUE_SAT),
     TimerJob("bars-pack", "bars-pack.yml", "Bars pack", "06:15", TUE_SAT),
-    # The early pre-market push (Emil, 26 Oct 2026): 11:30 in Copenhagen whatever the US
-    # clocks do; the 07:17 New York run stays the full one (its volume floors need the time).
-    TimerJob(
-        "pm_early",
-        "premarket.yml",
-        "Pre-market",
-        "11:30",
-        WEEKDAYS,
-        {"early": "true"},
-        tz="Europe/Copenhagen",
-    ),  # fmt: skip
+    # The early 11:30 Copenhagen pre-market push was dropped on 27 Oct 2026 (Emil): one
+    # pre-market push at 07:17 New York, EP-PM only.
     TimerJob("pm", "premarket.yml", "Pre-market", "07:17", WEEKDAYS),
     TimerJob("pm", "premarket.yml", "Pre-market", "07:35", WEEKDAYS, retry=True),
     TimerJob("am", "intraday.yml", "Intraday", "10:17", WEEKDAYS, {"slot": "am"}),
@@ -77,7 +68,8 @@ JOBS = (
     # Price alerts (Emil, 22 Oct 2026): the session in two runs (a job may run 6 hours at most).
     TimerJob("alerts", "alerts.yml", "Price alerts", "09:25", WEEKDAYS, {"until": "12:44"}),
     TimerJob("alerts", "alerts.yml", "Price alerts", "12:45", WEEKDAYS, {"until": "16:00"}),
-    TimerJob("weekly", "weekly.yml", "Weekly", "12:00", (0,)),
+    # Saturday morning in Copenhagen on Friday's close (Emil, 27 Oct 2026; was Sunday 12:00 NY)
+    TimerJob("weekly", "weekly.yml", "Weekly", "09:00", (6,), tz="Europe/Copenhagen"),
 )
 
 

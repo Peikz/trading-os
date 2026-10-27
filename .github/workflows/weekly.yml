@@ -1,14 +1,14 @@
-# Weekly job (SPEC §3): Sunday 18:00 Copenhagen.
-# Two crons, one per EU DST state; scripts/weekly.py exits unless it is Sunday in New York,
-# and skips a week that is already saved.
+# Weekly job (SPEC §3): Saturday 09:00 Copenhagen on Friday's close (Emil, 27 Oct 2026; was
+# Sunday). The cron-job.org timer starts it; these crons are the fallback. scripts/weekly.py
+# exits unless it is Saturday in New York, and skips a week that is already saved.
 # This repo is public and so are these logs: the job prints counts and status only.
 
 name: Weekly
 
 on:
   schedule:
-    - cron: "0 16 * * 0"      # 18:00 CEST
-    - cron: "0 17 * * 0"      # 18:00 CET
+    - cron: "0 8 * * 6"       # 09:00 CET (10:00 CEST)
+    - cron: "0 10 * * 6"      # late fallback
   workflow_dispatch:
     inputs:
       timer:

@@ -120,7 +120,9 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 
 ### 6.1 Pre-market (13:30 CET)
 
-An early push comes at 11:30 Copenhagen time (Emil, 26 Oct 2026; `--early`, timer job `pm_early`). It runs the same pre-market job, titled "Pre-market early", with last night's setups, the market head and any gappers that already have the volume. It is saved under `data/manual/`, so the 07:17 New York run stays the session's full pre-market run: its volume floors need the later time.
+The early 11:30 Copenhagen push (26 Oct 2026) was dropped on 27 Oct 2026; `--early` stays for manual runs.
+
+**Push schedule (Emil, 27 Oct 2026).** Four pushes: pre-market 07:17 (EP-PM only), morning 10:17 (EP 10:30, EP9M pace A+, a reminder of today's Luk flush buy), midday 12:03 (new EP9M pace A+ only, silent when nothing is new) and after hours 16:50 (the market line, EP-AH, and the close run's Luk flush, EP9M AVWAP, MA-surf and parabolics via `push_slot: ah`). The EOD and weekly runs save without a push (`job.SILENT_SLOTS`); an EOD run finishing after the after-hours push sends its part itself. Every other scan is `action: log`, saved for the dashboard. The weekly job runs Saturday 09:00 Copenhagen. A tap opens the dashboard's Today on the push's stocks (`DASHBOARD_URL` secret; else the report).
 
 | Scan | Filters | Phase | Action |
 |---|---|---|---|

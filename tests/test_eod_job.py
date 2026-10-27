@@ -16,7 +16,8 @@ def ep_day_pushing(cfg):
     from types import MappingProxyType
 
     scans = dict(cfg.scans)
-    for name in ("ep_day", "ep9m", "breakout_trigger"):  # saved only since 21 Oct 2026
+    # saved only since 21 Oct 2026; Pivot watch since 27 Oct 2026
+    for name in ("ep_day", "ep9m", "breakout_trigger", "pivot_watch"):
         scans[name] = dataclasses.replace(scans[name], action="push")
     return dataclasses.replace(cfg, scans=MappingProxyType(scans))
 
@@ -31,6 +32,9 @@ def _grades_off(monkeypatch):
     cfg = ep_day_pushing(load_config())  # EP-Day is the example pushing scan here
     off = dataclasses.replace(cfg, grading=MappingProxyType({**cfg.grading, "enabled": False}))
     monkeypatch.setattr(job, "load_config", lambda *a, **k: off)
+    # The close and weekly runs push nothing since 27 Oct 2026 (test_the_close_run_is_silent);
+    # here they stay the example push, to pin the message layout.
+    monkeypatch.setattr(job, "SILENT_SLOTS", ())
 
 
 def run_eod(argv):
@@ -164,11 +168,10 @@ def test_premarket_run_pushes_ep_pm(tmp_path, capsys, sent):
     assert "EP-PM: 1 hits (1 alert), saved" in out
     [message] = sent
     assert message.title.startswith("Pre-market ")
-    # The push starts with the Light and QQQ against its MAs, then the stocks (Emil, 23 Oct
-    # 2026); the breadth, movers and index lines stay in the report.
-    head = message.body.split("\n\n")[0].split("\n")
-    assert head == ["⚪ QQQ light n/a", "QQQ below 10, 20, 50, 200"]
-    assert "Pre-market 4%" not in message.body and "SPY pre-market" not in message.body
+    # EP-PM only since 27 Oct 2026 (Emil): no market line in the pre-market push; it stays in
+    # the report, and the after-hours push has it.
+    assert message.body.startswith("━━ 🌅 EP-PM · 1 ━━")
+    assert "QQQ light" not in message.body and "Pre-market 4%" not in message.body
     assert f"▸ {GAPPER}  +12.0% PM  vol 0.4M  $4M" in message.body
     [run_dir] = (tmp_path / "data" / "manual").iterdir()
     assert run_dir.name.split("_")[1] == "pm"
@@ -430,9 +433,9 @@ def test_midday_check_skips_names_sent_at_1015(tmp_path, capsys, sent, monkeypat
     assert run_intraday("mid", ["--data-dir", str(tmp_path), "--force"]) == 0
     out, _ = capsys.readouterr()
     assert "Push: 1 already sent at 10:15, skipped" in out
-    [message] = sent
-    assert "Nothing new: EP9M pace (1 sent earlier)" in message.body
-    assert GAPPER not in message.body
+    # Nothing new at midday: no push at all since 27 Oct 2026 (Emil)
+    assert "Push: nothing new, none sent" in out
+    assert sent == []
 
 
 def test_intraday_script_picks_the_check_by_time(monkeypatch):

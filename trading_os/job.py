@@ -46,6 +46,11 @@ from trading_os.retry import once_more
 from trading_os.scans import run_scans
 
 TV_RETRY_WAIT_S = 30
+# The pushes since 27 Oct 2026 (Emil): pre-market (EP-PM only), morning, midday (only when
+# there is something new) and after hours (EP-AH, the close's setups and the market line).
+# The close and the weekly runs scan and save without a push of their own.
+SILENT_SLOTS = ("eod", "weekly")
+QUIET_WHEN_EMPTY = ("mid",)
 NTFY_RETRY_WAIT_S = 10
 
 
@@ -170,6 +175,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     if slot == "weekly":
         results = _with_cats(results, args.data_dir, cfg, session)
     extras, header, push_head = _breadth_and_light(args.data_dir, cfg, session, slot, uni)
+    if slot == "pm":  # the pre-market push is EP-PM only; the market line is in the report
+        push_head = []
     if slot in ("eod", "weekly") and not ranked_industries.empty:
         extras["industries"] = ranked_industries
     if slot == "eod":
@@ -203,16 +210,26 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = _with_heat_tags(results, args.data_dir, session)
     ibd_info = _ibd_state(args.data_dir, session, slot, extras)
     results = _with_ibd(results, ibd_info)
+    if slot == "ah":  # the market line moved here from the close (Emil, 27 Oct 2026)
+        push_head = [*_close_market_head(args.data_dir, session, ibd_info), *push_head]
+        push_head += [x for x in _job_health(cfg) if not x.startswith("🩺 All")]
+    if slot == "am":
+        push_head = [*push_head, *_planned_today(args.data_dir, cfg, session)]
     if slot in ("pm", "eod"):  # the report only: the push stays market head + stocks
         header = [*header, *ibd.line(ibd_info)]
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
     selected = notify.select_for_push(results, cfg, slot)
-    carried = _from_last_close(args.data_dir, cfg, session, uni) if slot == "pm" else {}
+    carried = _from_last_close(args.data_dir, cfg, session, uni, slot) if slot == "ah" else {}
     if carried:
         selected.update(notify.select_for_push(carried, cfg, slot))
     if slot == "mid":
         selected = _not_pushed_earlier(selected, args.data_dir, session, "am")
+    # A close run that comes after the after-hours push (its 17:00 retry) sends the close's
+    # part of that push itself, so the setups are never lost.
+    late_close = slot == "eod" and store.already_done(args.data_dir, session, "ah")
+    if late_close:
+        selected = notify.select_for_push(results, cfg, "ah")
     # Last close's hits go into the message and report only; this run saves its own.
     shown, selected = _with_context({**results, **carried}, selected, cfg, session)
     results = {name: shown[name] for name in results}
@@ -220,9 +237,15 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     push_error: requests.RequestException | None = None
     if args.no_push:
         status("Push: skipped (--no-push)")
+    elif slot in SILENT_SLOTS and not late_close:
+        status("Push: none for this run (saved for the dashboard)")
+    elif slot in QUIET_WHEN_EMPTY and not any(len(h) for h in selected.values()):
+        status("Push: nothing new, none sent")
     else:
         report_path = store.run_outputs(args.data_dir, ctx)["report"]
-        link = notify.report_url(cfg, report_path.relative_to(args.data_dir).as_posix())
+        link = notify.dashboard_url(session, slot, selected) or notify.report_url(
+            cfg, report_path.relative_to(args.data_dir).as_posix()
+        )
         message = notify.build_message(ctx, shown, selected, cfg, push_head, click=link)
         try:
             once_more(
@@ -352,11 +375,11 @@ def _position_lines(data_dir: Path, cfg, session, slot: str, uni: pd.DataFrame) 
         return []
 
 
-def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
-    """Pre-market: the last session's hits of the scans that push now (`push_slot: pm`:
-    BO-Watch, MA-surf, the parabolics, Luk flush from the EOD run; EP-AH from the after-hours
-    check, Emil 23 Oct 2026), with today's pre-market price and move, so they arrive before the
-    open. `carried_from` is the run they came from. Auxiliary: a problem leaves them out, never
+def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame, slot: str = "ah") -> dict:
+    """The hits of scans that run at another slot but push in this one (`push_slot`). After
+    hours (Emil, 27 Oct 2026): today's close run, so Luk flush, EP9M AVWAP, MA-surf and the
+    parabolics arrive with EP-AH and their after-hours move. Pre-market: the last session's.
+    `carried_from` is the run they came from. Auxiliary: a problem leaves them out, never
     fails the run."""
     names = [
         name
@@ -364,15 +387,19 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
         if scan.enabled
         and scan.action == "push"
         and isinstance(scan.slot, str)
-        and scan.slot != "pm"
-        and "pm" in notify.push_slots(scan)
+        and scan.slot != slot
+        and slot in notify.push_slots(scan)
     ]
     if not names:
         return {}
     try:
-        last = clock.previous_session(cfg.schedule, session)
+        last = session if slot == "ah" else clock.previous_session(cfg.schedule, session)
         folder = Path(data_dir) / "data" / "candidates" / str(last.year)
-        fields = [c for c in ("pm_price", "pm_change_pct", "pm_volume") if c in uni]
+        moves = {
+            "pm": ("pm_price", "pm_change_pct", "pm_volume"),
+            "ah": ("ah_price", "ah_change_pct"),
+        }
+        fields = [c for c in moves.get(slot, ()) if c in uni]
         pm = uni.drop_duplicates("ticker").set_index("ticker")[fields]
         runs, out = {}, {}
         for name in names:
@@ -386,7 +413,7 @@ def _from_last_close(data_dir: Path, cfg, session, uni: pd.DataFrame) -> dict:
             rows = rows.drop(columns=fields, errors="ignore").join(pm, on="ticker")
             out[name] = rows.assign(carried_from=slot).reset_index(drop=True)
         if not out:
-            status("Last close's watch: no run to carry over")
+            status("Last close's watch: no run to carry over (the close run not saved yet?)")
             return {}
         status("Last close's watch: " + ", ".join(f"{n} {len(h)}" for n, h in out.items()))
         return out
@@ -421,10 +448,50 @@ def _ibd_state(data_dir: Path, session, slot: str, extras: dict) -> dict | None:
     try:
         if slot == "eod" and "breadth" in extras and len(extras["breadth"]):
             return ibd.state_at(data_dir, session, extras["breadth"].iloc[0].to_dict())
+        if slot == "ah":  # today's close is stored by now
+            return ibd.state_at(data_dir, session)
         return ibd.state_at(data_dir, session - dt.timedelta(days=1))
     except Exception as exc:  # noqa: BLE001
         status(f"IBD state: FAILED ({type(exc).__name__}), left out")
         return None
+
+
+def _close_market_head(data_dir: Path, session, ibd_info: dict | None) -> list[str]:
+    """The after-hours push's market line (Emil, 27 Oct 2026): today's close as the close push
+    had it (QQQ light, the heat, QQQ against its averages) and the IBD state. Auxiliary."""
+    try:
+        row = breadth.latest_eod_row(data_dir, session + dt.timedelta(days=1))
+        if not row or pd.Timestamp(row["session_date"]).date() != session:
+            status("Market line: today's close not saved yet, left out")
+            return [ibd.tag(ibd_info)] if ibd_info else []
+        light, *qqq_ma = breadth.short_lines(row)
+        stats = heat.load(data_dir)
+        tag = [ibd.tag(ibd_info)] if ibd_info else []
+        return [light, *heat.short_line(stats, row.get("scan_count")), *qqq_ma, *tag]
+    except Exception as exc:  # noqa: BLE001 - the push goes out without the line
+        status(f"Market line: FAILED ({type(exc).__name__}), left out")
+        return []
+
+
+def _planned_today(data_dir: Path, cfg, session) -> list[str]:
+    """The morning push's reminder (Emil, 27 Oct 2026): the A / B buys from last evening's push
+    that are bought by hand today (Luk flush at 10:30). Buy-stops and buys at the open are
+    placed the evening before. Auxiliary."""
+    try:
+        last = clock.previous_session(cfg.schedule, session)
+        path = Path(data_dir) / "data" / "candidates" / str(last.year) / f"{last}_eod.parquet"
+        if not path.exists():
+            return []
+        hits = pd.read_parquet(path, columns=["scan", "ticker", "tier", "grade"])
+        rows = hits[(hits["scan"] == "luk_flush") & (hits["tier"] == "alert")]
+        rows = rows[rows["grade"].isin(["A+", "A", "B"])]
+        if rows.empty:
+            return []
+        names = ", ".join(rows["ticker"].astype(str))
+        return [f"🗓 Planned today: Luk flush {names} (buy 10:30 New York)"]
+    except Exception as exc:  # noqa: BLE001 - the push goes out without the line
+        status(f"Planned today: FAILED ({type(exc).__name__}), left out")
+        return []
 
 
 def _with_ibd(results: dict, info: dict | None) -> dict:

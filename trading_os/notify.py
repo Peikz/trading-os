@@ -11,6 +11,7 @@ one line at the end. Tapping the notification opens the run's full report.
 from __future__ import annotations
 
 import os
+import urllib.parse
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -205,6 +206,17 @@ def premarket_line(row: Mapping[str, Any]) -> str | None:
     return text
 
 
+def afterhours_line(row: Mapping[str, Any]) -> str | None:
+    """`AH 12.10 +1.2%`: a close-run hit in the after-hours push (since 27 Oct 2026), with its
+    move after the close; None for the after-hours run's own hits or without a trade."""
+    if row.get("carried_from") != "eod":
+        return None
+    price, change = row.get("ah_price"), row.get("ah_change_pct")
+    if price is None or pd.isna(price) or price <= 0:
+        return None
+    return f"AH {price:.2f}" + ("" if change is None or pd.isna(change) else f" {change:+.1f}%")
+
+
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
 NTFY_LIMIT = 3900  # ntfy turns longer messages into attachments (4096 bytes)
@@ -343,13 +355,14 @@ def grade_lines(row: Mapping[str, Any]) -> list[str]:
 
 
 def later_counts(results: Mapping[str, pd.DataFrame], cfg: Config, slot: str) -> list[str]:
-    """`BO-Watch 3 · MA-surf 1`: alert-tier hits held for the pre-market push."""
+    """`Luk flush 1 · MA-surf 1`: alert-tier hits held for a later push (the after-hours push
+    since 27 Oct 2026)."""
     out = []
     for name, hits in results.items():
         scan = cfg.scans[name]
         if scan.action != "push" or pushes_now(scan, slot) or hits.empty:
             continue
-        if "pm" not in push_slots(scan):
+        if not set(push_slots(scan)) - {slot}:
             continue
         eligible = hits[hits["tier"] == scan["push_tier"]] if "push_tier" in scan.params else hits
         if len(eligible):
@@ -601,7 +614,7 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     si_tag = row.get("si_tag")  # days to cover >= 5 (Emil, 25 Oct 2026)
     if isinstance(si_tag, str) and si_tag:
         out.append(Line("plan", INDENT + si_tag))
-    pm = premarket_line(row)
+    pm = premarket_line(row) if slot == "pm" else afterhours_line(row) if slot == "ah" else None
     if pm:
         out.append(Line("plan", INDENT + pm))
     # A C hit shown for its facts (EP 10:30, EP-AH) gets no size: it is not a buy by the study.
@@ -745,13 +758,27 @@ def build_message(
         lines += [Line("note", "Study C, saved: " + " · ".join(saved))]
     later = later_counts(results, cfg, ctx.slot)
     if later:
-        lines += [Line("note", "In the pre-market push: " + " · ".join(later))]
+        lines += [Line("note", "In the after-hours push: " + " · ".join(later))]
     if click:
-        lines.append(Line("note", "Tap for the full report with charts."))
+        on_github = "github.com" in click
+        tap = "Tap for the full report with charts." if on_github else "Tap to open on Today."
+        lines.append(Line("note", tap))
     first = (header_lines or [""])[0][:1]
     icon = first if first in LIGHT_ICONS.values() else ""
     body = fit(lines) or "No pushing scans ran."
     return Message(title=_title(ctx, counts, icon), body=body, click=click)
+
+
+def dashboard_url(session, slot: str, selected: Mapping[str, pd.DataFrame]) -> str | None:
+    """Tapping a push opens the dashboard's Today on that push's stocks (Emil, 27 Oct 2026).
+    The address is the GitHub secret DASHBOARD_URL (kept out of the public repo); None when
+    it isn't set, and the push falls back to the report."""
+    base = os.environ.get("DASHBOARD_URL", "").strip()
+    if not base:
+        return None
+    tickers = list(dict.fromkeys(t for h in selected.values() for t in h.get("ticker", [])))
+    query = urllib.parse.urlencode({"push": slot, "session": str(session), "t": ",".join(tickers)})
+    return f"{base.rstrip('/')}/?{query}"
 
 
 def report_url(cfg: Config, path: str) -> str | None:

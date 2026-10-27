@@ -38,6 +38,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read              # the after-hours push's job check reads the run list
 
 jobs:
   intraday:
@@ -62,6 +63,8 @@ jobs:
       - name: Run intraday check
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}   # a tap opens Today (Emil, 27 Oct)
+          GH_TOKEN: ${{ github.token }}              # the after-hours push's job check
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           SLOT: ${{ github.event_name == 'workflow_dispatch' && format('--slot {0}', inputs.slot) || '' }}
           FORCE: ${{ inputs.force && '--force' || '' }}

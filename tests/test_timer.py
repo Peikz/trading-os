@@ -66,8 +66,9 @@ def test_last_fire_follows_new_york_time_and_the_job_days():
     assert timer.last_fire(pm, utc(2026, 11, 2, 13, 0)) == utc(2026, 11, 2, 12, 17)
     assert timer.last_fire(pm, utc(2026, 10, 20, 12, 0)) == utc(2026, 10, 20, 11, 17)  # EDT
     assert timer.last_fire(pm, utc(2026, 10, 24, 15, 0)) == utc(2026, 10, 23, 11, 17)  # Sat
-    weekly = by_title("weekly")
-    assert timer.last_fire(weekly, utc(2026, 10, 21, 0, 0)) == utc(2026, 10, 18, 16, 0)
+    weekly = by_title("weekly")  # Saturday 09:00 Copenhagen since 27 Oct 2026 (Emil)
+    assert timer.last_fire(weekly, utc(2026, 10, 21, 0, 0)) == utc(2026, 10, 17, 7, 0)  # CEST
+    assert timer.last_fire(weekly, utc(2026, 11, 2, 0, 0)) == utc(2026, 10, 31, 8, 0)  # CET
 
 
 def test_check_says_on_time_late_missed_or_due():
@@ -150,12 +151,9 @@ def test_the_daily_job_line_names_missed_and_failed_runs():
     assert timer.health_line(pd.DataFrame(rows), WINDOWS, now).startswith("🩺 All ")
 
 
-def test_early_premarket_fires_at_1130_copenhagen():
-    import datetime as dt
-
-    job = by_title("pm_early")
-    assert job.title.endswith("11:30 CPH") and job.inputs == {"early": "true"}
-    assert timer.payload(job, "t")["schedule"]["timezone"] == "Europe/Copenhagen"
-    # Tue 27 Oct 2026, 12:00 Copenhagen (UTC+1): it last fired at 11:30 Copenhagen = 10:30 UTC
-    fired = timer.last_fire(job, dt.datetime(2026, 10, 27, 11, 0, tzinfo=dt.UTC))
-    assert fired == dt.datetime(2026, 10, 27, 10, 30, tzinfo=dt.UTC)
+def test_one_premarket_push_and_the_weekly_on_saturday():
+    titles = [j.title for j in timer.JOBS]
+    assert not any("pm_early" in t for t in titles)  # dropped on 27 Oct 2026 (Emil)
+    weekly = by_title("weekly")
+    assert weekly.title.endswith("09:00 CPH") and weekly.days == (6,)
+    assert timer.payload(weekly, "t")["schedule"]["timezone"] == "Europe/Copenhagen"

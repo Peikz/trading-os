@@ -104,7 +104,7 @@ def test_message_without_hits_and_the_market_icon():
         "🟡 Market Light YELLOW",
         "",
         "Nothing new: EP-Day (2 below alert tier)",
-        "Tap for the full report with charts.",
+        "Tap to open on Today.",
     ]
     assert msg.click == "https://x/r.md"
 

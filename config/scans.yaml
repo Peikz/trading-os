@@ -51,7 +51,7 @@ schedule:                                   # SPEC §3
     ah: ["16:40", "17:10"]                  # EP after hours at 16:50 (Emil, 21 Oct 2026): sees
                                             # ~16:35 (TradingView is 15 min delayed); Saxo's
                                             # extended hours end at 17:00
-  weekly_day: Sunday                        # New York date; the job reports the week's last session
+  weekly_day: Saturday                       # New York date; the job reports the week's last session
 
 scans:
   # --- Pre-market (SPEC §6.1) ---
@@ -61,11 +61,13 @@ scans:
      note: "Heads-up only: the buy is the 10:30 check (EP 10:30 A+)"}
   # pm_gap_basis (proposed, pending Emil): premarket_change = current pre-market price vs
   # prior close; premarket_gap = first pre-market print vs prior close.
+  # Pushes since 27 Oct 2026 (Emil): only EP (all grades), EP9M A+, the A / B setups, MA-surf
+  # and the parabolics; the rest is scanned and saved for the dashboard (action: log).
   ep9m_early:
-    {enabled: true, phase: 1, slot: pm, action: push, push_tier: alert,
+    {enabled: true, phase: 1, slot: pm, action: log, push_tier: alert,
      pm_volume_min: 500_000, pm_gap_min_pct: 4, pm_gap_basis: premarket_change}
   watchlist_gappers:
-    {enabled: true, phase: 1, slot: pm, action: push,
+    {enabled: true, phase: 1, slot: pm, action: log,
      lists: [bo_watch, ep_watch], pm_gap_min_pct: 2, pm_gap_basis: premarket_change}
 
   # --- End of day (SPEC §6.2) ---
@@ -89,7 +91,7 @@ scans:
                                             # close (Emil, 21 Oct 2026): the study's 16:45 entry,
                                             # measured on after-close earnings releases only
     {enabled: true, phase: 1, slot: ah, action: push, push_tier: alert, push_ungraded: true,
-     push_slot: [ah, pm],                   # and again pre-market with its move (Emil, 23 Oct)
+     push_slot: ah,                         # after hours only (Emil, 27 Oct 2026)
      ah_change_min_pct: 8, price_min: 1.00, market_cap_min: 50_000_000, ah_volume_min: 50_000,
      earnings_only: true}
   ep9m:                                     # saved only since 21 Oct 2026 (Emil): its buys are
@@ -102,22 +104,22 @@ scans:
     {enabled: true, phase: 1, slot: [am, mid], action: push, push_tier: alert,
      volume_min: 9_000_000, chg_min_pct: 4}
   pivot_watch:                              # BO-Watch names at/over their pivot (Emil, 19 Oct)
-    {enabled: true, phase: 2, slot: [am, mid], action: push, push_tier: alert,
+    {enabled: true, phase: 2, slot: [am, mid], action: log, push_tier: alert,
      near_pivot_pct: 1.0}                   # (proposed) up to 1 % below the pivot counts
-  mb_up:                                    # pushed the next morning (Emil, 22 Oct 2026)
-    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+  mb_up:                                    # saved for the dashboard (Emil, 27 Oct 2026)
+    {enabled: true, phase: 1, slot: eod, action: log, push_tier: alert, push_slot: pm,
      push_ungraded: true, chg_min_pct: 4, volume_min: 100_000, volume_gt_prior: true, close_loc_min: 0.70}
   mb_down:
     {enabled: true, phase: 1, slot: eod, action: log,
      chg_max_pct: -4, volume_min: 100_000, volume_gt_prior: true}
-  # BO-Watch, MA-surf and the parabolics are found at the close and pushed the next morning
-  # in the pre-market push with their pre-market move (push_slot: pm; Emil, 21 Oct 2026).
+  # Found at the close, pushed in the after-hours push with EP-AH and the market line
+  # (push_slot: ah; Emil, 27 Oct 2026: one evening push, the pre-market push is EP-PM only).
   parabolic_short:
-    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: ah,
      push_ungraded: true, lookback_days_max: 10, large_cap_min: 1_000_000_000,
      gain_min_pct_large_cap: 50, gain_min_pct_small_cap: 200, consec_up_min: 3}
   parabolic_long:
-    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: pm,
+    {enabled: true, phase: 1, slot: eod, action: push, push_tier: alert, push_slot: ah,
      push_ungraded: true, lookback_days_max: 10, drop_min_pct: 30, consec_down_min: 3}
   # Breadth: one line in the EOD push. Up/down use the Momentum Burst thresholds above.
   # up_count_rule (proposed, pending Emil): stockbee_4pct = change >= 4 % on volume above
@@ -133,20 +135,20 @@ scans:
   luk_flush:                                # Martin Luk's AVWAP flush, live (Emil, 20 Oct 2026):
                                             # rules in `luk:`, bought the next session (grading)
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert,
-     push_slot: [eod, pm]}                  # EOD, and again pre-market with its move (Emil)
+     push_slot: ah}                         # in the after-hours push (Emil, 27 Oct 2026)
   ep9m_avwap:                               # EP9M anchored-VWAP re-entry, live (Emil, 26 Oct
                                             # 2026): an EP9M A+ back at the VWAP anchored at
                                             # its day, 2-15 sessions later (`avwap_live.py`);
                                             # graded A, bought at the next open
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: [eod, pm]}
+    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: ah}
   luk_pullback:                             # Martin Luk's pullback, live (Emil, 22 Oct
                                             # 2026): rules in `luk:`; C, pushed pre-market
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+    {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert, push_slot: pm,
      push_ungraded: true}
   vcp:                                      # Minervini's VCP, live (Emil, 22 Oct 2026): a
                                             # base still under its pivot; rules in
                                             # `minervini:`; C, pushed pre-market
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+    {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert, push_slot: pm,
      push_ungraded: true}
   minervini_tt:                             # Minervini's Trend Template as a daily list,
                                             # ranked by RS (Emil, 22 Oct 2026); saved only
@@ -156,9 +158,9 @@ scans:
                                             # `qm_surf:`; grade C, pushed anyway (push_ungraded)
                                             # with the study plan for the next session
     {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_ungraded: true,
-     push_slot: pm}
+     push_slot: ah}
   breakout_watch:                           # B1-B4 all pass -> BO-Watch (SPEC §6.4)
-    {enabled: true, phase: 2, slot: eod, action: push, push_tier: alert, push_slot: pm,
+    {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert, push_slot: pm,
      push_ungraded: true}
   breakout_trigger:                         # B5 at the close, B1-B4 stored for grading
     {enabled: true, phase: 2, slot: eod, action: log, push_tier: alert,
@@ -169,15 +171,15 @@ scans:
 
   # --- Weekly (SPEC §6.3) ---
   qm_gainers:
-    {enabled: true, phase: 1, slot: weekly, action: push,
+    {enabled: true, phase: 1, slot: weekly, action: log,
      top_pct: 2, return_windows: [22, 63, 126], adr_min_pct: 4,
      avg_dollar_volume_20d_min: 10_000_000, price_gt: 5}
   growth_bucket_1:
-    {enabled: true, phase: 1, slot: weekly, action: push,
+    {enabled: true, phase: 1, slot: weekly, action: log,
      price_gt: 10, avg_volume_gt: 100_000, rev_growth_q_min_pct: 40,
      quarters_to_check: 2, annual_revenue_gt: 25_000_000}
   growth_bucket_2:
-    {enabled: true, phase: 1, slot: weekly, action: push,
+    {enabled: true, phase: 1, slot: weekly, action: log,
      price_gt: 10, avg_volume_gt: 200_000, eps_growth_q_min_pct: 40,
      rev_growth_q_min_pct: 20, quarters_to_check: 2}
   tight_bases:                              # HTB + Ants merged (needs daily history)

@@ -27,7 +27,7 @@ def collect(
     newest first, one row per ticker and scan. `everything`: every scan's hits, all tiers, one
     row per ticker (its best grade)."""
     latest = []
-    for slot in ("pm", "am", "mid", "eod"):
+    for slot in ("pm", "am", "mid", "eod", "ah"):  # ah: EP-AH (Emil, 27 Oct 2026)
         run = next((r for r in runs if r.slot == slot), None)
         if run is not None:
             latest.append(run)
@@ -245,6 +245,13 @@ def _step(n: int, by: int) -> None:
     st.session_state["board_i"] = (st.session_state.get("board_i", 0) + by) % n
 
 
+def _everything() -> None:
+    """From the push view to every hit of the latest runs; the push link is cleared."""
+    st.query_params.clear()
+    st.session_state["board_scope"] = "Every scan hit"
+    st.session_state["board_i"] = 0
+
+
 def _jump(i: int) -> None:
     st.session_state["board_i"] = i
 
@@ -418,6 +425,13 @@ def show(
         label_visibility="collapsed",
     )
     scopes = ["A+ / A / B", "Pushed, incl. C", "Every scan hit", "My watchlists"]
+    # Opened from a push (Emil, 27 Oct 2026): ?push=ah&session=...&t=A,B shows that push's
+    # stocks first, with every other hit one click away.
+    from_push = [t for t in str(st.query_params.get("t", "")).split(",") if t]
+    if from_push:
+        scopes = ["From the push", *scopes]
+        if st.session_state.get("board_scope") not in scopes:
+            st.session_state["board_scope"] = "From the push"
     scope = more.selectbox(
         "Show",
         scopes,
@@ -425,7 +439,19 @@ def show(
         label_visibility="collapsed",
         help="C: no edge after costs. Every scan hit: all scans and tiers",
     )
-    if scope == "My watchlists":
+    if scope == "From the push":
+        st.button(
+            "Show everything this run found",
+            key="board_all_hits",
+            on_click=_everything,
+            help="Every scan's hits, the C strategies too",
+        )
+        every = collect(runs, cfg, scan_frames, exchanges, everything=True)
+        order = {t: i for i, t in enumerate(from_push)}
+        hits = every[every["ticker"].isin(order)] if len(every) else every
+        if len(hits):
+            hits = hits.assign(_o=hits["ticker"].map(order)).sort_values("_o").drop(columns="_o")
+    elif scope == "My watchlists":
         hits = watchlist_rows(runs, data_dir, exchanges)
     else:
         hits = collect(runs, cfg, scan_frames, exchanges, everything=scope == "Every scan hit")

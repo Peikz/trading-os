@@ -55,6 +55,7 @@ jobs:
       - name: Run pre-market scans
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}   # a tap opens Today (Emil, 27 Oct)
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           FORCE: ${{ inputs.force && '--force' || '' }}
           EARLY: ${{ inputs.early && '--early' || '' }}

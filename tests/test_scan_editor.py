@@ -63,15 +63,15 @@ def test_the_push_uses_your_name_and_note(config_copy):
     cfg = parse_config(yaml.safe_load(config_copy.read_text(encoding="utf-8")))
     ctx = RunContext(
         session=dt.date(2026, 10, 22),
-        slot="pm",
-        run_ts=dt.datetime(2026, 10, 22, 11, 17, tzinfo=dt.UTC),
+        slot="ah",  # MA-surf pushes after hours since 27 Oct 2026
+        run_ts=dt.datetime(2026, 10, 22, 20, 50, tzinfo=dt.UTC),
         run_kind="scheduled",
     )
     hits = pd.DataFrame(
         [{"ticker": "AAA", "tier": "alert", "rank": 1, "grade": "C", "surf_ma": 10.0,
           "surf_days": 12.0, "surf_base_len": 8.0}]
     )  # fmt: skip
-    selected = notify.select_for_push({"ma_surf": hits}, cfg, "pm")
+    selected = notify.select_for_push({"ma_surf": hits}, cfg, "ah")
     body = notify.build_message(ctx, {"ma_surf": hits}, selected, cfg).body
     assert "Qulla surf" in body and "Only A-grade bases" in body
 

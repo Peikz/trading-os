@@ -1,5 +1,7 @@
-"""BO-Watch, MA-surf and the parabolics: found at the close, pushed the next morning with the
-pre-market move (Emil, 21 Oct 2026). Synthetic data only."""
+"""The close's setups (Luk flush, EP9M AVWAP, MA-surf, the parabolics): found at the close,
+pushed in the after-hours push with EP-AH and their after-hours move (Emil, 27 Oct 2026; they
+came the next morning before). The other close scans are saved for the dashboard. Synthetic
+data only."""
 
 import datetime as dt
 from pathlib import Path
@@ -11,9 +13,9 @@ from trading_os.config import load_config
 from trading_os.store import RunContext
 
 A = "".join(["S", "R", "F"])
-LATER = ("breakout_watch", "ma_surf", "parabolic_long", "parabolic_short")
-# Luk flush: pushed at EOD and again pre-market; the momentum scans since 22 Oct 2026.
-CARRIED = (*LATER, "luk_flush", "ep9m_avwap", "mb_up", "luk_pullback", "vcp")
+LATER = ("ma_surf", "parabolic_long", "parabolic_short", "luk_flush", "ep9m_avwap")
+SAVED_ONLY = ("breakout_watch", "mb_up", "luk_pullback", "vcp", "ep_day", "ep9m",
+              "breakout_trigger", "minervini_tt")  # fmt: skip
 
 
 def hit(**kw):
@@ -40,93 +42,65 @@ def ctx(slot):
     return RunContext(
         session=dt.date(2026, 10, 22),
         slot=slot,
-        run_ts=pd.Timestamp("2026-10-22T11:17:00Z"),
+        run_ts=pd.Timestamp("2026-10-22T20:50:00Z"),
         run_kind="scheduled",
         forced=False,
     )
 
 
-def test_the_four_scans_wait_for_the_premarket_push():
+def test_the_close_setups_wait_for_the_after_hours_push():
     cfg = load_config()
     for name in LATER:
         scan = cfg.scans[name]
-        assert scan.slot == "eod" and scan.params["push_slot"] == "pm"
-        assert not notify.pushes_now(scan, "eod") and notify.pushes_now(scan, "pm")
-    luk = cfg.scans["luk_flush"]
-    assert notify.pushes_now(luk, "eod") and notify.pushes_now(luk, "pm")
-    for name in ("ep_day", "ep9m", "breakout_trigger"):  # saved only since 21 Oct 2026
-        assert not notify.pushes_now(cfg.scans[name], "eod")
+        assert scan.slot == "eod" and scan.params["push_slot"] == "ah"
+        assert not notify.pushes_now(scan, "eod") and notify.pushes_now(scan, "ah")
+        assert not notify.pushes_now(scan, "pm")
+    for name in SAVED_ONLY:
+        assert cfg.scans[name].action == "log"
 
 
-def test_the_evening_push_names_what_comes_in_the_morning():
+def test_the_close_report_names_what_comes_after_hours():
     cfg = load_config()
     results = {"ma_surf": hit(), "breakout_watch": hit()}
     assert notify.select_for_push(results, cfg, "eod") == {}
     message = notify.build_message(ctx("eod"), results, {}, cfg)
-    assert "In the pre-market push: MA-surf 1 · BO-Watch 1" in message.body
+    assert "In the after-hours push: MA-surf 1" in message.body
+    assert "BO-Watch" not in message.body  # saved only
     assert "Study C, saved" not in message.body
 
 
-def test_the_premarket_block_shows_the_move_against_the_pivot():
+def test_the_after_hours_block_shows_the_move_after_the_close():
     cfg = load_config()
-    carried = {"ma_surf": hit(pm_price=10.71, pm_change_pct=7.1, carried_from="eod")}
-    selected = notify.select_for_push(carried, cfg, "pm")
-    message = notify.build_message(ctx("pm"), carried, selected, cfg)
+    carried = {"ma_surf": hit(ah_price=10.4, ah_change_pct=4.0, carried_from="eod")}
+    selected = notify.select_for_push(carried, cfg, "ah")
+    message = notify.build_message(ctx("ah"), carried, selected, cfg)
     assert f"▸ {A}  MA10 12d  base 8d" in message.body
-    assert "PM 10.71 +7.1% · +5.0% vs pivot · ⚠️ up > 1 ADR" in message.body
-    quiet = notify.premarket_line(hit(carried_from="eod").iloc[0].to_dict())
-    assert quiet == "PM: no trade yet"
+    assert "AH 10.40 +4.0%" in message.body and "PM" not in message.body
+    assert notify.afterhours_line(hit(carried_from="eod").iloc[0].to_dict()) is None
 
 
-def test_the_premarket_run_carries_last_closes_hits(tmp_path: Path):
+def test_the_after_hours_run_carries_todays_close_hits(tmp_path: Path):
     cfg = load_config()
-    last = dt.date(2026, 10, 21)
+    today = dt.date(2026, 10, 22)
     folder = tmp_path / "data" / "candidates" / "2026"
     folder.mkdir(parents=True)
     pd.concat(
-        [hit(scan="ma_surf"), hit(scan="ep9m"), hit(scan="parabolic_long", pm_price=1.0)]
-    ).to_parquet(folder / f"{last}_eod.parquet")
-    uni = pd.DataFrame({"ticker": [A], "pm_price": [10.3], "pm_change_pct": [3.0]})
-    out = job._from_last_close(tmp_path, cfg, dt.date(2026, 10, 22), uni)
-    assert set(out) == set(CARRIED)
-    assert out["ma_surf"].iloc[0]["pm_price"] == 10.3  # today's, not the stored column
-    assert out["parabolic_long"].iloc[0]["pm_price"] == 10.3
-    assert out["breakout_watch"].empty
+        [hit(scan="ma_surf"), hit(scan="ep9m"), hit(scan="parabolic_long", ah_price=1.0)]
+    ).to_parquet(folder / f"{today}_eod.parquet")
+    uni = pd.DataFrame({"ticker": [A], "ah_price": [10.3], "ah_change_pct": [3.0]})
+    out = job._from_last_close(tmp_path, cfg, today, uni, "ah")
+    assert set(out) == set(LATER)
+    assert out["ma_surf"].iloc[0]["ah_price"] == 10.3  # this evening's, not the stored column
+    assert out["parabolic_long"].iloc[0]["ah_price"] == 10.3
+    assert out["luk_flush"].empty
     assert (out["ma_surf"]["carried_from"] == "eod").all()
+    assert job._from_last_close(tmp_path, cfg, today, uni, "pm") == {}  # EP-PM only
 
 
-def test_ep_ah_comes_again_in_the_premarket_push(tmp_path: Path):
-    """EP-AH (Emil, 23 Oct 2026): pushed at the after-hours check and again the next morning,
-    against its after-hours price, without last night's ticket or buy time."""
+def test_ep_ah_pushes_after_hours_only():
     cfg = load_config()
     scan = cfg.scans["ep_ah"]
-    assert notify.pushes_now(scan, "ah") and notify.pushes_now(scan, "pm")
-    last = dt.date(2026, 10, 21)
-    folder = tmp_path / "data" / "candidates" / "2026"
-    folder.mkdir(parents=True)
-    graded = {"grade": "A+", "grade_entry_rule": "ah_1645", "grade_stop": 9.5, "ah_price": 11.0,
-              "ah_change_pct": 10.0, "ah_volume": 2e5}  # fmt: skip
-    hit(scan="ep_ah", **graded).to_parquet(folder / f"{last}_ah.parquet")
-    uni = pd.DataFrame({"ticker": [A], "pm_price": [10.78], "pm_change_pct": [7.8]})
-    out = job._from_last_close(tmp_path, cfg, dt.date(2026, 10, 22), uni)
-    assert "ma_surf" not in out  # no EOD file: only the after-hours run carries over
-    row = out["ep_ah"].iloc[0].to_dict()
-    assert row["carried_from"] == "ah" and row["pm_price"] == 10.78
-    assert notify.premarket_line(row) == "PM 10.78 +7.8% · -2.0% vs AH 11.00"
-    assert notify.saxo_line(row, "ep_ah") is None
-    selected = notify.select_for_push(out, cfg, "pm")
-    message = notify.build_message(ctx("pm"), out, selected, cfg)
-    assert notify.AH_CARRIED_TEXT.split(":")[0] in message.body
-    assert "buy after hours now" not in message.body
-
-
-def test_the_momentum_scans_are_live_and_pushed_next_morning():
-    cfg = load_config()
-    for name in ("mb_up", "luk_pullback", "vcp"):
-        scan = cfg.scans[name]
-        assert scan.enabled and scan.action == "push" and notify.pushes_now(scan, "pm")
-        assert scan.params["push_ungraded"] and name in notify.UNGRADED_PLANS
-    assert cfg.scans["minervini_tt"].action == "log"  # a list, saved only
+    assert notify.pushes_now(scan, "ah") and not notify.pushes_now(scan, "pm")
 
 
 def test_the_scans_read_their_live_flags():
