@@ -122,7 +122,7 @@ Action: **Push** = saved + phone notification. **Log** = saved only. All scans a
 
 The early 11:30 Copenhagen push (26 Oct 2026) was dropped on 27 Oct 2026; `--early` stays for manual runs.
 
-**Push schedule (Emil, 27 Oct 2026).** Four pushes: pre-market 07:17 (EP-PM only), morning 10:17 (EP 10:30, EP9M pace A+, a reminder of today's Luk flush buy), midday 12:03 (new EP9M pace A+ only, silent when nothing is new) and after hours 16:50 (the market line, EP-AH, and the close run's Luk flush, EP9M AVWAP, MA-surf and parabolics via `push_slot: ah`). The EOD and weekly runs save without a push (`job.SILENT_SLOTS`); an EOD run finishing after the after-hours push sends its part itself. Every other scan is `action: log`, saved for the dashboard. The weekly job runs Saturday 09:00 Copenhagen. A tap opens the dashboard's Today on the push's stocks (`DASHBOARD_URL` secret; else the report).
+**Push schedule (Emil, 27 Oct 2026).** Four pushes: pre-market 07:17 (EP-PM only), morning 10:17 (EP 10:30, EP9M pace A+, a Planned today reminder of last evening's Luk flush, EP9M AVWAP and MA-surf), midday 12:03 (new EP9M pace A+ only, silent when nothing is new) and after hours 16:50 (the market line, EP-AH, and the close run's Luk flush, EP9M AVWAP, MA-surf and parabolics via `push_slot: ah`). The EOD and weekly runs save without a push (`job.SILENT_SLOTS`); an EOD run finishing after the after-hours push sends its part itself. Every other scan is `action: log`, saved for the dashboard. The weekly job runs Saturday 09:00 Copenhagen. A tap opens the dashboard's Today on the push's stocks (`DASHBOARD_URL` secret; else the report).
 
 | Scan | Filters | Phase | Action |
 |---|---|---|---|

@@ -252,7 +252,7 @@ other scan still runs and is saved, and the dashboard shows it (Today → Show: 
 | Push | New York | Copenhagen (from 2 Nov) | In it |
 |---|---|---|---|
 | ☀️ Pre-market | 07:17 | 13:17 | EP-PM, every grade |
-| ⚡ Morning | 10:17 | 16:17 | EP 10:30 (every grade), EP9M pace A+, a reminder of today's Luk flush buy |
+| ⚡ Morning | 10:17 | 16:17 | EP 10:30 (every grade), EP9M pace A+, and 🗓 Planned today: last evening's Luk flush (buy 10:30), EP9M AVWAP (bought at the open?) and MA-surf (buy-stop live?), each with its stop |
 | ⚡ Midday | 12:03 | 18:03 | new EP9M pace A+ only; no push when nothing is new |
 | 🌙 After hours | 16:50 | 22:50 | the market line (QQQ light, heat, IBD), EP-AH (every grade), Luk flush A, EP9M AVWAP B, MA-surf, the parabolics |
 

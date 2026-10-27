@@ -473,22 +473,36 @@ def _close_market_head(data_dir: Path, session, ibd_info: dict | None) -> list[s
         return []
 
 
+# The morning reminder per setup (Emil, 27 Oct 2026): which grades, and what to do today. The
+# push comes at 10:17 New York: after the open (EP9M AVWAP) and after MA-surf's buy-stop goes
+# live at 10:00, so those two are a check that the order is in; Luk flush is bought at 10:30.
+PLANNED = {
+    "luk_flush": (("A+", "A", "B"), "Luk flush", "buy 10:30 New York"),
+    "ep9m_avwap": (("A+", "A", "B"), "EP9M AVWAP", "bought at the open?"),
+    "ma_surf": (None, "MA-surf", "buy-stop {pivot} live since 10:00?"),
+}
+
+
 def _planned_today(data_dir: Path, cfg, session) -> list[str]:
-    """The morning push's reminder (Emil, 27 Oct 2026): the A / B buys from last evening's push
-    that are bought by hand today (Luk flush at 10:30). Buy-stops and buys at the open are
-    placed the evening before. Auxiliary."""
+    """The morning push's reminder (Emil, 27 Oct 2026): last evening's Luk flush, EP9M AVWAP
+    and MA-surf hits, with what to do today and the stop. Auxiliary."""
     try:
         last = clock.previous_session(cfg.schedule, session)
         path = Path(data_dir) / "data" / "candidates" / str(last.year) / f"{last}_eod.parquet"
         if not path.exists():
             return []
-        hits = pd.read_parquet(path, columns=["scan", "ticker", "tier", "grade"])
-        rows = hits[(hits["scan"] == "luk_flush") & (hits["tier"] == "alert")]
-        rows = rows[rows["grade"].isin(["A+", "A", "B"])]
-        if rows.empty:
-            return []
-        names = ", ".join(rows["ticker"].astype(str))
-        return [f"🗓 Planned today: Luk flush {names} (buy 10:30 New York)"]
+        hits = pd.read_parquet(path)
+        out = []
+        for scan, (grades, label, todo) in PLANNED.items():
+            rows = hits[(hits["scan"] == scan) & (hits["tier"] == "alert")]
+            if grades is not None and "grade" in rows:
+                rows = rows[rows["grade"].isin(grades)]
+            for row in rows.to_dict("records"):
+                pivot, stop = row.get("pivot"), row.get("plan_stop")
+                what = todo.format(pivot=f"{pivot:.2f}" if pd.notna(pivot) else "at the pivot")
+                stop_text = f", stop {stop:.2f}" if stop is not None and pd.notna(stop) else ""
+                out.append(f"• {label} {row['ticker']}: {what}{stop_text}")
+        return ["🗓 Planned today", *out] if out else []
     except Exception as exc:  # noqa: BLE001 - the push goes out without the line
         status(f"Planned today: FAILED ({type(exc).__name__}), left out")
         return []

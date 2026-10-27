@@ -69,15 +69,20 @@ def test_the_morning_push_reminds_of_the_luk_buy(tmp_path):
     last = clock.previous_session(cfg.schedule, session)
     frame = pd.DataFrame(
         {
-            "scan": ["luk_flush", "luk_flush"],
-            "ticker": [GAPPER, QUIET],
-            "tier": ["alert", "alert"],
-            "grade": ["A", "C"],
+            "scan": ["luk_flush", "luk_flush", "ep9m_avwap", "ma_surf", "mb_up"],
+            "ticker": [GAPPER, QUIET, GAPPER, QUIET, GAPPER],
+            "tier": ["alert"] * 5,
+            "grade": ["A", "C", "B", "C", "C"],
+            "pivot": [None, None, None, 57.89, None],
+            "plan_stop": [23.1, None, 41.2, 55.03, None],
         }
     )
     _saved(tmp_path, last, "eod", frame)
     assert job._planned_today(tmp_path, cfg, session) == [
-        f"🗓 Planned today: Luk flush {GAPPER} (buy 10:30 New York)"
+        "🗓 Planned today",
+        f"• Luk flush {GAPPER}: buy 10:30 New York, stop 23.10",
+        f"• EP9M AVWAP {GAPPER}: bought at the open?, stop 41.20",
+        f"• MA-surf {QUIET}: buy-stop 57.89 live since 10:00?, stop 55.03",  # every grade
     ]
     assert job._planned_today(tmp_path, cfg, dt.date(2026, 11, 5)) == []  # no run that day
 
