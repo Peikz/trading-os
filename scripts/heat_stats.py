@@ -47,6 +47,9 @@ STOP_TEXT = {
 EXIT_TEXT = {"hold_21d": "hold 21 sessions", "trail_ma20": "trail the 20-day MA"}
 # (key, label, kind, rows): kind A = a live grade, C = a setup without a grade.
 SHORT = {"ep_a_1030": "EP A+", "ep_a_ah": "EP-AH A+", "luk_flush_a": "Luk A"}  # push names
+# Setups studied after the grading study, one trade list each in the same release (Emil, 26 Oct
+# 2026: the EP9M AVWAP B was missing from the Market page)
+EXTRA = ["ep9m_avwap_b_trades.parquet"]
 SETUPS = [
     ("ep_a_1030", "EP A+ 10:30", "A", "strategy == 'ep' and entry == 't_1030' and quality >= 5"),
     (
@@ -56,6 +59,8 @@ SETUPS = [
         "strategy == 'ep' and entry == 'ah_1645' and stop_rule == 'adr' and quality >= 5",
     ),
     ("ep9m_a", "EP9M A+", "A", "strategy == 'ep9m' and entry == 't_1015' and quality >= 5"),
+    # The B (26 Oct 2026): its trades come from EXTRA, not the grading study's file
+    ("ep9m_avwap_b", "EP9M AVWAP B", "B", "strategy == 'ep9m_avwap'"),
     (
         "luk_flush_a",
         "Luk flush A",
@@ -147,11 +152,18 @@ def main(argv: list[str] | None = None) -> int:
     trades = pd.read_parquet(
         remote_data.fetch(REPO, "grading-10y", "validated_trades_v3.parquet")[0]
     )
-    years = remote_data.fetch(REPO, "grading-10y", "grading_20[12][0-9].parquet")
+    for name in EXTRA:
+        found = remote_data.fetch(REPO, "grading-10y", name)
+        if found:
+            trades = pd.concat([trades, pd.read_parquet(found[0])], ignore_index=True)
+    # One year at a time, read as soon as it is here: fetching them all first let the full cache
+    # drop the early years before they were read (26 Oct 2026: 32k trades lost their heat).
     cols = ["session_date", "mkt_scan_count"]
-    counts = pd.concat(
-        pq.read_table(f, columns=cols).to_pandas().drop_duplicates("session_date") for f in years
-    ).drop_duplicates("session_date")
+    parts = []
+    for name in remote_data.names(REPO, "grading-10y", "grading_20[12][0-9].parquet"):
+        for f in remote_data.fetch(REPO, "grading-10y", name):
+            parts.append(pq.read_table(f, columns=cols).to_pandas().drop_duplicates("session_date"))
+    counts = pd.concat(parts).drop_duplicates("session_date")
     counts["session_date"] = pd.to_datetime(counts["session_date"]).dt.date
     stats = build(trades, counts)
     out = args.data_dir / heat.STATS

@@ -98,7 +98,8 @@ def _pair(row: Mapping[str, Any]) -> str:
 # Live scan -> its study setup in heat_stats.json, for the per-hit heat tag (Emil, 22 Oct 2026).
 SCAN_KEYS = {
     "ep_am": "ep_a_1030", "ep_ah": "ep_a_ah", "ep9m_pace": "ep9m_a", "luk_flush": "luk_flush_a",
-    "ma_surf": "qm_surf", "vcp": "vcp", "luk_pullback": "luk_pullback", "mb_up": "mb_up",
+    "ma_surf": "qm_surf", "ep9m_avwap": "ep9m_avwap_b", "vcp": "vcp",
+    "luk_pullback": "luk_pullback", "mb_up": "mb_up",
     "mb_down": "mb_down", "parabolic_long": "parabolic_long",
     "parabolic_short": "parabolic_short", "breakout_watch": "breakout",
     "breakout_trigger": "breakout", "ep_day": "ep_next_day",
