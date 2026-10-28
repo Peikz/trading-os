@@ -26,6 +26,14 @@ jobs:
           MATCH: ${{ inputs.match }}
         run: |
           curl -sf "https://ntfy.sh/$NTFY_TOPIC/json?poll=1&since=12h" > history.jsonl
+          # Sizes only (title + text + link bytes, attachment or not); price alerts' titles name
+          # a stock, so only the scheduled pushes' titles (counts, no tickers) are printed.
+          jq -r 'select(.event == "message")
+            | [(.time | strftime("%H:%M UTC")),
+               ((.title // "") | utf8bytelength) + ((.message // "") | utf8bytelength) + ((.click // "") | utf8bytelength),
+               (if .attachment then "attachment" else "inline" end),
+               (if ((.title // "") | startswith("Trading OS")) then "price alert" else ((.title // "") | .[0:26]) end)]
+            | @tsv' history.jsonl
           jq -c --arg match "$MATCH" '
             select(.event == "message")
             | select(.title as $t | ($match | split("|")) | any(. as $m | $t | startswith($m)))
