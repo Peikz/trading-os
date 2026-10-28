@@ -1,0 +1,26 @@
+# Sends your ntfy topic name to your phone, on the topic itself (Emil, 28 Oct 2026: the iOS app
+# cuts the name off and GitHub never shows a secret again). Only the subscriber receives it;
+# GitHub masks the value in this public log. Run by hand: Actions -> Topic reminder -> Run.
+
+name: Topic reminder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send the topic name to the topic
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" \
+            '{topic: $topic, title: "Trading OS · your ntfy topic", priority: 4,
+              message: ("Your topic name is:\n" + $topic + "\n\nHistory: https://ntfy.sh/" + $topic + "/json?poll=1&since=12h")}' \
+            | curl -sf -X POST -H "Content-Type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null
+          echo "sent"
