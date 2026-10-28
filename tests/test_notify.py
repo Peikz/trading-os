@@ -229,7 +229,7 @@ def test_fit_drops_headlines_then_facts_from_the_bottom_then_cuts():
     assert top_facts.count("FACT") == 1 and "FACT" in top_facts.split("\n\n")[0]
     assert "▸ BBB" in top_facts
     cut = notify.fit(lines, limit=60)
-    assert size(cut) <= 60 and cut.endswith("more in the report")
+    assert size(cut) <= 60 and cut.endswith("more on Today")
 
 
 def test_format_pace_and_pivot():

@@ -220,6 +220,9 @@ def afterhours_line(row: Mapping[str, Any]) -> str | None:
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
 NTFY_LIMIT = 3900  # ntfy turns longer messages into attachments (4096 bytes)
+# Apple's push payload is 4096 bytes; ntfy's own fields take some. Title + text + tap link stay
+# under this, so the iPhone gets the message itself (28 Oct 2026: bigger ones went missing).
+APNS_BUDGET = 3300
 
 
 @dataclass(frozen=True)
@@ -765,8 +768,12 @@ def build_message(
         lines.append(Line("note", tap))
     first = (header_lines or [""])[0][:1]
     icon = first if first in LIGHT_ICONS.values() else ""
-    body = fit(lines) or "No pushing scans ran."
-    return Message(title=_title(ctx, counts, icon), body=body, click=click)
+    title = _title(ctx, counts, icon)
+    # Title, text and tap link together under Apple's 4 KB (Emil, 28 Oct 2026): a bigger push
+    # goes to the iPhone as a silent "fetch it" signal, which iOS often skips.
+    extra = len(title.encode("utf-8")) + len((click or "").encode("utf-8"))
+    body = fit(lines, max(1000, APNS_BUDGET - extra)) or "No pushing scans ran."
+    return Message(title=title, body=body, click=click)
 
 
 def dashboard_url(session, slot: str, selected: Mapping[str, pd.DataFrame]) -> str | None:
@@ -836,10 +843,10 @@ def fit(lines: list[Line], limit: int = NTFY_LIMIT) -> str:
     if not too_big():
         return _join(lines)
     cut = 0
-    while lines and len((_join(lines) + f"\n… {cut} more in the report").encode("utf-8")) > limit:
+    while lines and len((_join(lines) + f"\n… {cut} more on Today").encode("utf-8")) > limit:
         if lines.pop().role == "hit":
             cut += 1
-    marker = Line("note", f"… {cut} more in the report")
+    marker = Line("note", f"… {cut} more on Today")
     return _join([*lines, marker])
 
 

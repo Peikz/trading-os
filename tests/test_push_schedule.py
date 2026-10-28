@@ -97,3 +97,22 @@ def test_a_tap_opens_today_on_the_pushed_stocks(monkeypatch):
     assert url == f"http://dash.example/?push=ah&session=2026-10-27&t={GAPPER}%2C{QUIET}"
     monkeypatch.delenv("DASHBOARD_URL")
     assert notify.dashboard_url(dt.date(2026, 10, 27), "ah", selected) is None
+
+
+def test_a_push_fits_apples_4kb_with_its_title_and_link():
+    """28 Oct 2026: pushes over Apple's 4 KB went missing on the iPhone."""
+    cfg = load_config()
+    ctx = store.RunContext(session=dt.date(2026, 10, 28), slot="am",
+                           run_ts=dt.datetime(2026, 10, 28, 14, 17, tzinfo=dt.UTC),
+                           run_kind="scheduled")  # fmt: skip
+    rows = [
+        {"ticker": f"T{i:03d}", "tier": "alert", "rank": i, "grade": "C", "gap_pct": 12.0,
+         "chg_pct": 10.0, "rvol50": 2.0, "dollar_volume": 5e7, "earnings_flag": True}
+        for i in range(40)
+    ]  # fmt: skip
+    hits = pd.DataFrame(rows)
+    selected = notify.select_for_push({"ep_am": hits}, cfg, "am")
+    click = "http://dash.example/?push=am&session=2026-10-28&t=" + ",".join(hits["ticker"])
+    msg = notify.build_message(ctx, {"ep_am": hits}, selected, cfg, click=click)
+    total = len(msg.title.encode()) + len(msg.body.encode()) + len(msg.click.encode())
+    assert total <= notify.APNS_BUDGET
