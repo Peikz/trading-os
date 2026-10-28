@@ -795,6 +795,9 @@ def send(server: str, topic: str, message: Message, *, timeout: float = 15) -> N
         "title": message.title,
         "message": message.body,
         "tags": ["chart_with_upwards_trend"],
+        # High (4 of 5; Emil, 28 Oct 2026): two scheduled pushes that ntfy accepted never
+        # reached the iPhone, and high priority is delivered more reliably by Apple's service.
+        "priority": 4,
     }
     if message.click:
         payload["click"] = message.click

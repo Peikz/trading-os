@@ -135,6 +135,7 @@ def test_send_posts_json_with_the_report_link(monkeypatch):
     assert calls["url"] == "https://ntfy.sh/"
     assert calls["json"]["topic"] == "topic-x" and calls["json"]["click"] == "https://x"
     assert calls["json"]["title"] == "t" and calls["json"]["message"] == "b"
+    assert calls["json"]["priority"] == 4  # high, for delivery to the iPhone
     assert calls["checked"]
 
 
