@@ -1,0 +1,41 @@
+# Sends today's scheduled pushes again (Emil, 28 Oct 2026: ntfy had them, the iPhone never got
+# them). Reads the topic's last 12 hours from ntfy and re-sends the messages whose title starts
+# with `match`, at high priority, marked "(resent)". The public log prints counts only.
+
+name: Push resend
+
+on:
+  workflow_dispatch:
+    inputs:
+      match:
+        description: "Title starts with (several: separate with |)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  resend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resend the matching messages
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MATCH: ${{ inputs.match }}
+        run: |
+          curl -sf "https://ntfy.sh/$NTFY_TOPIC/json?poll=1&since=12h" > history.jsonl
+          jq -c --arg match "$MATCH" '
+            select(.event == "message")
+            | select(.title as $t | ($match | split("|")) | any(. as $m | $t | startswith($m)))
+            | select(.title | test("resent|manual run") | not)' history.jsonl > picked.jsonl
+          n=0
+          while read -r m; do
+            echo "$m" | jq --arg topic "$NTFY_TOPIC" \
+              '{topic: $topic, title: (.title + " (resent)"), message: .message, priority: 4,
+                tags: ["chart_with_upwards_trend"]} + (if .click then {click: .click} else {} end)' \
+              | curl -sf -X POST -H "Content-Type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null
+            n=$((n + 1))
+          done < picked.jsonl
+          echo "resent $n of $(wc -l < history.jsonl) messages"
