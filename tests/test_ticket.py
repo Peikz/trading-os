@@ -30,3 +30,12 @@ def test_own_limit_price_and_the_position_cap():
     assert t.limit == 19.0 and t.capped and t.shares == 131  # 25 % of 10,000 / 19
     assert ticket.build(ROW, "limit", 500, 100_000, 25, price=17.5) is None  # under the stop
     assert ticket.build({"ticker": "X"}, "market", 500, 100_000, 25) is None
+
+
+def test_the_ticket_price_field_starts_at_the_plans_price():
+    row = {"plan_entry": 20.0, "plan_stop": 18.0, "pivot": 21.0}
+    assert ticket.plan_price(row, "stop") == 21.0  # a buy-stop triggers at the pivot
+    assert ticket.plan_price(row, "limit") == 20.0
+    assert ticket.plan_price({"pivot": 21.0}, "stop") is None  # no plan, no ticket
+    own = ticket.build(row, "stop", 100.0, 100_000.0, 25.0, ticket.plan_price(row, "stop"))
+    assert own == ticket.build(row, "stop", 100.0, 100_000.0, 25.0)  # same as leaving it

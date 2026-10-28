@@ -155,6 +155,8 @@ def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkey
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not at.exception, [e.value for e in at.exception]
+    assert not any("Study A" in str(m.value) for m in at.markdown)  # tables off: not built
+    at.toggle(key="today_all_scans").set_value(True).run()
     assert any("Study A" in str(m.value) for m in at.markdown)  # Today's grade block
     at.sidebar.radio[0].set_value("Research").run()
     at.radio(key="research_section").set_value("Grades").run()

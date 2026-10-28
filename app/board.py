@@ -20,7 +20,28 @@ from trading_os import clock, ibd, notify, plans, report, ticket
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
 
+def _version(path) -> int:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
 def collect(
+    runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
+) -> pd.DataFrame:
+    """`_collect`, cached until a run file changes: building it took ~0.3 s on every click
+    (Emil, 28 Oct 2026: faster dashboard)."""
+    version = tuple((str(r.candidates), _version(r.candidates), _version(r.universe)) for r in runs)
+    return _collect_cached(version, everything, runs, cfg, scan_frames, exchanges)
+
+
+@st.cache_data(ttl=600, show_spinner=False, max_entries=8)
+def _collect_cached(version, everything, _runs, _cfg, _scan_frames, _exchanges) -> pd.DataFrame:
+    return _collect(_runs, _cfg, _scan_frames, _exchanges, everything)
+
+
+def _collect(
     runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
 ) -> pd.DataFrame:
     """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
@@ -72,7 +93,8 @@ def collect(
         out["grade"] = "C"
     out["grade"] = out["grade"].fillna("C")
     out["_g"] = out["grade"].map(notify.GRADE_RANK).fillna(9)
-    out["_s"] = pd.to_numeric(out.get("grade_score"), errors="coerce").fillna(-1e9)
+    score = out["grade_score"] if "grade_score" in out else pd.Series(index=out.index)
+    out["_s"] = pd.to_numeric(score, errors="coerce").fillna(-1e9)
     out = out.sort_values(["_g", "_s"], ascending=[True, False])
     return out.drop_duplicates("ticker", keep="first") if everything else out
 
@@ -132,6 +154,16 @@ def _plan_session(row, cfg) -> dt.date:
     return day
 
 
+PRICE_LABELS = {
+    "stop": "Trigger price",
+    "stop_limit": "Trigger price",
+    "limit": "Limit price",
+    "limit_ext": "Limit price",
+    "market": "Expected price (sizing)",
+    "moc": "Expected price (sizing)",
+}
+
+
 def ticket_view(row, key: str, cfg, data_dir, account, usd_rate) -> None:
     """The Saxo ticket: order type (the plan's by default), an own price, the values to type."""
     default = ticket.default_type(row)
@@ -144,13 +176,16 @@ def ticket_view(row, key: str, cfg, data_dir, account, usd_rate) -> None:
         key=f"{key}_type",
         format_func=lambda k: ticket.ORDER_TYPES[k] + (" (plan)" * (k == default)),
     )
+    plan_price = ticket.plan_price(row, kind)
     own = b.number_input(
-        "Own price (0 = the plan's)",
+        PRICE_LABELS.get(kind, "Price"),
         min_value=0.0,
-        value=0.0,
+        value=round(plan_price, 2) if plan_price else 0.0,
         step=0.01,
         format="%.2f",
-        key=f"{key}_price",
+        # Per stock and order type, so it starts at that plan's price; type over it to change.
+        key=f"{key}_price_{row['ticker']}_{kind}",
+        help="The plan's price; type your own to recompute the shares.",
     )
     if account is None or not usd_rate:
         st.caption("Add settings/account.yaml in the data repo for share sizes.")
@@ -375,7 +410,7 @@ def toolbar() -> tuple[str, list[str]]:
     # Defaults through session state (the W key sets fc_tf too; a widget default would clash)
     st.session_state.setdefault("fc_tf", "1D")
     st.session_state.setdefault("fc_ind", list(DEFAULT))
-    a, b = st.columns([1, 4])
+    a, b = st.container(key="board_tools").columns([1, 4])
     tf = a.segmented_control("Bars", ["1D", "1W"], key="fc_tf", label_visibility="collapsed")
     picked = b.pills(
         "Indicators",
@@ -392,7 +427,7 @@ def hotkeys(row, data_dir) -> None:
     T ticket (the arrows are on ◀ ▶)."""
     from trading_os import my_watchlists
 
-    cols = st.columns(4)
+    cols = st.container(key="board_hotkeys").columns(4)
     cols[0].button("W · 1D/1W", key="hk_w", shortcut="W", on_click=_flip_timeframe, width="stretch")
     if cols[1].button("F · 🟩 flag", key="hk_f", shortcut="F", width="stretch"):
         my_watchlists.add(data_dir, FLAGS["🟩"], [str(row["ticker"])])
@@ -408,6 +443,23 @@ def hotkeys(row, data_dir) -> None:
         args=("fc_ticket",),
         width="stretch",
     )
+
+
+# The board on a phone (Emil, 28 Oct 2026): ◀ count ▶ stays one row (Streamlit stacks columns
+# under 640 px), the toolbar scrolls sideways instead of wrapping, and the hotkey buttons
+# (keyboard only) are hidden; the ticket, flags and notes stay in the tabs.
+BOARD_CSS = """<style>
+.st-key-board_nav [data-testid="stHorizontalBlock"]{flex-wrap:nowrap;gap:.5rem}
+.st-key-board_nav [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+.st-key-board_nav [data-testid="stColumn"]:nth-child(2){flex:2 1 0!important}
+@media (max-width:640px){
+.st-key-board_hotkeys{display:none}
+.st-key-board_tools [data-testid="stHorizontalBlock"]{flex-wrap:nowrap;gap:.5rem}
+.st-key-board_tools [data-testid="stColumn"]{min-width:0!important;width:auto!important}
+.st-key-board_tools [data-testid="stColumn"]:last-child{overflow-x:auto;flex:1 1 0!important}
+.st-key-board_tools [data-testid="stColumn"]:last-child div[role="group"]{flex-wrap:nowrap}
+}
+</style>"""
 
 
 def show(
@@ -479,14 +531,16 @@ def show(
     per_page = 4 if mode == "Grid" else 1
     pages = (len(rows) + per_page - 1) // per_page
     page_i = st.session_state.get("board_i", 0) % (pages if mode == "Grid" else len(rows))
-    prev, where, nxt = st.columns([1, 2, 1])
+    st.markdown(BOARD_CSS, unsafe_allow_html=True)
+    prev, where, nxt = st.container(key="board_nav").columns([1, 2, 1])
     prev.button(
-        "◀ Previous",
+        "◀",
         key="board_prev",
         shortcut="Left",
         on_click=_step,
         args=(pages if mode == "Grid" else len(rows), -1),
         width="stretch",
+        help="Previous (← key)",
     )
     if mode == "Grid":
         first = page_i * 4
@@ -498,12 +552,13 @@ def show(
         unsafe_allow_html=True,
     )
     nxt.button(
-        "Next ▶",
+        "▶",
         key="board_next",
         shortcut="Right",
         on_click=_step,
         args=(pages if mode == "Grid" else len(rows), 1),
         width="stretch",
+        help="Next (→ key)",
     )
     tf, picked = toolbar()
     if mode == "Grid":
@@ -555,6 +610,38 @@ def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None)
     if not row:
         st.info("No market row yet.")
         return
+    tiles = _tiles(row, ibd_info, heat_text)
+    cols = st.columns(3)
+    for i, (label, value, delta) in enumerate(tiles):
+        cols[i % 3].metric(
+            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
+        )
+
+
+def market_strip(row: dict | None, ibd_info: dict | None, heat_text: str | None) -> None:
+    """The same tiles as one compact row of chips above the candidates (Emil, 28 Oct 2026: the
+    market at a glance, also on the phone); the full tiles and lines are under 'Market'."""
+    if not row:
+        return
+    chips = []
+    for label, value, delta in _tiles(row, ibd_info, heat_text):
+        colour = ""
+        if delta and label != "IBD market":
+            up = not delta.startswith("-")
+            colour = "#3fb950" if up != (label == "VIX") else "#f85149"
+        extra = f" <span style='color:{colour}'>{delta}</span>" if delta and colour else ""
+        if delta and not colour:
+            extra = f" <span style='opacity:.6'>{delta}</span>"
+        chips.append(
+            "<span style='display:inline-block;margin:2px 6px 2px 0;padding:3px 9px;"
+            "border:1px solid #30363d;border-radius:8px'>"
+            f"<span style='opacity:.6'>{label}</span> <b>{value}</b>{extra}</span>"
+        )
+    st.html(" ".join(chips).replace("$", "&#36;"))
+
+
+def _tiles(row: dict, ibd_info: dict | None, heat_text: str | None) -> list[tuple]:
+    """(label, value, change) per market tile."""
     icons = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}
     light = row.get("qqq_light")
     tiles = [
@@ -570,11 +657,7 @@ def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None)
         close = row.get(f"{name}_close")
         if close is not None and not pd.isna(close):
             tiles.append((name.upper(), f"{close:,.2f}", _signed(row.get(f"{name}_chg_pct"))))
-    cols = st.columns(3)
-    for i, (label, value, delta) in enumerate(tiles):
-        cols[i % 3].metric(
-            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
-        )
+    return tiles
 
 
 def position_cards(

@@ -30,7 +30,6 @@ from trading_os import (
     alerts,
     breadth,
     chart_marks,
-    charts,
     clock,
     daily_notes,
     dashboard,
@@ -178,6 +177,23 @@ if not (data_dir / "data").exists():
 
 
 # ---------------------------------------------------------------- cached loaders
+
+
+@st.fragment
+def board_fragment(runs, account, usd_rate) -> None:
+    """The candidate board as a fragment: ◀ ▶, the hotkeys and the ticket rerun only the board,
+    not the whole page (Emil, 28 Oct 2026: faster dashboard)."""
+    board.show(
+        runs,
+        CFG,
+        data_dir,
+        account,
+        usd_rate,
+        scan_frames,
+        open_chart,
+        focus_chart,
+        exchanges_of,
+    )
 
 
 @st.cache_data(ttl=60)
@@ -1447,20 +1463,6 @@ if page == "Today":
         st.stop()
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
-    board_account = sizing.load_account(data_dir)
-    board.show(
-        runs,
-        CFG,
-        data_dir,
-        board_account,
-        fx_rate(str(data_dir), board_account.currency if board_account else "USD"),
-        scan_frames,
-        open_chart,
-        focus_chart,
-        exchanges_of,
-    )
-    st.divider()
-    st.subheader("Market")
     tile_run = latest_pm if latest_pm is not None and latest_pm.breadth_pm is not None else None
     tile_row = None
     if latest_eod is not None and latest_eod.breadth is not None:
@@ -1474,7 +1476,14 @@ if page == "Today":
     except Exception:  # noqa: BLE001 - the tile shows n/a
         tile_ibd = None
     tile_heat = heat.short_line(heat.load(data_dir), (tile_row or {}).get("scan_count"))
-    board.market_tiles(tile_row, tile_ibd, tile_heat[0].replace("🌡 ", "") if tile_heat else None)
+    board.market_strip(tile_row, tile_ibd, tile_heat[0].replace("🌡 ", "") if tile_heat else None)
+    board_account = sizing.load_account(data_dir)
+    board_fragment(
+        runs,
+        board_account,
+        fx_rate(str(data_dir), board_account.currency if board_account else "USD"),
+    )
+    st.divider()
     with st.expander("Market details"):
         if (
             latest_pm is not None
@@ -1490,34 +1499,38 @@ if page == "Today":
     latest_am = next((r for r in runs if r.slot == "am"), None)
     latest_mid = next((r for r in runs if r.slot == "mid"), None)
     latest = [r for r in (latest_pm, latest_am, latest_mid, latest_eod) if r is not None]
-    st.subheader("All scans")
-    for run in sorted(latest, key=runs.index):  # newest first
-        exp = st.expander(f"{run.label} · every pushed scan's table")
-        with exp:
-            tables = []
-            for scan, hits in scan_frames(str(run.candidates)).items():
-                if scan not in CFG.scans or CFG.scans[scan].action != "push":
-                    continue
-                alert_only = "push_tier" in CFG.scans[scan].params
-                shown = hits[hits["tier"] == "alert"] if alert_only else hits
-                ranks = shown["grade"].map(notify.GRADE_RANK) if "grade" in shown else None
-                best = ranks.min() if ranks is not None and ranks.notna().any() else 9
-                tables.append((best, scan, hits, shown))
-            # The scan with the best grade first (A+ on top, C last; Emil, 26 Oct 2026)
-            for _, scan, hits, shown in sorted(tables, key=lambda x: x[0]):
-                label = report.SCAN_LABELS.get(scan, scan)
-                st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
-                show_table(scan, shown, exchanges_of(str(run.universe)))
-                grade_blocks(shown)
-                facts = report.fact_lines(scan, shown)
-                if facts:
-                    st.markdown("\n".join(facts))
-                charts = [(t, dashboard.chart_for(run, scan, t)) for t in shown["ticker"].head(10)]
-                charts = [(t, p) for t, p in charts if p is not None]
-                if charts:
-                    cols = st.columns(min(3, len(charts)))
-                    for i, (ticker, path) in enumerate(charts):
-                        cols[i % len(cols)].image(str(path), caption=ticker)
+    # A toggle, not only expanders: a collapsed expander's code runs too, and these tables cost
+    # ~0.2 s on every click of the board (Emil, 28 Oct 2026).
+    if st.toggle("All scans: every pushed scan's table", key="today_all_scans"):
+        for run in sorted(latest, key=runs.index):  # newest first
+            exp = st.expander(f"{run.label} · every pushed scan's table")
+            with exp:
+                tables = []
+                for scan, hits in scan_frames(str(run.candidates)).items():
+                    if scan not in CFG.scans or CFG.scans[scan].action != "push":
+                        continue
+                    alert_only = "push_tier" in CFG.scans[scan].params
+                    shown = hits[hits["tier"] == "alert"] if alert_only else hits
+                    ranks = shown["grade"].map(notify.GRADE_RANK) if "grade" in shown else None
+                    best = ranks.min() if ranks is not None and ranks.notna().any() else 9
+                    tables.append((best, scan, hits, shown))
+                # The scan with the best grade first (A+ on top, C last; Emil, 26 Oct 2026)
+                for _, scan, hits, shown in sorted(tables, key=lambda x: x[0]):
+                    label = report.SCAN_LABELS.get(scan, scan)
+                    st.markdown(f"**{label}** — {len(shown)} of {len(hits)} hits")
+                    show_table(scan, shown, exchanges_of(str(run.universe)))
+                    grade_blocks(shown)
+                    facts = report.fact_lines(scan, shown)
+                    if facts:
+                        st.markdown("\n".join(facts))
+                    charts = [
+                        (t, dashboard.chart_for(run, scan, t)) for t in shown["ticker"].head(10)
+                    ]
+                    charts = [(t, p) for t, p in charts if p is not None]
+                    if charts:
+                        cols = st.columns(min(3, len(charts)))
+                        for i, (ticker, path) in enumerate(charts):
+                            cols[i % len(cols)].image(str(path), caption=ticker)
 
 elif page == "Positions":
     # The positions cockpit (Emil, 26 Oct 2026): each open position with its price, open R, the

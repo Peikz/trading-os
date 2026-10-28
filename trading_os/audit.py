@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from trading_os import breakouts, charts, clock, history
+from trading_os import breakouts, clock, history
 from trading_os import history_metrics as hm
 from trading_os.config import Config, load_config
 
@@ -120,6 +120,8 @@ def write_sheet(
     hits: pd.DataFrame, bars: pd.DataFrame, data_dir: Path, n: int, seed: int, today: dt.date
 ) -> Path:
     """Sample `n` hits and write the audit sheet with charts."""
+    from trading_os import charts  # matplotlib only here: the dashboard imports this module
+
     folder = Path(data_dir) / "docs" / f"breakout_audit_{today.isoformat()}"
     picked = pick(hits, n, seed)
     counts = hits["kind"].value_counts().to_dict() if len(hits) else {}
