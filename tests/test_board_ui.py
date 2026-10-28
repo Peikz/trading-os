@@ -69,3 +69,45 @@ def test_lightweight_chart_page_has_the_data_and_levels():
     assert names["RS vs QQQ"]["scale"] == "rs" and names["RS vs QQQ"]["pts"][0]["value"] == 2.1
     week = lwchart.weekly(bars)  # 1 Jan 2026 is a Thursday: a 2-day first week
     assert len(week) == 13 and week["volume"].iloc[0] == 2e6
+
+
+def test_market_strip_is_one_row_of_chips():
+    at = _run(
+        "board.market_strip({'qqq_light': 'RED', 'spy_close': 700.0, 'spy_chg_pct': -0.5,"
+        " 'vix_close': 18.0, 'vix_chg_pct': 3.0}, None, 'Warm market')\n"
+    )
+    html = at.get("html")[0].proto.body
+    assert "QQQ light" in html and "Warm market" in html and "&#36;" not in html
+    assert html.count("#f85149") == 2  # SPY down and VIX up: both red
+    assert not at.metric  # chips, not the big tiles
+
+
+def test_the_candidate_list_is_cached_until_a_run_file_changes(tmp_path):
+    import os
+    import sys
+    import types
+
+    import pandas as pd
+
+    sys.path.insert(0, "app")
+    import board
+
+    path = tmp_path / "run.parquet"
+    pd.DataFrame({"ticker": ["AAA"], "tier": ["alert"], "grade": ["A"]}).to_parquet(path)
+    run = types.SimpleNamespace(
+        candidates=path, universe=tmp_path / "none.parquet", slot="eod", label="eod", session=1
+    )
+    cfg = types.SimpleNamespace(scans={"ep_day": types.SimpleNamespace(action="push")})
+    calls = []
+
+    def frames(p):
+        calls.append(p)
+        return {"ep_day": pd.read_parquet(p)}
+
+    first = board.collect([run], cfg, frames)
+    again = board.collect([run], cfg, frames)
+    assert len(calls) == 1 and first.equals(again)
+    pd.DataFrame({"ticker": ["BBB"], "tier": ["alert"], "grade": ["B"]}).to_parquet(path)
+    os.utime(path, ns=(path.stat().st_atime_ns, path.stat().st_mtime_ns + 10**9))  # a new run
+    assert board.collect([run], cfg, frames)["ticker"].tolist() == ["BBB"]
+    assert len(calls) == 2

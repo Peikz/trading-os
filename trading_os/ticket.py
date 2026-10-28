@@ -83,6 +83,19 @@ class Ticket:
         return out
 
 
+def plan_price(row: Mapping[str, Any], order_type: str) -> float | None:
+    """The plan's price for `order_type`: the pivot as a buy-stop's trigger when the hit has
+    one, else the plan's entry (else the grade's, else the close)."""
+    plan_entry = next(
+        (v for k in ("plan_entry", "grade_entry", "close") if (v := _num(row.get(k))) is not None),
+        None,
+    )
+    if plan_entry is None:  # no plan, no ticket
+        return None
+    pivot = _num(row.get("pivot"))
+    return pivot if order_type in ("stop", "stop_limit") and pivot else plan_entry
+
+
 def build(
     row: Mapping[str, Any],
     order_type: str,
@@ -93,15 +106,11 @@ def build(
 ) -> Ticket | None:
     """The ticket for `row` (a graded hit with its plan) as `order_type`. `price`: the user's own
     price for a limit / trigger (else the plan's). None without an entry and a stop."""
-    plan_entry = next(
-        (v for k in ("plan_entry", "grade_entry", "close") if (v := _num(row.get(k))) is not None),
-        None,
-    )
     stop = _num(row.get("plan_stop")) or _num(row.get("grade_stop"))
-    pivot = _num(row.get("pivot"))
-    if plan_entry is None or stop is None:
+    plan = plan_price(row, order_type)
+    if plan is None or stop is None:
         return None
-    base = price or (pivot if order_type in ("stop", "stop_limit") and pivot else plan_entry)
+    base = price or plan
     trigger = limit = None
     if order_type == "stop":
         trigger, est = base, base
