@@ -467,7 +467,9 @@ def short_lines(
 def push_lines(row: Mapping[str, Any]) -> list[str]:
     """EOD market header (report, dashboard): the QQQ light, the breadth Light, breadth, SPY
     and VIX."""
-    return [qqq_light_line(row), *light_lines(row), *breadth_lines(row), *index_lines(row)]
+    # The Market Light is saved, not shown (Emil, 28 Oct 2026: it lowered the return in both
+    # periods, docs/research/2026-10-23-market-light-rules.md; the QQQ light stays as context)
+    return [qqq_light_line(row), *breadth_lines(row), *index_lines(row)]
 
 
 # --- pre-market (Emil, 19 Oct 2026: breadth also runs pre-market; SPEC §6.1)
@@ -522,10 +524,7 @@ def premarket_suffix(row: Mapping[str, Any]) -> str:
 
 def premarket_lines(row: Mapping[str, Any], last: Mapping[str, Any] | None) -> list[str]:
     """Light for today's orders, last close's breadth, and the pre-market movers."""
-    lines = [
-        qqq_light_line(row, premarket_suffix(row)),
-        *light_lines(row, suffix=premarket_suffix(row)),
-    ]
+    lines = [qqq_light_line(row, premarket_suffix(row))]  # the Market Light: saved, not shown
     if last:
         lines.append(f"Last close {breadth_lines(last)[0]}")
     qqq = row["qqq_pm_change_pct"]

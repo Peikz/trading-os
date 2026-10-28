@@ -159,13 +159,13 @@ def test_breadth_row_from_snapshot_history(cfg, tmp_path):
     assert not math.isnan(row["ratio_10d"])
     assert row["qqq_trend"] == "up"
     assert row["scan_count_basis"] == "eod-bootstrap"
+    assert row["light"] == "STOP"  # today's bootstrap count of 1 stock; saved, not shown
     lines = breadth.push_lines(row)[1:]  # [0] is the QQQ light (tests below)
-    assert lines[0] == "⛔ Market Light STOP"  # today's bootstrap count of 1 stock
-    assert lines[1].startswith("QQQ up · breadth ")
-    assert lines[2].startswith("4%: 🟢")
-    assert lines[3].startswith("Qtr 25%: 🟢") and " · Mo 25%: 🟢" in lines[3]
-    assert lines[4].endswith("34d 13%: n/a")  # no 34-day history yet
-    assert lines[5].startswith("Above MA20 ")
+    assert not any("Market Light" in line for line in lines)  # since 28 Oct 2026 (Emil)
+    assert lines[0].startswith("4%: 🟢")
+    assert lines[1].startswith("Qtr 25%: 🟢") and " · Mo 25%: 🟢" in lines[1]
+    assert lines[2].endswith("34d 13%: n/a")  # no 34-day history yet
+    assert lines[3].startswith("Above MA20 ")
 
 
 def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
@@ -205,8 +205,6 @@ def test_premarket_lines_use_last_close_light_and_pm_movers(cfg, tmp_path):
     lines = breadth.premarket_lines(row, last)
     assert lines == [
         "⚪ QQQ light n/a (from the 10-16 close)",
-        "🟡 Market Light YELLOW (from the 10-16 close)",
-        "QQQ sideways · breadth neutral · count 30",
         "Last close 4%: 🟢22 🔴203 · 5d 0.50 · 10d 0.80",
         "Pre-market 4%: 🟢1 🔴1 · QQQ 🟢 +0.4%",
     ]
@@ -218,7 +216,6 @@ def test_premarket_lines_before_any_eod(cfg):
     lines = breadth.premarket_lines(row, None)
     assert lines == [
         "⚪ QQQ light n/a",
-        "⚪ Market Light n/a (needs an EOD run)",
         "Pre-market 4%: 🟢1 🔴0",
     ]
 

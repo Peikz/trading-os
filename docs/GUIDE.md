@@ -228,7 +228,7 @@ line, the dashboard's tiles and tables; the push leaves it out), and the monthly
 splits the live trades by it. In the study MA-surf A and EP9M A+ did better in an uptrend, but
 that was found with both periods in view and 2006–15 didn't confirm it, so grades don't use it.
 
-**The Market Light** (your rules, SPEC §6.5; since 25 Oct 2026 in the report and on the dashboard only), from three inputs:
+**The Market Light** (your rules, SPEC §6.5). **Since 28 Oct 2026 it is saved but no longer shown** in the report or on Today: in the account test it lowered the return in both periods, and GREEN was the worst light for the graded setups (data repo `docs/research/2026-10-23-market-light-rules.md`). The QQQ light, the heat and the IBD state stay as the market line; the Light's history stays on the Market page. It came from three inputs:
 
 - **QQQ trend**: *up* when the close is over the 20-day MA and the 10-day is over the 20-day;
   *down* when the close is under the 50-day MA and the 20-day is lower than 5 sessions ago;

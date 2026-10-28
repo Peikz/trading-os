@@ -904,44 +904,6 @@ def industry_files(folder: str) -> list[str]:
     return [str(f) for f in sorted((Path(folder) / "data" / "industries").glob("*/*.parquet"))]
 
 
-LIGHT_TEXT = """
-**The QQQ light** (Qullamaggie's Nasdaq rule; the push's light since 25 Oct 2026):
-
-- 🟢 **GREEN**: QQQ's 10- and 20-day both rising, the 10 over the 20. A momentum market: the
-  most 10R+ breakouts a day (2-3 in the study).
-- 🟡 **YELLOW**: anything else. Mixed.
-- 🔴 **RED**: both falling, the 10 under the 20. Few breakout winners (2022-26: breakouts
-  -0.32R a trade); momentum mostly off.
-
-It says how much momentum opportunity there is, not "stop trading": the A setups (EP, EP9M,
-Luk flush) did as well or better on RED, and stopping them on any red light cost money in every
-test. Read it with the heat: cool markets were the best for nearly every setup.
-
-**How the breadth Light is set** (your rules, SPEC §6.5, now information only), from three inputs:
-
-- **QQQ trend**: *up* = close over its 20-day and the 10-day over the 20-day; *down* = close
-  under its 50-day and the 20-day lower than 5 sessions ago; *sideways* = anything else.
-- **Breadth** (Stockbee-style): *strong* = 10-day up/down ratio ≥ 1.5 and more stocks up 25 %+
-  in a quarter than down; *weak* = 10-day ratio under 1.0 and more down than up; *neutral* =
-  the rest (a 5-day ratio over 2, a breadth thrust, lifts weak to neutral).
-- **Scan count** (Sunday): stocks over $5, 500K+ average volume, up 50 %+ in a quarter, over
-  their 20-day. How many stocks are running.
-
-The light, first match wins:
-
-| Light | When | Your rule for new entries |
-|---|---|---|
-| 🛑 **STOP** | QQQ down **and** breadth weak, or the scan count under 5 | none |
-| 🔴 **RED** | QQQ down **or** breadth weak, or the scan count under 15 | A grades only, half risk |
-| 🟢 **GREEN** | QQQ up **and** breadth not weak **and** the scan count 50+ | normal |
-| 🟡 **YELLOW** | anything else | A and B grades only |
-
-The evening's light covers the next day's orders. From the 10-year study: picking trades by
-the Light did **not** hold up on 2022–26; market **heat** (the scan count band above) did. So
-read the Light as the state of the market, and the heat lines for what the setups did in it.
-"""
-
-
 def market_overview() -> None:
     """Indexes, sectors and themes: returns over a chosen period, against SPY, the trend, the
     rotation quadrant and a rotation chart; then the industries' rank moves."""
@@ -1011,8 +973,6 @@ def market_overview() -> None:
             "A big climb is money moving into a group before it reaches the top. Needs "
             f"{offset + 1} saved EOD runs for the move column."
         )
-    with st.expander("What the Market Light means (GREEN, YELLOW, RED, STOP)"):
-        st.markdown(LIGHT_TEXT)
 
 
 def open_chart(ticker: str) -> None:
