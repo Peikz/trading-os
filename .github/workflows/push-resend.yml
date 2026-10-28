@@ -34,16 +34,37 @@ jobs:
                (if .attachment then "attachment" else "inline" end),
                (if ((.title // "") | startswith("Trading OS")) then "price alert" else ((.title // "") | .[0:26]) end)]
             | @tsv' history.jsonl
-          jq -c --arg match "$MATCH" '
-            select(.event == "message")
-            | select(.title as $t | ($match | split("|")) | any(. as $m | $t | startswith($m)))
-            | select(.title | test("resent|manual run") | not)' history.jsonl > picked.jsonl
-          n=0
-          while read -r m; do
-            echo "$m" | jq --arg topic "$NTFY_TOPIC" \
-              '{topic: $topic, title: (.title + " (resent)"), message: .message, priority: 4,
-                tags: ["chart_with_upwards_trend"]} + (if .click then {click: .click} else {} end)' \
-              | curl -sf -X POST -H "Content-Type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null
-            n=$((n + 1))
-          done < picked.jsonl
-          echo "resent $n of $(wc -l < history.jsonl) messages"
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          # Under Apple's 4 KB like the live pushes (notify.APNS_BUDGET): lines are cut from
+          # the end until title + text + tap link fit.
+          BUDGET = 3300
+          topic, match = os.environ["NTFY_TOPIC"], os.environ["MATCH"].split("|")
+          n = total = 0
+          for line in open("history.jsonl", encoding="utf-8"):
+              m = json.loads(line)
+              if m.get("event") != "message":
+                  continue
+              total += 1
+              title = m.get("title", "")
+              if not any(title.startswith(x) for x in match) or "resent" in title or "manual run" in title:
+                  continue
+              title += " (resent)"
+              click = m.get("click", "")
+              lines = m.get("message", "").split("\n")
+              room = BUDGET - len(title.encode()) - len(click.encode())
+              cut = 0
+              while len("\n".join(lines).encode()) > room - 40 and len(lines) > 1:
+                  lines.pop()
+                  cut += 1
+              body = "\n".join(lines) + ("\n… more on Today" if cut else "")
+              payload = {"topic": topic, "title": title, "message": body, "priority": 4,
+                         "tags": ["chart_with_upwards_trend"]}
+              if click:
+                  payload["click"] = click
+              req = urllib.request.Request("https://ntfy.sh/", json.dumps(payload).encode(),
+                                           {"Content-Type": "application/json"})
+              urllib.request.urlopen(req, timeout=15).read()
+              n += 1
+          print(f"resent {n} of {total} messages")
+          EOF
