@@ -18,7 +18,7 @@ from streamlit.testing.v1 import AppTest  # noqa: E402
 APP = Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py"
 PAGES = [
     "Today",
-    "Screens",
+    "Screener",
     "Scans",
     "Chart",
     "Watchlists",
@@ -112,6 +112,21 @@ def test_journal_tabs_render_with_trades_positions_and_plans(data_repo, monkeypa
     texts = " ".join(str(m.value) for m in at.metric)
     assert "1" in texts  # one closed trade, one open position
     assert any("CCC" in str(df.value) for df in at.dataframe)  # the plan is listed
+
+
+def test_the_screener_filters_scan_hits_and_keeps_the_grade_form(data_repo, monkeypatch):
+    # The old Screens page lives in the Screener since 29 Oct 2026: Stocks from → Scan hits
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio[0].set_value("Screener").run()
+    assert not at.exception, [e.value for e in at.exception]
+    at.button_group(key="sc_from").set_value("Scan hits").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("AAA" in str(df.value) for df in at.dataframe)  # the hit, in the scan's table
+    assert at.selectbox(key="sc_look").value == "AAA"  # chart and grading form below
+    next(b for b in at.button if b.label == "＋ Add filter").click().run()  # ADR >= 4
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("0 stocks" in m.value for m in at.markdown)  # the hit has no ADR: filtered out
 
 
 def test_my_watchlists_render(data_repo, monkeypatch):

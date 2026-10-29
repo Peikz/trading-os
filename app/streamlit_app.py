@@ -94,7 +94,7 @@ DEFAULT_DATA = Path(
 # Ordered by the trading day (Emil, 26 Oct 2026): before the open, live, after the close, then
 # research and settings out of the way. Each page shows its group's icon.
 PAGE_GROUPS = {
-    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screener", "Screens"],
+    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screener"],
     "⚡ Live": ["Positions", "Chart", "Scans"],
     "🌙 After the close": ["Journal", "Live results"],
     "🔬 Research & settings": ["Research", "System health", "Guide"],
@@ -1559,9 +1559,9 @@ elif page == "Screener":
     # Your own screens, TradingView style (Emil, 29 Oct 2026; `trading_os/screens.py`)
     st.header("Screener")
     st.caption(
-        "Filter every US stock in the universe (about 4,000) on the fields below, like "
-        "TradingView's screener. A screen is a list to look at, not a tested setup: no grade, "
-        "no buy."
+        "Filter every US stock in the universe (about 4,000), or one scan's hits, on the fields "
+        "below, like TradingView's screener. A screen of all stocks is a list to look at, not a "
+        "tested setup: no grade, no buy. Scan hits keep their study grade and your grading form."
     )
     eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
     if not eod_runs:
@@ -1572,14 +1572,38 @@ elif page == "Screener":
     choices = ["＋ New screen", *saved, *(f"Example: {n}" for n in screens.EXAMPLES)]
     a, b = st.columns([3, 2])
     pick = a.selectbox("Screen", choices, key="sc_screen")
-    source = b.segmented_control(
-        "Data",
-        ["Last close", "Live now"],
-        default="Last close",
-        key="sc_source",
-        help="Last close: the EOD snapshot, every field. Live now: one TradingView fetch for "
-        "price, change, volume and pre/after-hours; history fields stay from the last close.",
+    # Where the stocks come from: the whole universe, or one run's scan hits (the old Screens
+    # page, merged in on 29 Oct 2026 so one page lists, filters and grades)
+    origin = b.segmented_control(
+        "Stocks from",
+        ["All stocks", "Scan hits"],
+        default="All stocks",
+        key="sc_from",
+        help="All stocks: every US stock in the universe. Scan hits: one scan's hits from one "
+        "run, with the study grade, the chart and your grading form.",
     )
+    hit_scan, source = None, "Last close"
+    if origin == "Scan hits":
+        c1, c2, c3 = st.columns([3, 3, 2])
+        run = c1.selectbox("Run", runs, format_func=lambda r: r.label, key="sc_run")
+        frames = scan_frames(str(run.candidates))
+        if not frames:
+            st.info("This run saved no hits.")
+            st.stop()
+        hit_scan = c2.selectbox(
+            "Scan", list(frames), format_func=lambda s: report.SCAN_LABELS.get(s, s), key="sc_scan"
+        )
+        tiers = c3.multiselect("Tier", ["alert", "log"], default=["alert", "log"], key="sc_tier")
+        hits = frames[hit_scan][frames[hit_scan]["tier"].isin(tiers)]
+    else:
+        source = st.segmented_control(
+            "Data",
+            ["Last close", "Live now"],
+            default="Last close",
+            key="sc_source",
+            help="Last close: the EOD snapshot, every field. Live now: one TradingView fetch for "
+            "price, change, volume and pre/after-hours; history fields stay from the last close.",
+        )
     # Load the picked screen into the editor when the pick changes
     if st.session_state.get("sc_loaded") != pick:
         if pick in saved:
@@ -1649,52 +1673,72 @@ elif page == "Screener":
         st.session_state["sc_next"] = k + 1
         filters.append({"field": "adr20_pct", "op": ">=", "value": 4.0, "_id": k})
         st.rerun()
-    sort = c2.selectbox(
-        "Sort by", fields, index=fields.index(st.session_state["sc_sort"]),
-        key=f"sc_sort_{st.session_state['sc_loaded']}",
-        format_func=screens.label,
-    )  # fmt: skip
-    descending = c3.toggle(
-        "Highest first", value=st.session_state["sc_desc"],
-        key=f"sc_desc_{st.session_state['sc_loaded']}",
-    )  # fmt: skip
+    sort, descending = st.session_state["sc_sort"], st.session_state["sc_desc"]
+    if hit_scan:  # scan hits keep the scan's order: best study grade first
+        c2.caption("Sorted best study grade first, as in the push.")
+    else:
+        sort = c2.selectbox(
+            "Sort by", fields, index=fields.index(sort),
+            key=f"sc_sort_{st.session_state['sc_loaded']}",
+            format_func=screens.label,
+        )  # fmt: skip
+        descending = c3.toggle(
+            "Highest first", value=descending,
+            key=f"sc_desc_{st.session_state['sc_loaded']}",
+        )  # fmt: skip
 
     data = snapshot
     when = f"the {eod_runs[0].session:%d %b} close"
-    if source == "Live now":
+    if hit_scan:
+        # The hits plus the universe's fields they lack, so every filter works on them
+        snap = read_parquet(str(run.universe)) if run.universe.exists() else snapshot
+        snap = snap.drop_duplicates("ticker").set_index("ticker")
+        data = hits.join(snap[[c for c in snap.columns if c not in hits.columns]], on="ticker")
+        when = f"{report.SCAN_LABELS.get(hit_scan, hit_scan)} hits, {run.label}"
+        if "exchange" not in data:
+            data["exchange"] = data["ticker"].map(exchanges_of(str(eod_runs[0].universe)))
+    elif source == "Live now":
         try:
             data = live_universe(str(eod_runs[0].universe))
             when = "live (TradingView, just now; history fields from the last close)"
         except Exception as exc:  # noqa: BLE001 - fall back to the snapshot
             st.warning(f"Live fetch failed ({type(exc).__name__}); showing the last close.")
     try:
-        result = screens.run(data, filters, sort, descending)
+        result = screens.run(data, filters, None if hit_scan else sort, descending)
     except ValueError as exc:
         st.error(str(exc))
         st.stop()
-    summary = " · ".join(screens.describe(f) for f in filters) or "no filters: every stock"
+    every = "every hit" if hit_scan else "every stock"
+    summary = " · ".join(screens.describe(f) for f in filters) or f"no filters: {every}"
     st.markdown(f"**{len(result)} stocks** from {when}  \n{summary}")
     exchanges = dict(zip(data["ticker"], data.get("exchange", pd.Series(dtype=str)), strict=False))
-    shown_cols = list(dict.fromkeys([*screens.SHOWN, *(f["field"] for f in filters), sort]))
-    view = result[[c for c in shown_cols if c in result]].head(500).copy()
-    view.insert(1, "chart", [tradingview_url(t, exchanges.get(t)) for t in view["ticker"]])
-    formats = {"money": "compact", "pct": "%.1f", "num": "%.2f"}
-    config = {"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")}
-    for col in view.columns:
-        fmt = formats.get(screens.kind(col)) if col in screens.FIELDS else None
-        if fmt:
-            name = screens.label(col)
-            fmt = "compact" if col in ("volume", "avg_volume_20d", "float_shares", "pm_volume",
-                                       "ah_volume") else fmt  # fmt: skip
-            config[name] = st.column_config.NumberColumn(name, format=fmt)
-    st.dataframe(
-        view.rename(columns=lambda c: screens.label(c) if c in screens.FIELDS else c),
-        hide_index=True,
-        width="stretch",
-        column_config=config,
-    )
-    if len(result) > 500:
-        st.caption(f"Showing the first 500 of {len(result)}; narrow the filters to see the rest.")
+    exchanges = {t: e for t, e in exchanges.items() if isinstance(e, str)}
+    if hit_scan:  # the scan's own table: study grade, why, the scan's columns
+        result = notify.best_first(result).reset_index(drop=True)
+        show_table(hit_scan, result, exchanges)
+    else:
+        shown_cols = list(dict.fromkeys([*screens.SHOWN, *(f["field"] for f in filters), sort]))
+        view = result[[c for c in shown_cols if c in result]].head(500).copy()
+        view.insert(1, "chart", [tradingview_url(t, exchanges.get(t)) for t in view["ticker"]])
+        formats = {"money": "compact", "pct": "%.1f", "num": "%.2f"}
+        config = {"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")}
+        for col in view.columns:
+            fmt = formats.get(screens.kind(col)) if col in screens.FIELDS else None
+            if fmt:
+                name = screens.label(col)
+                fmt = "compact" if col in ("volume", "avg_volume_20d", "float_shares",
+                                           "pm_volume", "ah_volume") else fmt  # fmt: skip
+                config[name] = st.column_config.NumberColumn(name, format=fmt)
+        st.dataframe(
+            view.rename(columns=lambda c: screens.label(c) if c in screens.FIELDS else c),
+            hide_index=True,
+            width="stretch",
+            column_config=config,
+        )
+        if len(result) > 500:
+            st.caption(
+                f"Showing the first 500 of {len(result)}; narrow the filters to see the rest."
+            )
 
     def _flip(tickers: list[str], name: str) -> None:
         st.query_params.clear()
@@ -1711,13 +1755,17 @@ elif page == "Screener":
         key="sc_flip",
         disabled=result.empty,
         on_click=_flip,
-        args=(list(result["ticker"].head(200)), name_now or "unsaved"),
+        args=(
+            list(result["ticker"].head(200)),
+            name_now or (report.SCAN_LABELS.get(hit_scan, hit_scan) if hit_scan else "unsaved"),
+        ),
         width="stretch",
     )
     b.download_button(
         "TradingView list (.txt)",
-        ",".join(f"{exchanges.get(t) or 'NASDAQ'}:{t}" for t in result["ticker"].head(1000)),
-        file_name="screen.txt",
+        tradingview_list(result["ticker"].head(1000), exchanges),
+        file_name=f"{run.session}_{hit_scan}.txt" if hit_scan else "screen.txt",
+        help="TradingView: Watchlist menu → Import list",
         width="stretch",
     )
     with c.popover("💾 Save screen", width="stretch"):
@@ -1735,37 +1783,15 @@ elif page == "Screener":
             st.toast(f"Deleted '{name_now}'")
             st.rerun()
 
-elif page == "Screens":
-    st.header("Screens")
-    if not runs:
-        st.info("No runs yet.")
-        st.stop()
-    run = st.selectbox("Run", runs, format_func=lambda r: r.label)
-    frames = scan_frames(str(run.candidates))
-    scans = list(frames)
-    scan = st.selectbox("Scan", scans, format_func=lambda s: report.SCAN_LABELS.get(s, s))
-    hits = frames[scan]
-    tiers = st.multiselect("Tier", ["alert", "log"], default=["alert", "log"])
-    hits = hits[hits["tier"].isin(tiers)]
-    st.caption(f"{len(hits)} hits")
-    exchanges = exchanges_of(str(run.universe))
-    show_table(scan, hits, exchanges)
-    if len(hits):
-        st.download_button(
-            "TradingView list (.txt)",
-            tradingview_list(hits["ticker"], exchanges),
-            file_name=f"{run.session}_{scan}.txt",
-            help="TradingView: Watchlist menu → Import list",
-            key="scr_tv",
-        )
-    grade_blocks(hits)
-    if len(hits):
-        ticker = st.selectbox("Look at", hits["ticker"].tolist())
+    if hit_scan and len(result):
+        # The A+/A/B blocks as the push shows them, then one hit's chart and your grading form
+        grade_blocks(result)
+        ticker = st.selectbox("Look at", result["ticker"].tolist(), key="sc_look")
         st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
-        row = hits[hits["ticker"] == ticker].iloc[0]
-        stock_chart(ticker, sessions=126, key=f"scr-{scan}-{ticker}")
+        row = result[result["ticker"] == ticker].iloc[0]
+        stock_chart(ticker, sessions=126, key=f"scr-{hit_scan}-{ticker}")
         grade_form(
-            "signal", row["signal_id"], f"Grade {ticker} · {scan}", f"sig-{row['signal_id']}"
+            "signal", row["signal_id"], f"Grade {ticker} · {hit_scan}", f"sig-{row['signal_id']}"
         )
 
 elif page == "Scans":
@@ -2911,7 +2937,10 @@ elif page == "Graded signals":
     notes = dashboard.notes_state(data_dir)
     graded = notes[notes["kind"] == "signal"]
     if graded.empty:
-        st.info("Grade signals on the Screens page; they show up here with their outcomes.")
+        st.info(
+            "Grade signals on the Screener (Stocks from: Scan hits); they show up here with "
+            "their outcomes."
+        )
         st.stop()
     cands = outcomes.load_candidates(data_dir)
     found = stats.load_outcomes(data_dir)
