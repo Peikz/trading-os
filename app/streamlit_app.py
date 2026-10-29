@@ -52,6 +52,7 @@ from trading_os import (
     report,
     review,
     scan_editor,
+    screens,
     search,
     sectors,
     sizing,
@@ -93,7 +94,7 @@ DEFAULT_DATA = Path(
 # Ordered by the trading day (Emil, 26 Oct 2026): before the open, live, after the close, then
 # research and settings out of the way. Each page shows its group's icon.
 PAGE_GROUPS = {
-    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screens"],
+    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screener", "Screens"],
     "⚡ Live": ["Positions", "Chart", "Scans"],
     "🌙 After the close": ["Journal", "Live results"],
     "🔬 Research & settings": ["Research", "System health", "Guide"],
@@ -344,6 +345,20 @@ def scan_frames(path: str) -> dict[str, pd.DataFrame]:
 
 
 FORMATS = {"money": "compact", "shares": "compact", "int": "%d"}
+
+
+@st.cache_data(ttl=300, show_spinner="Fetching live data from TradingView…")
+def live_universe(snapshot_path: str) -> pd.DataFrame:
+    """The Screener's live data (Emil, 29 Oct 2026): one TradingView fetch of the universe
+    (at most once per 5 minutes), with the last close's history fields joined in."""
+    from trading_os import metrics, universe
+
+    raw = tv.fetch_universe(CFG.universe)
+    raw["earnings_flag"] = False
+    live = universe.build_universe(metrics.add_phase1_metrics(raw, CFG.proxies), CFG.universe, "am")
+    snap = read_parquet(snapshot_path).drop_duplicates("ticker").set_index("ticker")
+    keep = [c for c in snap.columns if c not in live.columns]
+    return live.join(snap[keep], on="ticker")
 
 
 def tradingview_url(ticker: str, exchange: str | None = None) -> str:
@@ -1539,6 +1554,186 @@ elif page == "Positions":
         "Exits are the plan's facts, not advice: hold = sell at the close after N sessions; "
         "trail = out on a close under the 20-day MA. Fills and stops come from the Journal."
     )
+
+elif page == "Screener":
+    # Your own screens, TradingView style (Emil, 29 Oct 2026; `trading_os/screens.py`)
+    st.header("Screener")
+    st.caption(
+        "Filter every US stock in the universe (about 4,000) on the fields below, like "
+        "TradingView's screener. A screen is a list to look at, not a tested setup: no grade, "
+        "no buy."
+    )
+    eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    if not eod_runs:
+        st.info("No EOD universe snapshot yet.")
+        st.stop()
+    snapshot = read_parquet(str(eod_runs[0].universe))
+    saved = screens.load(data_dir)
+    choices = ["＋ New screen", *saved, *(f"Example: {n}" for n in screens.EXAMPLES)]
+    a, b = st.columns([3, 2])
+    pick = a.selectbox("Screen", choices, key="sc_screen")
+    source = b.segmented_control(
+        "Data",
+        ["Last close", "Live now"],
+        default="Last close",
+        key="sc_source",
+        help="Last close: the EOD snapshot, every field. Live now: one TradingView fetch for "
+        "price, change, volume and pre/after-hours; history fields stay from the last close.",
+    )
+    # Load the picked screen into the editor when the pick changes
+    if st.session_state.get("sc_loaded") != pick:
+        if pick in saved:
+            spec = saved[pick]
+        elif pick.startswith("Example: "):
+            spec = screens.EXAMPLES[pick.removeprefix("Example: ")]
+        else:
+            spec = {"filters": [], "sort": "rs_pct", "descending": True}
+        # Each filter gets its own id, so its boxes keep their values when others change
+        start = st.session_state.get("sc_next", 0)
+        st.session_state["sc_filters"] = [
+            {**f, "_id": start + k} for k, f in enumerate(spec["filters"])
+        ]
+        st.session_state["sc_next"] = start + len(spec["filters"])
+        st.session_state["sc_sort"] = spec.get("sort") or "rs_pct"
+        st.session_state["sc_desc"] = spec.get("descending", True)
+        st.session_state["sc_loaded"] = pick
+    filters = st.session_state["sc_filters"]
+    fields = list(screens.FIELDS)
+    groups = {f: screens.FIELDS[f][2] for f in fields}
+    st.markdown("**Filters**")
+    for i, f in enumerate(list(filters)):
+        k = f["_id"]
+        c1, c2, c3, c4 = st.columns([4, 2, 4, 1])
+        field = c1.selectbox(
+            "Field", fields, index=fields.index(f["field"]), key=f"sc_f{k}",
+            format_func=lambda x: f"{groups[x]} · {screens.label(x)}",
+            label_visibility="collapsed",
+        )  # fmt: skip
+        ops = screens.OPS[screens.kind(field)]
+        op = c2.selectbox(
+            "Op", ops, index=ops.index(f["op"]) if f["op"] in ops else 0, key=f"sc_o{k}",
+            label_visibility="collapsed",
+        )  # fmt: skip
+        value = f.get("value")
+        if op == "between":
+            lo_hi = list(value) if isinstance(value, list | tuple) else [None, None]
+            x, y = c3.columns(2)
+            lo = x.number_input(
+                "from", value=lo_hi[0], key=f"sc_lo{k}", label_visibility="collapsed"
+            )
+            hi = y.number_input("to", value=lo_hi[1], key=f"sc_hi{k}", label_visibility="collapsed")
+            value = [lo, hi]
+        elif op in ("is one of", "is not one of"):
+            options = (
+                sorted(snapshot[field].dropna().astype(str).unique()) if field in snapshot else []
+            )
+            value = c3.multiselect(
+                "Values", options, default=[v for v in (value or []) if v in options],
+                key=f"sc_m{k}", label_visibility="collapsed",
+            )  # fmt: skip
+        elif op in ("is yes", "is no"):
+            value = None
+            c3.write("")
+        else:
+            start = float(value) if isinstance(value, int | float) else 0.0
+            value = c3.number_input(
+                "Value", value=start, key=f"sc_v{k}", label_visibility="collapsed"
+            )
+        filters[i] = {"field": field, "op": op, "value": value, "_id": k}
+        if c4.button("✕", key=f"sc_x{k}", help="Remove this filter"):
+            filters.pop(i)
+            st.rerun()
+    c1, c2, c3 = st.columns([2, 3, 2])
+    if c1.button("＋ Add filter", key="sc_add"):
+        k = st.session_state.get("sc_next", 0)
+        st.session_state["sc_next"] = k + 1
+        filters.append({"field": "adr20_pct", "op": ">=", "value": 4.0, "_id": k})
+        st.rerun()
+    sort = c2.selectbox(
+        "Sort by", fields, index=fields.index(st.session_state["sc_sort"]),
+        key=f"sc_sort_{st.session_state['sc_loaded']}",
+        format_func=screens.label,
+    )  # fmt: skip
+    descending = c3.toggle(
+        "Highest first", value=st.session_state["sc_desc"],
+        key=f"sc_desc_{st.session_state['sc_loaded']}",
+    )  # fmt: skip
+
+    data = snapshot
+    when = f"the {eod_runs[0].session:%d %b} close"
+    if source == "Live now":
+        try:
+            data = live_universe(str(eod_runs[0].universe))
+            when = "live (TradingView, just now; history fields from the last close)"
+        except Exception as exc:  # noqa: BLE001 - fall back to the snapshot
+            st.warning(f"Live fetch failed ({type(exc).__name__}); showing the last close.")
+    try:
+        result = screens.run(data, filters, sort, descending)
+    except ValueError as exc:
+        st.error(str(exc))
+        st.stop()
+    summary = " · ".join(screens.describe(f) for f in filters) or "no filters: every stock"
+    st.markdown(f"**{len(result)} stocks** from {when}  \n{summary}")
+    exchanges = dict(zip(data["ticker"], data.get("exchange", pd.Series(dtype=str)), strict=False))
+    shown_cols = list(dict.fromkeys([*screens.SHOWN, *(f["field"] for f in filters), sort]))
+    view = result[[c for c in shown_cols if c in result]].head(500).copy()
+    view.insert(1, "chart", [tradingview_url(t, exchanges.get(t)) for t in view["ticker"]])
+    formats = {"money": "compact", "pct": "%.1f", "num": "%.2f"}
+    config = {"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")}
+    for col in view.columns:
+        fmt = formats.get(screens.kind(col)) if col in screens.FIELDS else None
+        if fmt:
+            name = screens.label(col)
+            fmt = "compact" if col in ("volume", "avg_volume_20d", "float_shares", "pm_volume",
+                                       "ah_volume") else fmt  # fmt: skip
+            config[name] = st.column_config.NumberColumn(name, format=fmt)
+    st.dataframe(
+        view.rename(columns=lambda c: screens.label(c) if c in screens.FIELDS else c),
+        hide_index=True,
+        width="stretch",
+        column_config=config,
+    )
+    if len(result) > 500:
+        st.caption(f"Showing the first 500 of {len(result)}; narrow the filters to see the rest.")
+
+    def _flip(tickers: list[str], name: str) -> None:
+        st.query_params.clear()
+        st.query_params["screen"] = name
+        st.query_params["t"] = ",".join(tickers)
+        st.session_state["page"] = "Today"
+        st.session_state["board_i"] = 0
+        st.session_state.pop("board_scope", None)
+
+    a, b, c = st.columns(3)
+    name_now = pick if pick in saved else ""
+    a.button(
+        f"📈 Flip through on Today ({min(len(result), 200)})",
+        key="sc_flip",
+        disabled=result.empty,
+        on_click=_flip,
+        args=(list(result["ticker"].head(200)), name_now or "unsaved"),
+        width="stretch",
+    )
+    b.download_button(
+        "TradingView list (.txt)",
+        ",".join(f"{exchanges.get(t) or 'NASDAQ'}:{t}" for t in result["ticker"].head(1000)),
+        file_name="screen.txt",
+        width="stretch",
+    )
+    with c.popover("💾 Save screen", width="stretch"):
+        new_name = st.text_input("Name", value=name_now, key="sc_name")
+        if st.button("Save", key="sc_save"):
+            try:
+                screens.save(data_dir, new_name, filters, sort, descending)
+                st.session_state["sc_loaded"] = new_name.strip()
+                st.toast(f"Saved '{new_name.strip()}'. Commit & push to keep it on GitHub.")
+            except ValueError as exc:
+                st.error(str(exc))
+        if name_now and st.button(f"🗑 Delete '{name_now}'", key="sc_delete"):
+            screens.delete(data_dir, name_now)
+            st.session_state["sc_loaded"] = None
+            st.toast(f"Deleted '{name_now}'")
+            st.rerun()
 
 elif page == "Screens":
     st.header("Screens")

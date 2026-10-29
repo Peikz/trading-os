@@ -129,6 +129,28 @@ def watchlist_rows(runs, data_dir, exchanges=None) -> pd.DataFrame:
     return pd.DataFrame(rows).drop_duplicates("ticker")
 
 
+def ticker_rows(runs, tickers: list[str], label: str) -> pd.DataFrame:
+    """Any stocks as board rows (a screen's results, Emil 29 Oct 2026), in the given order,
+    with the newest EOD snapshot's numbers. No grade: a screen is a list, not a tested setup."""
+    with_universe = next((r for r in runs if r.universe.exists()), None)
+    uni = pd.DataFrame()
+    if with_universe is not None:
+        uni = pd.read_parquet(with_universe.universe).drop_duplicates("ticker").set_index("ticker")
+    rows = [
+        {
+            **(uni.loc[t].to_dict() if t in uni.index else {}),
+            "ticker": t,
+            "scan": "screen",
+            "grade": "–",
+            "run_label": label,
+            "run_slot": "eod",
+            "run_session": with_universe.session if with_universe else None,
+        }
+        for t in dict.fromkeys(tickers)
+    ]
+    return pd.DataFrame(rows)
+
+
 def _tags(row) -> list[str]:
     out = []
     for key in ("heat_tag", "si_tag", "ibd_tag"):
@@ -480,10 +502,13 @@ def show(
     # Opened from a push (Emil, 27 Oct 2026): ?push=ah&session=...&t=A,B shows that push's
     # stocks first, with every other hit one click away.
     from_push = [t for t in str(st.query_params.get("t", "")).split(",") if t]
+    # Opened from the Screener (Emil, 29 Oct 2026): ?screen=Name&t=A,B flips through its stocks
+    screen_name = str(st.query_params.get("screen", "") or "")
+    pinned = f"From the screen: {screen_name}" if screen_name else "From the push"
     if from_push:
-        scopes = ["From the push", *scopes]
+        scopes = [pinned, *scopes]
         if st.session_state.get("board_scope") not in scopes:
-            st.session_state["board_scope"] = "From the push"
+            st.session_state["board_scope"] = pinned
     scope = more.selectbox(
         "Show",
         scopes,
@@ -491,7 +516,9 @@ def show(
         label_visibility="collapsed",
         help="C: no edge after costs. Every scan hit: all scans and tiers",
     )
-    if scope == "From the push":
+    if scope.startswith("From the screen"):
+        hits = ticker_rows(runs, from_push, f"screen: {screen_name}")
+    elif scope == "From the push":
         st.button(
             "Show everything this run found",
             key="board_all_hits",
