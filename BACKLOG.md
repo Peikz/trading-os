@@ -22,42 +22,42 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [x] EP-Day — built and run locally on 16 Oct; ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
 - [x] EP9M — built and run locally on 16 Oct (5 hits); ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
 - [x] Momentum Burst up / down — built and run locally on 16 Oct (24 up, 308 down); ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
-- [ ] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive backfill, or our own EOD snapshots; default 1 in Questions)
-- [ ] Breadth line + Market Light count — built: breadth row daily (`data/breadth/`), two push lines, light from the owner's table; Sunday scan count (`data/market_light_count/`). Light shows once QQQ's 5-session SMA20 slope and 10 days of counts exist; defaults 1, 4, 5 in Questions
+- [x] Parabolic Short / Long — built on full-history metrics (`hist_*` columns); finds nothing until ~11 sessions of bars exist (Massive backfill, or our own EOD snapshots; default 1 in Questions) — verified 29 Oct 2026: ran in Actions since 21 Oct, hits on 8 of 8 EOD runs
+- [x] Breadth line + Market Light count — built: breadth row daily (`data/breadth/`), two push lines, light from the owner's table; Sunday scan count (`data/market_light_count/`). Light shows once QQQ's 5-session SMA20 slope and 10 days of counts exist; defaults 1, 4, 5 in Questions — verified 29 Oct 2026: light shows daily since the backfill; Sunday count saved
 - [x] EP-AH (built, toggle OFF) — built and tested; ticks after the first Actions run — ran on GitHub 19 Oct (forced EOD into the data repo)
 
 ### Scans — pre-market
-- [ ] EP-PM — built, `premarket.py` + `premarket.yml`; smoke-tested locally; ticks after the first Actions run
-- [ ] EP9M early warning — built (default 3 in Questions); ticks after the first Actions run
-- [ ] Watchlist gappers (empty watchlist OK until Phase 2) — built on the watchlists below (defaults 3, 6); ticks after the first Actions run
+- [x] EP-PM — built, `premarket.py` + `premarket.yml`; smoke-tested locally; ticks after the first Actions run — verified 29 Oct 2026: scheduled pre-market runs every session since 21 Oct
+- [x] EP9M early warning — built (default 3 in Questions); ticks after the first Actions run — verified 29 Oct 2026: ran in Actions, hits on 6 runs
+- [x] Watchlist gappers (empty watchlist OK until Phase 2) — built on the watchlists below (defaults 3, 6); ticks after the first Actions run — verified 29 Oct 2026: ran in Actions, hits on 5 runs
 
 ### Scans — weekly
-- [ ] Qullamaggie 1/3/6M gainers — built, `weekly.py` + `weekly.yml`; run locally on the week to 16 Oct (73 hits); ticks after the first Actions run
-- [ ] Growth Bucket 1 and 2 (record quarters checked) — built; previous quarter comes from `total_revenue_fq_h` / EPS history (SPEC §11.2: available); run locally (202 / 150 hits); ticks after the first Actions run
+- [x] Qullamaggie 1/3/6M gainers — built, `weekly.py` + `weekly.yml`; run locally on the week to 16 Oct (73 hits); ticks after the first Actions run — verified 29 Oct 2026: first Actions run 25 Oct
+- [x] Growth Bucket 1 and 2 (record quarters checked) — built; previous quarter comes from `total_revenue_fq_h` / EPS history (SPEC §11.2: available); run locally (202 / 150 hits); ticks after the first Actions run — verified 29 Oct 2026: first Actions run 25 Oct
 
 ### Delivery
 - [x] ntfy notifications (one message per job + failure message) — test EOD message and failure message both sent from GitHub on 19 Oct and received
-- [ ] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday); `eod.yml` wrote to the data repo 19 Oct; pre-market's first scheduled run is 20 Oct, weekly's 25 Oct; `intraday.yml` added 19 Oct
+- [x] GitHub Actions: `premarket.yml`, `eod.yml`, `weekly.yml` with dual cron + guard + `workflow_dispatch` + commit of `data/` — all three done (weekly: Sunday 16:00 and 17:00 UTC, guard on the New York weekday); `eod.yml` wrote to the data repo 19 Oct; pre-market's first scheduled run is 20 Oct, weekly's 25 Oct; `intraday.yml` added 19 Oct — verified 29 Oct 2026: all scheduled since 21 Oct (timer + GitHub crons)
 - [x] Secret set: `NTFY_TOPIC` (Massive key not needed until Phase 2) — added 19 Oct; a test push from GitHub (`Pipeline check` with push) was accepted by ntfy
 
 ### Validation
 - [ ] `docs/validation.md` **in the private data repo**: first 2 weeks, EP-Day and gainers vs Emil's manual TradingView screens — started with 16 Oct; `scripts/compare_screen.py` diffs a run against a TradingView CSV export and appends the table (with the reason for each difference) to `docs/validation.md`
-- [ ] 10 consecutive trading days without manual intervention → Phase 1 done
+- [ ] 10 consecutive trading days without manual intervention → Phase 1 done — 29 Oct 2026: 6 in a row (21-28 Oct, every job scheduled); earliest done 3 Nov
 
 ## Phase 2 — Breakouts and history
 - [x] Emil: create free Massive account, add `MASSIVE_API_KEY` as GitHub Secret (agent: if missing, log under Blocked and continue with other items) — added 19 Oct; `Massive check` workflow OK: 12,630 tickers on the latest session, history back to 2024-10-28 (older days answer 403, so the window is capped at 720 days)
-- [ ] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; full run dispatched 19 Oct
-- [ ] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key
-- [ ] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built and wired: `prefer_history` swaps in exact RVOL / ADR / returns / 20-day averages per row (whole groups, proxy kept as `*_proxy`, basis columns updated); end-to-end tested on 55 stored sessions; activates with the backfill
+- [x] Massive 2-year grouped-daily backfill (rate limited, resumable) — built: `massive.py`, `backfill.py`, `backfill.yml` (dispatch with max_calls=504 ≈ 100 min); tested with mocked API; full run dispatched 19 Oct — verified 29 Oct 2026: done: 502 sessions, Oct 2024 to today
+- [x] Daily Massive update in `eod` job — built as the scheduled catch-up in `backfill.yml` (09:30 UTC Tue-Sat, newest missing sessions first); exits cleanly without a key — verified 29 Oct 2026: catch-up runs daily, bars current
+- [x] Metrics on full history (ADR, returns, MA slopes, consecutive days) — built and wired: `prefer_history` swaps in exact RVOL / ADR / returns / 20-day averages per row (whole groups, proxy kept as `*_proxy`, basis columns updated); end-to-end tested on 55 stored sessions; activates with the backfill — verified 29 Oct 2026: active: every EOD row carries the history columns
 - [ ] Base detection B2 (configurable heuristic, store intermediates) — built: `breakouts.py` (pivot = base's highest high, zigzag contractions, depths/lows/volume ratios stored); unspecified parameters marked (proposed) in `config/scans.yaml` `breakout:`; waits for history and the 20-hit hand audit
-- [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5
+- [ ] B1, B3, B4 (pivot, order stop, risk_adr), B5 trigger — built: `breakout_watch` (B1-B4 all pass) and `breakout_trigger` (B5 at the close vs yesterday's base, B1-B4 stored for grading) in the EOD job; candidates carry pivot, order_stop, risk_adr, base_len, contraction_depths, b1..b5 — 29 Oct 2026: runs daily, but B2 has never passed (Question 30), so BO-Watch is empty
 - [ ] Watchlists: EP-Watch → BO-Watch flow — built: append-only event log (`data/watchlists/`), add/refresh/move/trigger/expire (default 6 in Questions)
-- [ ] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS built as a column on gainers and tight bases with proposed weights (default 14)
+- [x] Tight bases scan, CATS score — tight bases built (weekly, action `watchlist`, SPEC thresholds, needs ~50 sessions of bars); CATS built as a column on gainers and tight bases with proposed weights (default 14) — verified 29 Oct 2026: ran in Actions 25 Oct; CATS on every weekly hit
 - [ ] Hand audit of 20 random breakout hits — `scripts/audit_breakouts.py` replays B1-B5 over the Massive history and writes `docs/breakout_audit_<date>.md` (charts + checklist) in the data repo; runs right after the backfill
 
 ## Phase 3 — Outcomes and journal
-- [ ] Outcomes job (5/10/20/60 days) — built: `outcomes.py`, `outcomes.yml` (22:00 UTC weekdays); hand-computed tests; runs on EOD snapshots until Massive history exists
-- [ ] Before-shot chart PNGs per alert candidate — built: `charts.py`, drawn by the EOD and pre-market jobs for every pushed candidate into `data/charts/` (120 sessions, MA10/20/50, volume, pivot/stop when present); sparse until history exists
+- [x] Outcomes job (5/10/20/60 days) — built: `outcomes.py`, `outcomes.yml` (22:00 UTC weekdays); hand-computed tests; runs on EOD snapshots until Massive history exists — verified 29 Oct 2026: runs daily in Actions since 20 Oct
+- [x] Before-shot chart PNGs per alert candidate — built: `charts.py`, drawn by the EOD and pre-market jobs for every pushed candidate into `data/charts/` (120 sessions, MA10/20/50, volume, pivot/stop when present); sparse until history exists — verified 29 Oct 2026: drawn on every run with pushed candidates
 - [ ] Write Breakout Log rows to EPStudyDatabase (Google service account) — built (`epstudy.py`, EOD job, deduplicated by signal_id), off until you set `epstudy.enabled`, `sheet_id` and the secret `GOOGLE_SERVICE_ACCOUNT_JSON`; columns are config (proposed)
 
 - [x] Monthly live check (Emil, 21 Oct 2026) — `live_tracking.py`, `scripts/live_check.py`, `live-check.yml` (1st of the month): live A+ / A signals by their study plan against the study per grade, your trades against the plan; report in the data repo, one push, dashboard *Live results → Grades live vs study*
@@ -69,7 +69,7 @@ Work top to bottom. Tick items when done (code + tests + manual run + commit).
 - [ ] Power BI model over DuckDB/Parquet — groundwork: `scripts/build_duckdb.py` builds a views-only DuckDB file over the data repo (universe, candidates, outcomes, bars, signals_with_outcomes) for the DuckDB ODBC driver; the model itself waits for real trades
 
 ## Phase 5 — Dashboard
-- [ ] Private dashboard — built (System health, Entries & exits, Journal tabs added 20 Oct): Streamlit app (`app/streamlit_app.py`, localhost by default): today, screens, watchlists, journal with grades/notes/screenshots, graded signals, market, stats, validation. Plus a Markdown report per run in the data repo. Phone access: Tailscale (Emil, 19 Oct) via `scripts/start_dashboard.ps1` (`tailscale serve`); waiting for Tailscale to be installed on the PC
+- [x] Private dashboard — built (System health, Entries & exits, Journal tabs added 20 Oct): Streamlit app (`app/streamlit_app.py`, localhost by default): today, screens, watchlists, journal with grades/notes/screenshots, graded signals, market, stats, validation. Plus a Markdown report per run in the data repo. Phone access: Tailscale (Emil, 19 Oct) via `scripts/start_dashboard.ps1` (`tailscale serve`); waiting for Tailscale to be installed on the PC — verified 29 Oct 2026: in daily use on the PC and phone (Tailscale)
 
 ---
 
@@ -110,6 +110,7 @@ word and I flip it.
 | 27 | Minervini's VCP (Emil, 19 Oct) | Trend Template as in his books, RS = our 1-99 RS; base 3-26 weeks; swing highs hold 5 sessions each side, contractions >= 0.5 ADR, 2-6 of them, each shallower, first <= 35 %, last <= 10 %; last 10 days' volume <= 0.8 x the 50-day; stop at the last contraction low, at most 8 % | `minervini:` |
 | 28 | Minute study: no stop closer than 1 % of the entry | With only the 0.25 ADR floor, quiet stocks (merger targets) got stops of cents and R in the hundreds; 1 % is about the closest stop that survives spreads | `intraday_study.min_stop_pct` |
 | 29 | Trade plans expire after 5 sessions | A plan with no matching entry fill within 5 sessions of its day shows as expired | `journal.plan_valid_sessions` |
+| 30 | B2 never passes (found 29 Oct) | 0 of 275 breakout triggers 19-28 Oct passed B2, so BO-Watch and full breakout pushes never fire. The blocker is "each pullback <= 0.85 x the previous": with a pullback counted at every 1-ADR bounce (`swing_adr_mult`, proposed), a 10-40 day base has a median of 9 pullbacks, and none of 90 had all 9 shrinking. Checking only the last 3 would have passed 5 of 90. Both values are proposed; nothing changed until you decide (or do the 20-hit hand audit first) | `breakout:` |
 
 Still open (no default possible):
 - **Data repo size:** each trading day adds ~3 MB of Parquet (pre-market + EOD universe snapshots, zstd), about 0.75 GB a year in git. Fine for the first years; later options are a slimmer pre-market snapshot or moving old Parquet to release assets / object storage. No action needed now.
@@ -172,3 +173,4 @@ Still open (no default possible):
 - 2026-10-22: Less reliance on other tools (Emil): position manager (💼 block in pre-market/EOD pushes and Journal: exit days, 20-day MA closes, earnings, R, risk), a Saxo ticket line under each buy plan, a daily job-check line in the EOD push, live intraday charts from Alpaca, and a read-only Saxo client (positions and stop orders; docs/SAXO.md) waiting for Emil's developer app.
 - 2026-10-22: Momentum strategies live (Emil): MB up pushed, Luk pullback and Minervini's VCP as new live EOD scans pushed pre-market, the Trend Template as a saved daily list (`minervini_live.py`, `luk_live.py`); every hit carries a 🌡 heat tag (its setup's result at today's heat). A/B grades stay with the tested setups.
 - 2026-10-28: Dashboard on the phone and faster (Emil): market strip above the candidates, ◀ count ▶ in one row on a phone with the keyboard-only buttons hidden, the Saxo ticket's price field filled with the plan's price per order type; the board reruns alone (fragment), its candidate list is cached per run file, the All scans tables build only when switched on, matplotlib no longer loads with the dashboard. Full reruns ~0.75 s → ~0.45 s here.
+- 2026-10-29: Backlog checked against GitHub's run history and the data repo: 15 built items ticked (each ran in Actions and saved output). Phase 1 streak: 6 trading days in a row without a missed or manual job (21-28 Oct). Found: B2 has never passed (Question 30), so BO-Watch is empty. Next: Emil's TradingView validation, the B2 decision, the Saxo developer app.
