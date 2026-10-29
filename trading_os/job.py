@@ -243,9 +243,9 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         status("Push: nothing new, none sent")
     else:
         report_path = store.run_outputs(args.data_dir, ctx)["report"]
-        link = notify.dashboard_url(session, slot, selected) or notify.report_url(
-            cfg, report_path.relative_to(args.data_dir).as_posix()
-        )
+        # A tap opens the run's report on GitHub (Emil, 29 Oct 2026: it works with the laptop
+        # off); the dashboard link (`notify.dashboard_url`) waits for an always-on server.
+        link = notify.report_url(cfg, report_path.relative_to(args.data_dir).as_posix())
         message = notify.build_message(ctx, shown, selected, cfg, push_head, click=link)
         try:
             once_more(

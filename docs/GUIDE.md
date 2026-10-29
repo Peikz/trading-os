@@ -259,8 +259,9 @@ other scan still runs and is saved, and the dashboard shows it (Today → Show: 
 Saved for the dashboard, not pushed: EP9M early, watchlist gappers, Pivot watch, Momentum Burst,
 Luk pullback, VCP, BO-Watch, EP-Day, EP9M at the close, Trend Template, B5 trigger and the
 weekly lists. Your own price alerts still push the moment they hit. **Tapping a push** opens
-Today on that push's stocks ("From the push", with *Show everything this run found* one click
-away); the address is the `DASHBOARD_URL` secret, and without it a tap opens the report.
+the run's report on GitHub (since 29 Oct 2026, so it works with the laptop off). Today can still
+open on a push's stocks (`?t=...`, "From the push"); the tap will use it again once the
+dashboard runs on an always-on server.
 
 Sent through ntfy to your phone after each run that has something (the intraday checks also
 send "no alerts" so you know they ran). Layout, top to bottom: the title with counts, the
