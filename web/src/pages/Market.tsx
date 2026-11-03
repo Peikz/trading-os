@@ -7,6 +7,7 @@ import { createChart, type Time } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 import { api, type Market as MarketTiles, type MarketPage } from "../api";
 import { deltaColour } from "../format";
+import { IconText } from "../components/IconText";
 import { plain, stripIcons } from "../plain";
 import { ApiTableView } from "../components/Table";
 import { LAYOUT, T } from "../components/chartTheme";
@@ -185,7 +186,9 @@ function Overview() {
         {m.details.length ? (
           <ul className="details">
             {m.details.map((line) => (
-              <li key={line}>{stripIcons(line)}</li>
+              <li key={line}>
+                <IconText text={line} />
+              </li>
             ))}
           </ul>
         ) : (

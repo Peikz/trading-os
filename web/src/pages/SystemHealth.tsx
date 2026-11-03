@@ -4,6 +4,7 @@
 // screener export, appended to docs/validation.md in the data repo.
 import { useEffect, useState } from "react";
 import { api, type ApiTable, type Jobs } from "../api";
+import { IconText } from "../components/IconText";
 import { ApiTableView, Sections } from "../components/Table";
 import { readText } from "../format";
 
@@ -36,7 +37,7 @@ function JobsAndData() {
       <h3>Runs per session</h3>
       <ApiTableView label="Runs per session" table={data.grid} />
       <p className="muted">
-        ✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · ⏳ not due yet.
+        <IconText text="✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · ⏳ not due yet." />{" "}
         pm 07:15-07:55, am 10:10-11:30, mid 11:55-13:30, eod 16:15-23:59 ET.
       </p>
       <h3>Data freshness</h3>

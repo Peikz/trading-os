@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockApi } from "../test/mockApi";
 import { LiveResults } from "./LiveResults";
 import { Research } from "./Research";
@@ -111,7 +111,9 @@ describe("Live results and System health", () => {
       "GET /api/system/github": { answered: false },
     });
     render(<SystemHealth />);
-    expect(await screen.findByLabelText("Runs per session")).toHaveTextContent("✅");
+    const grid = await screen.findByLabelText("Runs per session");
+    expect(within(grid).getAllByRole("img", { name: "yes" }).length).toBeGreaterThan(0); // ✅ as a green dot
+    expect(grid).not.toHaveTextContent("✅");
     expect(screen.getByText("No failure logs.")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Load the latest runs from GitHub"));
     expect(await screen.findByText(/No answer from GitHub/)).toBeInTheDocument();

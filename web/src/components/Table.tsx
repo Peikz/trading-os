@@ -4,6 +4,9 @@ import type { ReactNode } from "react";
 import type { ApiTable, Row, Value } from "../api";
 import { cell } from "../format";
 import { plain } from "../plain";
+import { hasMarks, IconText } from "./IconText";
+
+const marked = (text: string) => (hasMarks(text) ? <IconText text={text} /> : text);
 
 export function Table({
   columns,
@@ -36,7 +39,7 @@ export function Table({
           {rows.map((r, i) => (
             <tr key={i}>
               {columns.map((c) => (
-                <td key={c}>{render?.(c, r) ?? cell(c, r[c] as Value)}</td>
+                <td key={c}>{render?.(c, r) ?? marked(cell(c, r[c] as Value))}</td>
               ))}
             </tr>
           ))}

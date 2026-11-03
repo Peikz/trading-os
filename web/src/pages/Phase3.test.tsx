@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockApi } from "../test/mockApi";
 import { Guide } from "./Guide";
 import { Journal } from "./Journal";
@@ -49,7 +49,9 @@ describe("Market", () => {
     expect(await screen.findByText("GREEN")).toBeInTheDocument(); // the tile, without its icon
     rerender(<Market tab="heat" />);
     expect(await screen.findByText("Cool market: scan count 12 (under 20)")).toBeInTheDocument();
-    expect(screen.getByLabelText("Setups at this heat", { selector: "table" })).toHaveTextContent("✅ held");
+    const heat = screen.getByLabelText("Setups at this heat", { selector: "table" });
+    expect(heat).toHaveTextContent("held");
+    expect(within(heat).getByRole("img", { name: "yes" })).toHaveClass("green"); // ✅ as a green dot
     rerender(<Market tab="sectors" />);
     expect(screen.getByLabelText("Indexes, sectors and themes")).toHaveTextContent(X);
     expect(screen.getByLabelText("Top 15 industries")).toHaveTextContent("Software");

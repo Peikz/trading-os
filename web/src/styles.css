@@ -329,7 +329,8 @@ main.place { flex: 1; width: 100%; max-width: 1680px; margin: 0 auto; padding: v
   align-items: start;
 }
 .queue-col { position: sticky; top: calc(var(--top) + var(--s3)); max-height: calc(100vh - var(--top) - 48px); overflow-y: auto; }
-.queue { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.queue li { min-width: 0; }
 .queue button {
   width: 100%;
   min-height: 44px;
@@ -594,5 +595,9 @@ summary:hover { color: var(--text); }
 }
 .tabs a.tab-link:hover { text-decoration: none; color: var(--text); border-bottom-color: var(--line-2); }
 .tabs a.tab-link.on { color: var(--text); border-bottom-color: var(--accent); }
-.reasons-list { list-style: none; padding: 0; margin: var(--s1) 0; display: grid; gap: var(--s1); }
+.reasons-list, .card .reasons-list { list-style: none; padding: 0; margin: var(--s1) 0; display: grid; gap: var(--s1); }
+.reasons-list li { display: flex; gap: 10px; align-items: baseline; }
+.two > .card + .card, .grid > .card + .card { margin-top: 0; }
+.dot.inline { margin: 0 4px 0 2px; transform: translateY(-1px); }
+.dot.inline:not(.green):not(.amber):not(.red) { background: transparent; border: 1px solid var(--text-2); }
 .details { padding-left: 18px; margin: var(--s1) 0; color: var(--text-2); display: grid; gap: 4px; }
