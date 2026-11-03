@@ -41,14 +41,14 @@ from trading_os import (
     ibd,
     intraday_study,
     journal,
+    journal_view,
     live_tracking,
     long_history,
-    luk,
-    minervini,
     my_watchlists,
     notify,
     outcomes,
     plans,
+    positions_view,
     remote_data,
     report,
     review,
@@ -333,15 +333,13 @@ def live_universe(snapshot_path: str) -> pd.DataFrame:
 
 
 def tradingview_url(ticker: str, exchange: str | None = None) -> str:
-    """The stock's TradingView chart (exchange-qualified when known)."""
-    symbol = f"{exchange}:{ticker}" if exchange else str(ticker)
-    return f"https://www.tradingview.com/chart/?symbol={symbol.replace(':', '%3A')}"
+    """The stock's TradingView chart (`board_data.tradingview_url`)."""
+    return board_data.tradingview_url(ticker, exchange)
 
 
 def tradingview_list(tickers, exchanges: dict | None = None) -> str:
-    """A TradingView import (Watchlist → Import list): EXCHANGE:TICKER, comma-separated."""
-    symbols = [f"{exchanges[t]}:{t}" if (exchanges or {}).get(t) else str(t) for t in tickers]
-    return ",".join(dict.fromkeys(symbols))
+    """A TradingView import (`board_data.tradingview_list`)."""
+    return board_data.tradingview_list(tickers, exchanges)
 
 
 @st.cache_data(ttl=600)
@@ -505,74 +503,36 @@ def grade_blocks(hits: pd.DataFrame) -> None:
 
 @st.cache_data(ttl=3600)
 def fx_rate(folder: str, currency: str) -> float | None:
-    """Units of the account currency per USD: live from TradingView, else the rate stored with
-    the newest planned alerts, else None (then sizes are not suggested)."""
-    if currency == "USD":
-        return 1.0
-    try:
-        return tv.fetch_fx(CFG.sizing["fx_symbol"].format(currency=currency))
-    except Exception:  # offline or TradingView down: fall back to the stored rate
-        for run in dashboard.list_runs(Path(folder))[:10]:
-            cands = read_parquet(str(run.candidates))
-            if "plan_fx_rate" in cands and cands["plan_fx_rate"].notna().any():
-                return float(cands["plan_fx_rate"].dropna().iloc[0])
-    return None
+    """Units of the account currency per USD (`board_data.fx_rate`)."""
+    return board_data.fx_rate(Path(folder), CFG, currency)
 
 
 def setup_names() -> list[str]:
     """Live scans and the study-only setups, for tagging trades and plans."""
-    return sorted({*CFG.scans, *luk.STRATEGIES, *minervini.STRATEGIES} - {"breadth"})
+    return journal_view.setup_names(CFG)
 
 
 @st.cache_data(ttl=600)
 def recent_bars(folder: str, tickers: tuple[str, ...], sessions: int = 10) -> pd.DataFrame:
     """The newest daily bars of a few tickers, from the compact bars-2y file."""
-    import pyarrow.dataset as ds
-
-    paths = {bars_file(folder, t) for t in tickers} - {None}
-    if not paths:
-        return pd.DataFrame(columns=["ticker", "session_date", "close"])
-    flt = ds.field("ticker").isin(list(tickers))
-    bars = ds.dataset(sorted(paths), format="parquet").to_table(filter=flt).to_pandas()
-    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
-    newest = sorted(set(bars["session_date"]))[-sessions:]
-    return bars[bars["session_date"].isin(newest)]
+    return positions_view.recent_bars(Path(folder), tickers, sessions)
 
 
 def trade_bars(folder: str, trades: pd.DataFrame) -> pd.DataFrame:
     """Daily bars of the traded tickers over the trades' dates."""
-    if trades.empty:
-        return pd.DataFrame()
-    frames = [ticker_bars(folder, t) for t in sorted(set(trades["ticker"]))]
-    frames = [
-        f.assign(ticker=t) for f, t in zip(frames, sorted(set(trades["ticker"])), strict=True)
-    ]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return journal_view.trade_bars(Path(folder), trades, lambda t: ticker_bars(folder, t))
 
 
 @st.cache_data(ttl=600)
 def latest_hits(folder: str) -> pd.DataFrame:
     """Planned hits (entry, stop) of the newest run, for starting a plan from a scan."""
-    runs = dashboard.list_runs(Path(folder))
-    if not runs:
-        return pd.DataFrame()
-    cands = read_parquet(str(runs[0].candidates))
-    if "plan_entry" not in cands:
-        return pd.DataFrame()
-    keep = cands.dropna(subset=["plan_entry", "plan_stop"])
-    return keep.sort_values(["scan", "rank"])[["ticker", "scan", "plan_entry", "plan_stop"]]
+    return journal_view.latest_hits(dashboard.list_runs(Path(folder)), read_parquet)
 
 
 @st.cache_data(ttl=600)
 def study_by_strategy(folder: str) -> dict[str, pd.DataFrame]:
-    """History-study trades per strategy (EP-Day from the EP study, alert tier)."""
-    hist = strategy_cached(folder)
-    out = {k: v for k, v in hist.groupby("strategy")} if len(hist) else {}
-    built = sorted((Path(folder) / "data" / "ep_history").glob("ep_history_*.parquet"))
-    if built:
-        ep = pd.read_parquet(built[-1], columns=["is_ep_day", "tier", "r_21d", "r_trail_ma20"])
-        out["ep_day"] = ep[ep["is_ep_day"] & (ep["tier"] == "alert")]
-    return out
+    """History-study trades per strategy (`journal_view.study_by_strategy`)."""
+    return journal_view.study_by_strategy(Path(folder))
 
 
 def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
@@ -1474,39 +1434,14 @@ elif page == "Positions":
     account_usd = account.size_usd(usd_rate) if account and usd_rate else None
     last = recent_bars(str(data_dir), tuple(sorted(positions["ticker"])))
     view = review.open_risk(positions, last, account_usd)
-    prices, source = {}, "the newest daily close in the data repo (not live)"
-    if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY"):
-        try:
-            from trading_os.alpaca import AlpacaClient
-
-            client = AlpacaClient(
-                os.environ["ALPACA_API_KEY_ID"], os.environ["ALPACA_API_SECRET_KEY"], per_minute=60
-            )
-            prices = client.latest_prices(view["ticker"])
-            source = "live (Alpaca IEX, last trade) where it has one, else the last close"
-        except Exception:  # noqa: BLE001 - falls back to the close
-            prices = {}
+    prices, source = positions_view.live_prices(view["ticker"])
     a, b, c = st.columns(3)
     a.metric("Open positions", len(view))
     b.metric("Open P&L (at the close)", f"${view['open_pnl'].sum():,.0f}")
     c.metric("At risk to stops", f"${view['at_risk_usd'].sum():,.0f}")
-    plan_check = pd.DataFrame()
-    eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
-    if eod_runs:
-        from trading_os import manage
-
-        snap = read_parquet(str(eod_runs[0].universe))
-        plan_day = eod_runs[0].session
-        around = [
-            *clock.sessions_back(CFG.schedule, plan_day, 400),
-            *clock.sessions_after(CFG.schedule, plan_day, 10, plan_day + dt.timedelta(days=30)),
-        ]
-        plan_check = manage.review(positions, snap, plan_day, around, CFG.grading, "eod")
+    plan_check, _ = positions_view.plan_check(positions, runs, CFG, read_parquet)
     board.position_cards(view, plan_check, prices, source, open_chart)
-    st.caption(
-        "Exits are the plan's facts, not advice: hold = sell at the close after N sessions; "
-        "trail = out on a close under the 20-day MA. Fills and stops come from the Journal."
-    )
+    st.caption(positions_view.PLAN_CAPTION)
 
 elif page == "Screener":
     # Your own screens, TradingView style (Emil, 29 Oct 2026; `trading_os/screens.py`)
@@ -2142,35 +2077,10 @@ elif page == "Watchlists":
             if export is not None:
                 text = export.getvalue().decode("utf-8", errors="replace")
                 tickers += [t for t in my_watchlists.parse_tickers(text) if t not in tickers]
-            # Check each ticker (Emil, 26 Oct 2026: no confirmation it was a valid one): the
-            # newest scan universe first, then the daily bars (ETFs like QQQ are only there).
-            eod_now = [r for r in runs if r.slot == "eod" and r.universe.exists()]
-            known = set(read_parquet(str(eod_now[0].universe))["ticker"]) if eod_now else set()
-            valid = [t for t in tickers if t in known or len(ticker_bars(str(data_dir), t))]
-            unknown = [t for t in tickers if t not in valid]
-            on_list = my_watchlists.current(my_watchlists.load(data_dir))
-            already = set(on_list.loc[on_list["list"] == name, "ticker"]) if name else set()
-            fresh = [t for t in valid if t not in already]
             try:
-                if not tickers:
-                    st.session_state["wl_msg"] = ("warning", "No tickers to add.")
-                elif not (name or "").strip():
-                    st.session_state["wl_msg"] = ("error", "Give the new list a name first.")
-                else:
-                    if fresh:
-                        my_watchlists.add(data_dir, name, fresh, note)
-                    parts = []
-                    if fresh:
-                        parts.append(f"✅ Added to **{name}**: {', '.join(fresh)}")
-                    if valid and len(fresh) < len(valid):
-                        dup = [t for t in valid if t in already]
-                        parts.append(f"Already on the list: {', '.join(dup)}")
-                    if unknown:
-                        parts.append(f"❌ Not found, not added: {', '.join(unknown)}")
-                    kind = "success" if fresh and not unknown else "warning"
-                    if not valid:
-                        kind = "error"
-                    st.session_state["wl_msg"] = (kind, "  \n".join(parts))
+                known = my_watchlists.known_checker(runs, data_dir, read_parquet)
+                done = my_watchlists.add_checked(data_dir, name, tickers, known, note)
+                st.session_state["wl_msg"] = (done["kind"], "  \n".join(done["lines"]))
                 st.cache_data.clear()
             except ValueError as exc:
                 st.session_state["wl_msg"] = ("error", str(exc))
@@ -2373,38 +2283,17 @@ elif page == "Journal":
                 f"${view['at_risk_usd'].sum():,.0f}"
                 + (f" · {heat.sum():.1f}%" if heat is not None else ""),
             )
-            cols = ["ticker", "direction", "entry_date", "entry_avg", "open_quantity"]
-            cols += ["order_stop", "last_close", "last_date", "open_pnl", "open_r"]
-            cols += ["at_risk_usd", "at_risk_pct", "setup"]
+            cols = journal_view.OPEN_COLUMNS
             st.dataframe(
                 view[[c for c in cols if c in view]].round(2), hide_index=True, width="stretch"
             )
             st.caption("Valued at the newest daily close in the data repo, not live prices.")
-            eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
-            if eod_runs:
-                from trading_os import manage
-
-                snap = read_parquet(str(eod_runs[0].universe))
-                plan_day = eod_runs[0].session
-                around = [
-                    *clock.sessions_back(CFG.schedule, plan_day, 400),
-                    *clock.sessions_after(
-                        CFG.schedule, plan_day, 10, plan_day + dt.timedelta(days=30)
-                    ),
-                ]
-                plan_check = manage.review(positions, snap, plan_day, around, CFG.grading, "eod")
+            plan_check, plan_day = positions_view.plan_check(positions, runs, CFG, read_parquet)
+            if plan_day is not None:
                 st.markdown(f"**What each plan says** (at the {plan_day} close)")
-                shown = plan_check[["ticker", "setup", "rule", "held", "hold", "r_now", "earnings"]]
-                st.dataframe(
-                    shown.assign(action=plan_check["action"]).round(2),
-                    hide_index=True,
-                    width="stretch",
-                )
-                st.caption(
-                    "hold: sell at the close after `hold` sessions · trail_ma20: out on a close "
-                    "under the 20-day MA · cover_ma20: a short covers on a close over it. The "
-                    "same lines come in the pre-market and EOD pushes."
-                )
+                cols = journal_view.PLAN_CHECK_COLUMNS
+                st.dataframe(plan_check[cols].round(2), hide_index=True, width="stretch")
+                st.caption(journal_view.PLAN_CHECK_CAPTION)
             pick = st.selectbox("Chart", ["—", *view["ticker"]], key="open_chart")
             if pick != "—":
                 row = view[view["ticker"] == pick].iloc[0]
@@ -2433,17 +2322,10 @@ elif page == "Journal":
                 st.error(str(exc))
 
     with tab_plans:
-        plan_events = plans.load(data_dir)
-        fills = journal.reconcile(journal.load_fills(data_dir))
-        today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
-        current = plans.status(
-            plan_events, fills, CFG.schedule, CFG.journal["plan_valid_sessions"], today
-        )
+        today = journal_view.ny_today(CFG)
+        current = journal_view.plan_table(data_dir, CFG, today)
         hits = latest_hits(str(data_dir))
-        options = ["—"] + [
-            f"{r['ticker']} · {r['scan']} · buy {r['plan_entry']:.2f} stop {r['plan_stop']:.2f}"
-            for r in hits.to_dict("records")
-        ]
+        options = ["—"] + [journal_view.hit_label(r) for r in hits.to_dict("records")]
         prefill = st.selectbox("Start from a scan hit (latest run)", options, key="plan_from")
         base = hits.iloc[options.index(prefill) - 1].to_dict() if prefill != "—" else {}
         with st.form("new-plan", clear_on_submit=True):
@@ -2464,15 +2346,7 @@ elif page == "Journal":
                 ["", *setups],
                 index=([""] + setups).index(base["scan"]) if base.get("scan") in setups else 0,
             )
-            suggestion = None
-            if account and usd_rate and entry and pstop:
-                suggestion = plans.shares_for(
-                    entry,
-                    pstop,
-                    account.risk_usd(usd_rate),
-                    account.size_usd(usd_rate),
-                    account.max_position_pct,
-                )
+            suggestion = journal_view.suggest_shares(entry, pstop, account, usd_rate)
             shares = st.number_input(
                 "Shares (suggested from your risk per trade)",
                 min_value=0,
@@ -2490,17 +2364,11 @@ elif page == "Journal":
                 except ValueError as exc:
                     st.error(str(exc))
         if suggestion:
-            st.caption(
-                f"Suggested: {suggestion['shares']:,} shares · ${suggestion['position_usd']:,.0f}"
-                f" · risk ${suggestion['risk_usd']:,.0f}"
-                + (" (capped by max position)" if suggestion["capped"] else "")
-            )
+            st.caption(journal_view.suggestion_text(suggestion))
         if current.empty:
             st.info("No plans yet.")
         else:
-            cols = ["status", "session_date", "ticker", "direction", "setup", "entry", "stop"]
-            cols += ["shares", "risk_usd", "fill_date", "fill_price", "slippage_pct"]
-            cols += ["slippage_r", "note", "plan_id"]
+            cols = journal_view.PLAN_COLUMNS
             st.dataframe(
                 current[[c for c in cols if c in current]].round(3),
                 hide_index=True,
@@ -2518,38 +2386,27 @@ elif page == "Journal":
         if trades.empty:
             st.info("No closed trades yet.")
         else:
-            notes = dashboard.notes_state(data_dir)
-            graded = notes[notes["kind"] == "trade"].set_index("ref_id")["grade"].to_dict()
-            trades = trades.assign(grade=trades["trade_id"].map(graded).fillna(""))
-            bars = trade_bars(str(data_dir), trades)
-            trades = review.excursions(trades, bars)
-            with_r = trades["r_multiple"].dropna()
+            trades = journal_view.closed_trades(data_dir, lambda t: ticker_bars(str(data_dir), t))
+            summary = journal_view.closed_stats(trades)
             a, b, c, d = st.columns(4)
-            a.metric("Closed trades", len(trades))
-            b.metric("Win rate", f"{(trades['pnl'] > 0).mean() * 100:.0f}%")
-            c.metric("Avg R", f"{with_r.mean():.2f}" if len(with_r) else "n/a")
-            d.metric("Total P&L", f"{trades['pnl'].sum():,.0f}")
-            if len(with_r):
-                curve = trades.dropna(subset=["r_multiple"]).sort_values("exit_date")
-                st.line_chart(curve.set_index("exit_date")["r_multiple"].cumsum(), height=200)
-            cols = ["ticker", "direction", "setup", "entry_date", "exit_date", "entry_avg"]
-            cols += ["exit_avg", "quantity", "pnl", "r_multiple", "mfe_r", "mae_r"]
-            cols += ["exit_efficiency", "sessions_held", "signal_scan", "grade"]
+            a.metric("Closed trades", summary["trades"])
+            b.metric("Win rate", f"{summary['win_rate']:.0f}%")
+            c.metric("Avg R", f"{summary['avg_r']:.2f}" if summary["avg_r"] is not None else "n/a")
+            d.metric("Total P&L", f"{summary['pnl']:,.0f}")
+            curve = journal_view.r_curve(trades)
+            if len(curve):
+                st.line_chart(curve, height=200)
+            cols = journal_view.CLOSED_COLUMNS
             st.dataframe(
                 trades[[c for c in cols if c in trades]].round(2),
                 hide_index=True,
                 width="stretch",
             )
-            st.caption(
-                "MFE/MAE: best and worst price from the session after entry to the exit, in R. "
-                "Exit efficiency: the R you took as a share of the MFE."
-            )
+            st.caption(journal_view.MFE_CAPTION)
             pick = st.selectbox(
                 "Review a trade",
                 trades.to_dict("records"),
-                format_func=lambda t: (
-                    f"{t['ticker']} {t['entry_date']} → {t['exit_date']} ({t['pnl']:,.0f})"
-                ),
+                format_func=journal_view.trade_label,
             )
             show_trade_chart(pick)
             grade_form(
@@ -2560,17 +2417,11 @@ elif page == "Journal":
         if trades.empty:
             st.info("Your real R per setup shows here once trades are closed.")
         else:
-            daily = study_by_strategy(str(data_dir))
-            files = list(from_github("intraday-2y", "summary_none.parquet").glob("summary_none*"))
-            best = intraday_study.best(read_big(str(files[0])), 50) if files else None
-            table = review.real_vs_study(trades, daily, best)
+            with st.spinner("Fetching the minute study from GitHub…"):
+                best = journal_view.minute_best(data_dir)
+            table = review.real_vs_study(trades, study_by_strategy(str(data_dir)), best)
             st.dataframe(table.round(2), hide_index=True, width="stretch")
-            st.caption(
-                "Study = the history replay of the same strategy (entry at the signal, its stop): "
-                "21-session hold and 20-day MA trail; minute best = the minute study's best "
-                "entry, stop and exit. The gap between your R and the study's is execution "
-                "(entries, exits, selection). Facts, not advice."
-            )
+            st.caption(journal_view.REAL_CAPTION)
 
 elif page == "Market regime":
     st.subheader("Market regime")

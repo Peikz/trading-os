@@ -10,6 +10,7 @@ write. Tickers can be typed in or imported from a TradingView watchlist export (
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -126,3 +127,54 @@ def with_market(members: pd.DataFrame, universe: pd.DataFrame, hits: pd.DataFram
         scans = hits.groupby("ticker")["scan"].agg(lambda s: ", ".join(sorted(set(s))))
         out["in_scans"] = out["ticker"].map(scans).fillna("")
     return out
+
+
+def add_checked(
+    data_dir: Path,
+    list_name: str,
+    tickers: list[str],
+    is_known: Callable[[str], bool],
+    note: str = "",
+) -> dict:
+    """Add only the tickers `is_known` accepts (Emil, 26 Oct 2026: no confirmation it was a
+    valid one) and not on the list yet. Returns what happened, with the lines to show:
+    {kind: success | warning | error, added, already, unknown, lines}."""
+    name = (list_name or "").strip()
+    out = {"kind": "error", "added": [], "already": [], "unknown": [], "lines": []}
+    if not tickers:
+        return out | {"kind": "warning", "lines": ["No tickers to add."]}
+    if not name:
+        return out | {"lines": ["Give the new list a name first."]}
+    valid = [t for t in tickers if is_known(t)]
+    unknown = [t for t in tickers if t not in valid]
+    on_list = current(load(data_dir))
+    already = set(on_list.loc[on_list["list"] == name, "ticker"])
+    fresh = [t for t in valid if t not in already]
+    if fresh:
+        add(data_dir, name, fresh, note)
+    dup = [t for t in valid if t in already]
+    lines = []
+    if fresh:
+        lines.append(f"✅ Added to **{name}**: {', '.join(fresh)}")
+    if dup:
+        lines.append(f"Already on the list: {', '.join(dup)}")
+    if unknown:
+        lines.append(f"❌ Not found, not added: {', '.join(unknown)}")
+    kind = "success" if fresh and not unknown else "warning"
+    if not valid:
+        kind = "error"
+    return {"kind": kind, "added": fresh, "already": dup, "unknown": unknown, "lines": lines}
+
+
+def known_checker(runs, data_dir: Path, read=pd.read_parquet) -> Callable[[str], bool]:
+    """Whether a ticker exists: in the newest scan universe, else in the daily bars (ETFs like
+    QQQ are only there)."""
+    from trading_os import board_data
+
+    eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    known = set(read(str(eod[0].universe))["ticker"]) if eod else set()
+
+    def check(t: str) -> bool:
+        return t in known or len(board_data.daily_bars(Path(data_dir), t)) > 0
+
+    return check

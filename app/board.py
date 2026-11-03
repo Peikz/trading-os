@@ -9,13 +9,12 @@ sent to Saxo.
 
 from __future__ import annotations
 
-import datetime as dt
 from collections.abc import Callable
 
 import pandas as pd
 import streamlit as st
 
-from trading_os import board_data, clock, plans, report, ticket
+from trading_os import board_data, positions_view, report, ticket
 
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
@@ -51,73 +50,15 @@ _tiles = board_data.tiles
 
 
 def watchlist_rows(runs, data_dir, exchanges=None) -> pd.DataFrame:
-    """Your own watchlists' stocks as board rows, with the newest EOD snapshot's numbers."""
-    from trading_os import my_watchlists
-
-    members = my_watchlists.current(my_watchlists.load(data_dir))
-    if members.empty:
-        return pd.DataFrame()
-    name_col = "list_name" if "list_name" in members else members.columns[0]
-    with_universe = next((r for r in runs if r.universe.exists()), None)
-    uni = pd.DataFrame()
-    if with_universe is not None:
-        uni = pd.read_parquet(with_universe.universe).drop_duplicates("ticker").set_index("ticker")
-    rows = []
-    for m in members.to_dict("records"):
-        t = str(m["ticker"])
-        base = uni.loc[t].to_dict() if t in uni.index else {}
-        rows.append(
-            {
-                **base,
-                "ticker": t,
-                "scan": "watchlist",
-                "grade": "–",
-                "run_label": f"watchlist: {m.get(name_col)}",
-                "run_slot": "eod",
-                "run_session": with_universe.session if with_universe else None,
-            }
-        )
-    return pd.DataFrame(rows).drop_duplicates("ticker")
+    """Your own watchlists' stocks as board rows (`board_data.watchlist_rows`)."""
+    return board_data.watchlist_rows(runs, data_dir)
 
 
-def ticker_rows(runs, tickers: list[str], label: str) -> pd.DataFrame:
-    """Any stocks as board rows (a screen's results, Emil 29 Oct 2026), in the given order,
-    with the newest EOD snapshot's numbers. No grade: a screen is a list, not a tested setup."""
-    with_universe = next((r for r in runs if r.universe.exists()), None)
-    uni = pd.DataFrame()
-    if with_universe is not None:
-        uni = pd.read_parquet(with_universe.universe).drop_duplicates("ticker").set_index("ticker")
-    rows = [
-        {
-            **(uni.loc[t].to_dict() if t in uni.index else {}),
-            "ticker": t,
-            "scan": "screen",
-            "grade": "–",
-            "run_label": label,
-            "run_slot": "eod",
-            "run_session": with_universe.session if with_universe else None,
-        }
-        for t in dict.fromkeys(tickers)
-    ]
-    return pd.DataFrame(rows)
-
-
-def _plan_session(row, cfg) -> dt.date:
-    """The session the order is for: an EOD find trades the next session."""
-    day = pd.Timestamp(row["run_session"]).date()
-    if row.get("run_slot") == "eod":
-        return clock.sessions_after(cfg.schedule, day, 1, day + dt.timedelta(days=10))[0]
-    return day
-
-
-PRICE_LABELS = {
-    "stop": "Trigger price",
-    "stop_limit": "Trigger price",
-    "limit": "Limit price",
-    "limit_ext": "Limit price",
-    "market": "Expected price (sizing)",
-    "moc": "Expected price (sizing)",
-}
+# A screen's results and the Saxo ticket's sizing live in the package too (React dashboard,
+# Nov 2026): both dashboards show the same ticket.
+ticker_rows = board_data.ticker_rows
+_plan_session = board_data.plan_session
+PRICE_LABELS = board_data.PRICE_LABELS
 
 
 def ticket_view(row, key: str, cfg, data_dir, account, usd_rate) -> None:
@@ -144,49 +85,23 @@ def ticket_view(row, key: str, cfg, data_dir, account, usd_rate) -> None:
         help="The plan's price; type your own to recompute the shares.",
     )
     if account is None or not usd_rate:
-        st.caption("Add settings/account.yaml in the data repo for share sizes.")
+        st.caption(board_data.NO_ACCOUNT)
         return
-    mult = row.get("grade_risk_mult")
-    if mult is None or pd.isna(mult):
-        mult = cfg.grading["risk_mult"].get(row.get("grade"), 0.0)
-    if not mult:
-        st.caption("Not graded A+ / A / B: sized as a B for reference (no study edge).")
-        mult = cfg.grading["risk_mult"].get("B", 1.0)
-    t = ticket.build(
-        row,
-        kind,
-        account.risk_usd(usd_rate) * float(mult),
-        account.size_usd(usd_rate),
-        account.max_position_pct,
-        own or None,
-    )
+    if not board_data.risk_mult(row, cfg)[1]:
+        st.caption(board_data.UNGRADED_NOTE)
+    t = board_data.make_ticket(row, kind, cfg, account, usd_rate, own or None)
     if t is None:
-        st.warning("No ticket: the price must be over the stop, and the plan needs both.")
+        st.warning(board_data.NO_TICKET)
         return
     if t.when:
         st.markdown(f"**When:** {t.when}")
     for label, value in t.lines():  # one column, in the order Saxo's ticket asks for them
         st.caption(label)
         st.code(value, language=None)
-    risk_local = t.risk_usd * usd_rate
-    st.caption(
-        f"Risk {t.risk_usd:,.0f} USD ({risk_local:,.0f} {account.currency}) · position "
-        f"{t.position_usd:,.0f} USD · sized on {t.est_entry:.2f}"
-        + (" · capped by your max position" if t.capped else "")
-    )
+    st.caption(board_data.ticket_caption(t, usd_rate, account.currency))
     if st.button("✅ Placed in Saxo: save as plan", key=f"{key}_placed"):
         try:
-            plans.create(
-                data_dir,
-                _plan_session(row, cfg),
-                str(row["ticker"]),
-                "long",
-                t.est_entry,
-                t.stop,
-                t.shares,
-                str(row["scan"]),
-                f"board: {ticket.ORDER_TYPES[kind]}, {row.get('grade')}",
-            )
+            board_data.place_plan(data_dir, row, cfg, t, kind)
             st.success("Saved as a plan. Your fill will match it in the Journal.")
         except ValueError as exc:
             st.error(str(exc))
@@ -263,7 +178,7 @@ def stats_strip(row) -> None:
     st.html(html.replace("$", "&#36;"))  # plain HTML: a $ would start math in markdown
 
 
-FLAGS = {"🟥": "Flag red", "🟨": "Flag yellow", "🟩": "Flag green"}
+FLAGS = board_data.FLAGS
 
 
 def notes_and_alerts(row, data_dir) -> None:
@@ -290,8 +205,7 @@ def notes_and_alerts(row, data_dir) -> None:
     mine = stock_notes.current(data_dir, t)
     for n in mine.tail(3).to_dict("records")[::-1] if len(mine) else []:
         st.caption(f"{n.get('note_date')}: {n.get('text')}")
-    levels = {k: row.get(k) for k in ("pivot", "plan_entry", "plan_stop")}
-    default = next((float(v) for v in levels.values() if v is not None and v == v and v), 0.0)
+    default = board_data.alert_default(row)
     with st.form(f"alert_{t}", clear_on_submit=False):
         a, b = st.columns(2)
         level = a.number_input(
@@ -565,53 +479,28 @@ def position_cards(
     view: pd.DataFrame, plan_check: pd.DataFrame, prices: dict, source: str, open_chart
 ) -> None:
     """The positions cockpit: one card per open position, with the price (live when the Alpaca
-    keys are set), open R and P&L, the distance to the stop, and what the plan says today."""
-    plan = plan_check.set_index("ticker") if len(plan_check) else pd.DataFrame()
+    keys are set), open R and P&L, the distance to the stop, and what the plan says today
+    (the numbers: `positions_view.cards`)."""
     st.caption(f"Prices: {source}")
-    for n, p in enumerate(view.to_dict("records")):
-        t = p["ticker"]
-        price = prices.get(t, p.get("last_close"))
-        sign = 1 if p.get("direction") == "long" else -1
-        entry, stop, qty = p.get("entry_avg"), p.get("order_stop"), abs(p.get("open_quantity") or 0)
-        risk = (entry - stop) * sign if stop == stop and stop is not None else float("nan")
-        r_now = (price - entry) * sign / risk if risk and risk > 0 else float("nan")
-        pnl = (price - entry) * sign * qty
-        to_stop = (price - stop) * sign / price * 100 if risk == risk else float("nan")
-        info = plan.loc[t] if t in plan.index else {}
+    for n, c in enumerate(positions_view.cards(view, plan_check, prices)):
+        t, stop, r_now, to_stop = c["ticker"], c["stop"], c["open_r"], c["to_stop_pct"]
         with st.container(border=True):
             st.markdown(
-                f"<b style='font-size:1.15em'>{t}</b> &nbsp;·&nbsp; {p.get('setup') or ''}"
-                f" &nbsp;<span style='opacity:.6'>{p.get('direction')} · {qty:,.0f} sh"
-                f" · in {p.get('entry_date')}</span>",
+                f"<b style='font-size:1.15em'>{t}</b> &nbsp;·&nbsp; {c['setup']}"
+                f" &nbsp;<span style='opacity:.6'>{c['direction']} · {c['shares']:,.0f} sh"
+                f" · in {c['entry_date']}</span>",
                 unsafe_allow_html=True,
             )
-            a, b, c = st.columns(3)
-            a.metric("Price", f"{price:,.2f}", f"{(price / entry - 1) * 100 * sign:+.1f}%")
-            b.metric("Open R", f"{r_now:+.2f}R" if r_now == r_now else "n/a", f"${pnl:,.0f}")
-            c.metric(
+            a, b, d = st.columns(3)
+            a.metric("Price", f"{c['price']:,.2f}", f"{c['move_pct']:+.1f}%")
+            b.metric("Open R", f"{r_now:+.2f}R" if r_now == r_now else "n/a", f"${c['pnl']:,.0f}")
+            d.metric(
                 "To stop",
                 f"{to_stop:.1f}%" if to_stop == to_stop else "no stop",
-                f"stop {stop:,.2f}" if stop == stop and stop is not None else None,
+                f"stop {stop:,.2f}" if stop == stop else None,
                 delta_color="off",
             )
-            facts = []
-            if len(info):
-                rule, held, hold = info.get("rule"), info.get("held"), info.get("hold")
-                if rule == "hold" and hold == hold and hold:
-                    facts.append(
-                        f"Plan: sell at the close after {int(hold)} sessions · day "
-                        f"{int(held)} of {int(hold)}"
-                    )
-                elif rule == "trail_ma20":
-                    facts.append("Plan: trail the 20-day MA, out on a close under it")
-                elif rule == "cover_ma20":
-                    facts.append("Plan: cover on a close over the 20-day MA")
-                action = info.get("action")
-                if isinstance(action, str) and action:
-                    facts.append(f"**⚠️ {action}**")
-                earn = info.get("earnings")
-                if earn is not None and not pd.isna(earn):
-                    facts.append(f"📅 Earnings {earn}")
+            facts = [f"**{f}**" if f.startswith("⚠️") else f for f in c["facts"]]
             if facts:
                 st.markdown("\n".join(f"- {f}" for f in facts))
             st.button("📈 Chart", key=f"pos_{n}_chart", on_click=open_chart, args=(t,))
