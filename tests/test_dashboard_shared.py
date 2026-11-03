@@ -102,7 +102,7 @@ def test_monthly_bars_and_watchlists_by_name(tmp_path):
 
     import pandas as pd
 
-    from trading_os import board_data, chart_series, interactive_chart, my_watchlists
+    from trading_os import board_data, chart_series, my_watchlists
 
     days = pd.bdate_range("2026-01-01", "2026-03-31")
     bars = pd.DataFrame({"session_date": days.date, "open": range(len(days)),
@@ -113,8 +113,13 @@ def test_monthly_bars_and_watchlists_by_name(tmp_path):
     assert len(m) == 3 and m["session_date"].iloc[0] == dt.date(2026, 1, 1)
     assert m["open"].iloc[1] == bars[days.month == 2]["open"].iloc[0]
     assert m["volume"].iloc[0] == 10 * (days.month == 1).sum()
-    labelled = interactive_chart.monthly(bars)
-    assert labelled["session_date"].iloc[0] == dt.date(2026, 1, 30)  # the month's last session
+    try:  # plotly is in the app group only; CI's base job runs without it
+        from trading_os import interactive_chart
+    except ImportError:
+        interactive_chart = None
+    if interactive_chart is not None:
+        labelled = interactive_chart.monthly(bars)
+        assert labelled["session_date"].iloc[0] == dt.date(2026, 1, 30)  # the month's last day
     my_watchlists.add(tmp_path, "Leaders", ["AAZQ", "BBZQ"])
     my_watchlists.add(tmp_path, "Flag green", ["CCZQ"])
     assert set(board_data.watchlist_names(tmp_path)) == {"Leaders", "Flag green"}
