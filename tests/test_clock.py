@@ -160,3 +160,17 @@ def test_early_window_is_copenhagen_time_on_trading_days(schedule):
     assert early_window(schedule, dt.datetime(2026, 10, 26, 10, 30, tzinfo=dt.UTC))  # 11:30
     assert not early_window(schedule, dt.datetime(2026, 10, 26, 12, 0, tzinfo=dt.UTC))  # 13:00
     assert not early_window(schedule, dt.datetime(2026, 10, 25, 10, 30, tzinfo=dt.UTC))  # Sunday
+
+
+def test_next_slot_is_the_next_window_on_a_session(schedule):
+    from trading_os.clock import next_slot
+
+    # Tue 3 Nov 2026 08:00 EST (13:00 UTC): the pre-market window has closed, 10:10 is next
+    slot, start = next_slot(schedule, utc(2026, 11, 3, 13, 0))
+    assert slot == "am" and start.strftime("%Y-%m-%d %H:%M") == "2026-11-03 10:10"
+    # Friday after the after-hours window: Monday's pre-market
+    slot, start = next_slot(schedule, utc(2026, 11, 6, 23, 30))
+    assert slot == "pm" and start.date() == dt.date(2026, 11, 9)
+    # Wednesday before Thanksgiving, late: the holiday is skipped
+    slot, start = next_slot(schedule, utc(2026, 11, 26, 2, 0))
+    assert slot == "pm" and start.date() == dt.date(2026, 11, 27)

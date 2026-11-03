@@ -205,6 +205,7 @@ def register(app: FastAPI, ctx: Context) -> None:
             return out | {"error": board_data.NO_TICKET}
         out["ticket"] = asdict(t) | {
             "lines": [{"label": k, "value": v} for k, v in t.lines()],
+            "summary": t.summary(),
             "caption": board_data.ticket_caption(t, usd_rate, acct.currency),
         }
         return out

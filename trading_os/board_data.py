@@ -479,3 +479,188 @@ def tradingview_list(tickers, exchanges: Mapping[str, str] | None = None) -> str
     listing = {t: e for t, e in (exchanges or {}).items() if isinstance(e, str) and e}
     symbols = [f"{listing[t]}:{t}" if t in listing else str(t) for t in tickers]
     return ",".join(dict.fromkeys(symbols))
+
+
+# --- the React dashboard's redesign (Emil, 4 Nov 2026): the plan card leads with the decision,
+# a "Why" card in plain sentences, one word for the market. Words only; the numbers and rules
+# are the study's and the scans', unchanged.
+
+# The study's buy time per entry rule: (New York time, the line in New York time, the line in
+# Copenhagen time). The Copenhagen time is worked out per session, so the weeks when only one
+# side has moved its clocks are right too.
+ENTRY_TIMES = {
+    "t_1030": ("10:30", "Buy at {t} New York", "{t} in Copenhagen"),
+    "next_1030": ("10:30", "Buy at {t} New York", "{t} in Copenhagen"),
+    "t_1015": ("10:15", "Buy after {t} New York", "after {t} in Copenhagen"),
+    "t_1200": ("12:00", "Buy after {t} New York", "after {t} in Copenhagen"),
+    "next_open": ("09:30", "Buy at the open, {t} New York", "{t} in Copenhagen"),
+    "pivot_1000": ("10:00", "Buy-stop at the pivot from {t} New York", "from {t} in Copenhagen"),
+    "pm_0915": ("09:15", "Buy pre-market at {t} New York", "{t} in Copenhagen"),
+    "close": ("15:45", "Buy at {t} New York, before the close", "{t} in Copenhagen"),
+    "ah_1645": ("17:00", "Buy after hours, before {t} New York", "before {t} in Copenhagen"),
+    "ah_1800": ("18:00", "Buy after hours at {t} New York", "{t} in Copenhagen"),
+}
+# Pivot setups without an entry rule: a buy-stop at the pivot (MA-surf from 10:00)
+PIVOT_ENTRY = {"ma_surf": "pivot_1000"}
+PIVOT_SCANS = ("breakout_watch", "pivot_watch", "vcp", "ma_surf")
+
+
+def decision(row: Mapping[str, Any], cfg) -> dict | None:
+    """The plan card's first line: `Buy at 10:30 New York`, the same moment in Copenhagen, and
+    the session it is for. None for anything but A+ / A / B (no study edge, no plan time)."""
+    from trading_os import clock
+
+    if row.get("grade") not in ("A+", "A", "B"):
+        return None
+    if row.get("carried_from") == "ah":  # the morning after: that buy time has passed
+        return {
+            "text": "Found after hours last night",
+            "local": "The study bought at 16:45 New York, before 17:00",
+            "session": None,
+            "day": None,
+        }
+    try:
+        day = plan_session(row, cfg)
+    except (KeyError, TypeError, ValueError, IndexError):
+        day = None
+    rule = str(row.get("grade_entry_rule") or "") or PIVOT_ENTRY.get(str(row.get("scan")), "")
+    out = {"session": day.isoformat() if day else None, "day": f"{day:%a %d %b}" if day else None}
+    if rule in ENTRY_TIMES:
+        hhmm, ny_text, local_text = ENTRY_TIMES[rule]
+        hour, minute = map(int, hhmm.split(":"))
+        when = dt.datetime.combine(day or dt.date.today(), dt.time(hour, minute), clock.NEW_YORK)
+        local = when.astimezone(clock.COPENHAGEN)
+        return out | {
+            "text": ny_text.format(t=hhmm),
+            "local": local_text.format(t=f"{local:%H:%M}"),
+        }
+    if row.get("scan") in PIVOT_SCANS:
+        pivot = row.get("pivot")
+        at = f" {float(pivot):.2f}" if pivot is not None and pivot == pivot else ""
+        return out | {"text": f"Buy-stop at the pivot{at}", "local": None}
+    return out | {"text": "Buy by the study's plan", "local": None}
+
+
+def _plain(text: str) -> str:
+    """A tag or point without its leading icon, first letter capitalised."""
+    text = text.strip()
+    while text and not text[0].isalnum() and text[0] not in "$+-":
+        text = text[1:].lstrip()
+    return text[:1].upper() + text[1:]
+
+
+def why(row: Mapping[str, Any]) -> dict:
+    """The "Why A+" card: the grade's summary (`4 quality points`), each quality point held or
+    not, then the exit, the history behind the grade and the tags, as plain sentences."""
+    summary = row.get("grade_why")
+    points = []
+    raw = row.get("grade_points")
+    if isinstance(raw, str) and raw:
+        for part in raw.split(" · "):
+            part = part.strip()
+            if part:
+                points.append({"ok": not part.startswith("❌"), "text": _plain(part)})
+    lines = []
+    hold, median = row.get("grade_hold_sessions"), row.get("grade_stat_days_median")
+    if hold is not None and not pd.isna(hold):
+        tail = f" (median {median:.0f})" if median is not None and not pd.isna(median) else ""
+        lines.append(f"Out at the close after {int(hold)} sessions{tail}.")
+    else:
+        exit_text = notify.EXIT_TEXT.get(str(row.get("grade_exit")), "")
+        if exit_text:
+            lines.append(_plain(exit_text) + ".")
+    n, mean, win = (row.get(f"grade_stat_{k}") for k in ("trades", "mean_r", "win_pct"))
+    if n is not None and not pd.isna(n) and mean is not None and not pd.isna(mean):
+        won = f"{win:.0f}% won, " if win is not None and not pd.isna(win) else ""
+        lines.append(f"{int(n):,} past trades in 2016-26: {won}average {mean:+.2f}R.")
+    lines += [_plain(t) for t in tags(row)]
+    return {
+        "summary": _plain(summary) if isinstance(summary, str) and summary else None,
+        "points": points,
+        "lines": lines,
+    }
+
+
+MOOD_WORDS = {"green": "Healthy market", "amber": "Cautious market", "red": "Weak market"}
+LIGHT_LEVELS = {"GREEN": "green", "YELLOW": "amber", "RED": "red"}
+
+
+def market_mood(
+    row: Mapping[str, Any] | None, ibd_info: Mapping | None, heat_stats: Mapping | None
+) -> dict:
+    """One word for the market from the three things the push shows (QQQ light, heat, IBD
+    state): green when all three are green, red when two or more are red, amber otherwise; with
+    each one's reason in plain words. A summary of facts, never a rule: nothing trades on it."""
+    row = row or {}
+    reasons = []
+    light = row.get("qqq_light")
+    if isinstance(light, str) and light in LIGHT_LEVELS:
+        reasons.append({"level": LIGHT_LEVELS[light], "text": f"QQQ light is {light.lower()}."})
+    heat_name = None
+    if heat_stats:
+        heat_name = heat.band(row.get("scan_count"), heat_stats["bands"])
+    if heat_name is not None:
+        names = [name for _, name in heat_stats["bands"]]
+        k = names.index(heat_name)
+        level = "red" if k == 0 else "green" if k == len(names) - 1 else "amber"
+        label = heat_stats.get("band_labels", {}).get(heat_name, "")
+        count = int(float(row["scan_count"]))
+        reasons.append(
+            {
+                "level": level,
+                "text": f"Heat is {heat_name}: {count} stocks up 50 %+ in a quarter"
+                + (f" (this band: {label})." if label else "."),
+            }
+        )
+    if ibd_info:
+        words = ibd.words(ibd_info["state"], ibd_info["dist_count"])
+        if words:
+            level = "green" if "🟢" in words else "red" if "🔴" in words else "amber"
+            days = ibd.sell_days(ibd_info["state"], ibd_info["dist_count"])
+            reasons.append({"level": level, "text": f"IBD: {_plain(words).lower()} ({days})."})
+    levels = [r["level"] for r in reasons]
+    if not levels:
+        mood = None
+    elif all(x == "green" for x in levels):
+        mood = "green"
+    elif levels.count("red") >= 2 or all(x == "red" for x in levels):
+        mood = "red"
+    else:
+        mood = "amber"
+    quotes = []
+    for name in ("spy", "qqq", "vix"):
+        close = row.get(f"{name}_close")
+        if close is not None and not pd.isna(close):
+            quotes.append(
+                {
+                    "label": name.upper(),
+                    "value": f"{close:,.2f}",
+                    "delta": _signed(row.get(f"{name}_chg_pct")),
+                }
+            )
+    return {
+        "level": mood,
+        "word": MOOD_WORDS.get(mood, "No market data"),
+        "reasons": reasons,
+        "quotes": quotes,
+    }
+
+
+def next_scan(cfg, now: dt.datetime) -> dict | None:
+    """The next scheduled scan (the quiet day's line): its name and start in New York and
+    Copenhagen time."""
+    from trading_os import clock
+
+    found = clock.next_slot(cfg.schedule, now)
+    if found is None:
+        return None
+    slot, start = found
+    names = {"pm": "pre-market scan", "am": "10:15 check", "mid": "12:00 check",
+             "eod": "end-of-day scan", "ah": "after-hours scan"}  # fmt: skip
+    local = start.astimezone(clock.COPENHAGEN)
+    return {
+        "slot": slot,
+        "name": names.get(slot, slot),
+        "when": f"{start:%a %d %b}, {start:%H:%M} New York ({local:%H:%M} in Copenhagen)",
+        "at": start.isoformat(),
+    }

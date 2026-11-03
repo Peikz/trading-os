@@ -10,6 +10,7 @@ writes (plans, fills, grades, notes, watchlists, alerts). No orders, no pushes, 
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import threading
 import time
@@ -23,7 +24,7 @@ from pydantic import BaseModel, Field
 from api import chart, pages, research
 from api import market as market_page
 from api.serialize import records, scalar
-from trading_os import board_data, chart_series, dashboard, notify, screens
+from trading_os import board_data, chart_series, dashboard, heat, notify, screens
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
 from trading_os.config import load_config
 
@@ -86,11 +87,12 @@ class ScreenSpec(BaseModel):
 
 
 class ScreenRun(ScreenSpec):
-    source: Literal["all", "hits"] = "all"
+    source: Literal["all", "hits", "list"] = "all"
     data: Literal["close", "live"] = "close"
     run: str | None = None  # run id, for source "hits"
     scan: str | None = None
     tiers: list[str] = Field(default_factory=lambda: ["alert", "log"])
+    watchlist: str | None = None  # one of your lists, for source "list" (Nov 2026)
     limit: int = Field(500, ge=1, le=5000)
 
 
@@ -141,7 +143,19 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         out["stats"] = [{"label": k, "value": v} for k, v in board_data.key_stats(row)]
         out["levels"] = board_data.levels(row)
         out["alert_default"] = board_data.alert_default(row)
+        # The redesign's plan card (Nov 2026): the decision line and the "Why" card
+        try:
+            out["decision"] = board_data.decision(row, cfg())
+        except (KeyError, TypeError, ValueError):
+            out["decision"] = None
+        out["why"] = board_data.why(row)
         return out
+
+    def next_scan() -> dict | None:
+        try:
+            return board_data.next_scan(cfg(), dt.datetime.now(dt.UTC))
+        except Exception:  # noqa: BLE001 - the quiet day shows no time
+            return None
 
     @app.get("/api/health")
     def health() -> dict:
@@ -203,7 +217,13 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
                 listing = exchanges(str(with_uni.universe)) if with_uni else {}
                 rows_["exchange"] = rows_["ticker"].map(listing)
             rows = [board_row(r) for r in rows_.to_dict("records")]
-            return {"scope": scope, "rows": rows, "hidden_c": 0, "total": len(rows)}
+            return {
+                "scope": scope,
+                "rows": rows,
+                "hidden_c": 0,
+                "total": len(rows),
+                "next_scan": next_scan(),
+            }
         every = scope == "all" or bool(wanted)
         hits = board_data.collect(found, cfg(), cache.scan_frames, exchanges, everything=every)
         if wanted and len(hits):
@@ -212,7 +232,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             hits = hits.assign(_o=hits["ticker"].map(order)).sort_values("_o")
             scope = "all"
         if hits.empty:
-            return {"scope": scope, "rows": [], "hidden_c": 0, "total": 0}
+            return {"scope": scope, "rows": [], "hidden_c": 0, "total": 0, "next_scan": next_scan()}
         graded = hits[hits["grade"].isin(GRADED)]
         shown = graded if scope == "graded" else hits
         rows = [board_row(r) for r in shown.to_dict("records")]
@@ -221,6 +241,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             "rows": rows,
             "hidden_c": int(len(hits) - len(graded)) if scope == "graded" else 0,
             "total": int(len(hits)),
+            "next_scan": next_scan(),
         }
 
     @app.get("/api/market")
@@ -228,12 +249,17 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         """The market tiles: QQQ light, heat, IBD state, SPY, QQQ, VIX; and the full lines."""
         row, ibd_info, heat_text = board_data.market_inputs(root(), runs(manual=False))
         if not row:
-            return {"tiles": [], "details": []}
+            return {"tiles": [], "details": [], "mood": board_data.market_mood(None, None, None)}
         tiles = board_data.tiles(row, ibd_info, heat_text)
+        try:
+            mood = board_data.market_mood(row, ibd_info, heat.load(root()))
+        except (KeyError, TypeError, ValueError):  # an odd heat file: the word from the rest
+            mood = board_data.market_mood(row, ibd_info, None)
         return {
             "tiles": [{"label": k, "value": v, "delta": d} for k, v, d in tiles],
             "details": board_data.market_details(row),
             "session": scalar(row.get("session_date")),
+            "mood": scalar(mood),
         }
 
     @app.get("/api/bars/{ticker}")
@@ -265,6 +291,25 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         ]
         lines = chart_series.indicator_lines(b, picked, anchor, bench)
         return {"ticker": ticker, "tf": tf, "candles": candles, "lines": lines}
+
+    @app.get("/api/sparks")
+    def sparks(t: str, n: int = Query(60, ge=5, le=260)) -> dict:
+        """The last `n` daily candles of up to 60 stocks at once: the Stocks grid's mini charts
+        (Nov 2026). Stocks without bars come back empty."""
+        tickers = [x.strip().upper() for x in t.split(",") if x.strip()][:60]
+        out = {}
+        for ticker in dict.fromkeys(tickers):
+            if len(ticker) > 12:
+                continue
+            b = board_data.daily_bars(root(), ticker).tail(n)
+            out[ticker] = [
+                {"time": f"{d}", "open": float(o), "high": float(h), "low": float(lo),
+                 "close": float(c)}
+                for d, o, h, lo, c in zip(
+                    b["session_date"], b["open"], b["high"], b["low"], b["close"], strict=True
+                )
+            ]  # fmt: skip
+        return out
 
     # --- Screener
 
@@ -316,6 +361,17 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
                 data["exchange"] = data["ticker"].map(exchanges(str(eod.universe)))
             scan = req.scan
             when = f"{notify.SCAN_LABELS.get(scan, scan)} hits, {run.label}"
+        elif req.source == "list":
+            # Your own list's stocks with the last close's numbers (the Stocks page's filters)
+            from trading_os import my_watchlists
+
+            members = my_watchlists.current(my_watchlists.load(root()))
+            names = members["list"] if "list" in members else pd.Series(dtype=str)
+            mine = members[names == (req.watchlist or "")]["ticker"].astype(str).tolist()
+            if not mine:
+                raise HTTPException(404, "No stocks in that list.")
+            data = snap[snap["ticker"].isin(mine)]
+            when = f"{req.watchlist}, the {eod.session:%d %b} close"
         elif req.data == "live":
             now = time.time()
             failed = None

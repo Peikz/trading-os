@@ -176,3 +176,38 @@ def github_runs(runs: pd.DataFrame, limit: int = 40) -> pd.DataFrame:
     ]
     keep = ["workflowName", "event", "started", "minutes_late", "status", "conclusion"]
     return runs[keep].rename(columns={"workflowName": "workflow"})
+
+
+def status(data_dir: Path, schedule, now: dt.datetime) -> dict:
+    """The dashboard's status dot (React redesign, Nov 2026): "error" when a job wrote a failure
+    log in the last two days, "warn" when a scheduled run of the last two sessions is missing,
+    else "ok"; with one line of text and the details behind it."""
+    grid = run_grid(data_dir, schedule, now, 2)
+    missing = [
+        f"{row['session']:%a %d %b} {slot}"
+        for row in grid.to_dict("records")
+        for slot in SLOTS
+        if row.get(slot) == MARKS["missing"]
+    ]
+    recent = []
+    cutoff = (now - dt.timedelta(days=2)).strftime("%Y-%m-%d")
+    for err in errors(data_dir, 10).to_dict("records"):
+        if str(err["when"])[:10] >= cutoff:
+            recent.append(f"{err['job']} failed ({str(err['when'])[:10]})")
+    if grid.empty:
+        return {"level": "warn", "text": "No runs in the data yet", "details": []}
+    if recent:
+        n = len(recent)
+        return {
+            "level": "error",
+            "text": f"{n} job{'s' if n > 1 else ''} failed",
+            "details": recent + missing,
+        }
+    if missing:
+        n = len(missing)
+        return {
+            "level": "warn",
+            "text": f"{n} run{'s' if n > 1 else ''} missing",
+            "details": missing,
+        }
+    return {"level": "ok", "text": "Every scheduled run saved", "details": []}

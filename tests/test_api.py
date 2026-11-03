@@ -182,3 +182,46 @@ def test_screens_save_and_delete_in_the_data_repo(client, data):
 def test_no_data_folder_is_a_clear_error(tmp_path):
     out = TestClient(create_app(tmp_path / "missing")).get("/api/runs")
     assert out.status_code == 503
+
+
+def test_today_rows_carry_the_decision_and_why_and_the_next_scan(client):
+    out = client.get("/api/today").json()
+    row = out["rows"][0]  # an A+ without an entry rule: the study's plan, no time
+    assert row["decision"]["text"] == "Buy by the study's plan"
+    assert row["decision"]["session"] > str(SESSION)  # an EOD find trades the next session
+    assert row["why"] == {"summary": None, "points": [], "lines": []}
+    assert out["next_scan"] is None or out["next_scan"]["when"].count("New York") == 1
+
+
+def test_market_carries_one_word_with_its_reasons(client):
+    mood = client.get("/api/market").json()["mood"]
+    assert mood["level"] == "green" and mood["word"] == "Healthy market"
+    assert mood["reasons"] == [{"level": "green", "text": "QQQ light is green."}]
+    assert [q["label"] for q in mood["quotes"]] == ["SPY", "VIX"]
+
+
+def test_sparks_give_many_stocks_last_candles(client):
+    out = client.get(f"/api/sparks?t={A},{B}&n=20").json()
+    assert len(out[A]) == 20 and set(out[A][0]) == {"time", "open", "high", "low", "close"}
+    assert out[B] == []  # no bars for this one
+
+
+def test_a_screen_over_one_of_your_lists(data, client):
+    from trading_os import my_watchlists
+
+    my_watchlists.add(data, "Leaders", [A, C])
+    out = client.post(
+        "/api/screener/run",
+        json={"source": "list", "watchlist": "Leaders", "filters": [
+            {"field": "adr20_pct", "op": ">=", "value": 6}]},
+    ).json()  # fmt: skip
+    assert out["tickers"] == [C] and out["count"] == 1
+    every = client.post("/api/screener/run", json={"source": "list", "watchlist": "Leaders"}).json()
+    assert sorted(every["tickers"]) == sorted([A, C])
+    missing = client.post("/api/screener/run", json={"source": "list", "watchlist": "Nope"})
+    assert missing.status_code == 404
+
+
+def test_status_dot(client):
+    out = client.get("/api/system/status").json()
+    assert out["level"] in ("ok", "warn", "error") and out["text"]

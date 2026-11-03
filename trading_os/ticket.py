@@ -82,6 +82,19 @@ class Ticket:
         out.append(("Stop loss (own order, GTC)", f"{self.stop:.2f}"))
         return out
 
+    def summary(self) -> str:
+        """`Buy 625 · Stop (buy-stop) 2.40 · Day · stop loss 1.75 GTC`: the whole order on one
+        line (the React dashboard's copy button, Nov 2026)."""
+        price = ""
+        if self.trigger is not None and self.limit is not None:
+            price = f" {self.trigger:.2f}, limit {self.limit:.2f}"
+        elif self.trigger is not None:
+            price = f" {self.trigger:.2f}"
+        elif self.limit is not None:
+            price = f" {self.limit:.2f}"
+        kind = ORDER_TYPES[self.order_type]
+        return f"Buy {self.shares} · {kind}{price} · Day · stop loss {self.stop:.2f} GTC"
+
 
 def plan_price(row: Mapping[str, Any], order_type: str) -> float | None:
     """The plan's price for `order_type`: the pivot as a buy-stop's trigger when the hit has
