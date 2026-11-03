@@ -101,7 +101,8 @@ def register(app: FastAPI, ctx: Context) -> None:
         eod = next((r for r in ctx.runs() if r.slot == "eod" and r.universe.exists()), None)
         exchange = ctx.exchanges(str(eod.universe)).get(t) if eod else None
         saved = marks.to_dict("records") if len(marks) else []
-        return (
+        # scalar(): saved marks and bars come from parquet (numpy numbers)
+        return scalar(
             body
             | {
                 "ticker": t,

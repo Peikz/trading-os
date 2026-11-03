@@ -102,11 +102,11 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
 
     @app.get("/api/research/how-tested")
     def how_tested() -> dict:
-        return research_view.how_tested(cfg(), root())
+        return scalar(research_view.how_tested(cfg(), root()))
 
     @app.get("/api/research/grades")
     def grades() -> dict:
-        return research_view.study_grades(cfg(), root())
+        return scalar(research_view.study_grades(cfg(), root()))
 
     @app.get("/api/research/notes")
     def notes(name: str | None = None) -> dict:
@@ -155,24 +155,26 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
         summary_t, compared = research_view.history_tables(view, cfg().exits, split)
         one = q.one if q.one in (picked or names) else (picked or names)[0]
         events = research_view.history_events(view, one)
-        return {
-            "empty": False,
-            "graded": graded,
-            "caption": research_view.HISTORY_CAPTION,
-            "strategies": names,
-            "years": years,
-            "picked": picked,
-            "chosen_years": chosen,
-            "ep_flags": research_view.EP_FLAGS,
-            "splits": splits,
-            "split": split,
-            "count": int(len(view)),
-            "summary": table(summary_t, digits=2),
-            "summary_caption": research_view.SUMMARY_CAPTION,
-            "compared": table(compared, digits=2),
-            "one": one,
-            "events": table(events, limit=500),
-        }
+        return scalar(
+            {
+                "empty": False,
+                "graded": graded,
+                "caption": research_view.HISTORY_CAPTION,
+                "strategies": names,
+                "years": years,
+                "picked": picked,
+                "chosen_years": chosen,
+                "ep_flags": research_view.EP_FLAGS,
+                "splits": splits,
+                "split": split,
+                "count": int(len(view)),
+                "summary": table(summary_t, digits=2),
+                "summary_caption": research_view.SUMMARY_CAPTION,
+                "compared": table(compared, digits=2),
+                "one": one,
+                "events": table(events, limit=500),
+            }
+        )
 
     @app.get("/api/research/history/event")
     def history_event(
@@ -214,15 +216,17 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
             exit_names = research_view.exits_of(overall)
             ex = exit if exit in exit_names else exit_names[0]
             one = strategy if strategy in names else names[0]
-            return {
-                "published": True,
-                "best": table(research_view.best(overall, min_trades), digits=2),
-                "exits": exit_names,
-                "exit": ex,
-                "strategies": names,
-                "strategy": one,
-                "by_year": table(research_view.by_year_table(by_year, one, ex), digits=2),
-            }
+            return scalar(
+                {
+                    "published": True,
+                    "best": table(research_view.best(overall, min_trades), digits=2),
+                    "exits": exit_names,
+                    "exit": ex,
+                    "strategies": names,
+                    "strategy": one,
+                    "by_year": table(research_view.by_year_table(by_year, one, ex), digits=2),
+                }
+            )
         splits = research_view.entries_2y_splits(root())
         if not splits:
             return {"published": False}
@@ -237,20 +241,24 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
             if exits is None
             else [e for e in exits.split(",") if e in exit_names]
         )
-        return {
-            "published": True,
-            "caption": research_view.ENTRIES_CAPTION,
-            "splits": splits,
-            "split": group,
-            "strategies": names,
-            "picked": picked,
-            "exits": exit_names,
-            "shown": shown,
-            "best": table(research_view.best(part, min_trades), digits=2)
-            if group == "none"
-            else None,
-            "table": table(research_view.entries_table(part, group, shown, min_trades), digits=2),
-        }
+        return scalar(
+            {
+                "published": True,
+                "caption": research_view.ENTRIES_CAPTION,
+                "splits": splits,
+                "split": group,
+                "strategies": names,
+                "picked": picked,
+                "exits": exit_names,
+                "shown": shown,
+                "best": table(research_view.best(part, min_trades), digits=2)
+                if group == "none"
+                else None,
+                "table": table(
+                    research_view.entries_table(part, group, shown, min_trades), digits=2
+                ),
+            }
+        )
 
     @app.get("/api/research/entries/trades/{strategy}")
     def entry_trades(strategy: str) -> dict:
@@ -270,7 +278,7 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
         if folder is None:
             return {"published": False}
         v = research_view.regime_view(folder, source, strategy, exit, entry, stop)
-        return {
+        return scalar({
             "published": True,
             "caption": research_view.REGIME_CAPTION,
             "mix": table(research_view.light_mix(folder)),
@@ -278,7 +286,7 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
                                  "stops", "stop")},
             "filters": table(v["filters"]),
             "by_year": table(v["by_year"]),
-        }  # fmt: skip
+        })  # fmt: skip
 
     # --- Live results
 
