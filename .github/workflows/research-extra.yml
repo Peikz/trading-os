@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "insiders, events8k, news, flow (order flow), openbars (first 5/15/30 minutes), daymins (whole A+ entry days)"
+        description: "insiders, events8k, news, flow (order flow), openbars (first 5/15/30 minutes), daymins (whole A+ entry days), indexbars (SPY/QQQ/IWM 5-minute bars since 2016)"
         type: choice
-        options: [insiders, events8k, news, flow, openbars, daymins]
+        options: [insiders, events8k, news, flow, openbars, daymins, indexbars]
         default: insiders
 
 concurrency:

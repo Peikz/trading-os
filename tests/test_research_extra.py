@@ -4,6 +4,8 @@ import datetime as dt
 import io
 import zipfile
 
+import pandas as pd
+
 from trading_os import research_extra as rx
 
 A = "".join(["S", "R", "F"])
@@ -116,3 +118,29 @@ def test_daymins_saves_every_bar_of_each_session(tmp_path):
     assert research_extra.daymins(Client(), tmp_path / "req.parquet", tmp_path / "out") == 0
     got = pd.read_parquet(tmp_path / "out" / "daymins.parquet")
     assert len(got) == 2 and got["c"].tolist() == [1.5, 2]
+
+
+def test_indexbars_keeps_regular_hours_of_each_year(tmp_path):
+    class Fake:
+        def __init__(self):
+            self.calls = []
+
+        def bars(self, symbols, timeframe, start, end):
+            self.calls.append((tuple(symbols), timeframe, start.year))
+            ts = pd.to_datetime(
+                [
+                    f"{start.year}-03-02 14:25",
+                    f"{start.year}-03-02 14:30",
+                    f"{start.year}-03-02 20:55",
+                    f"{start.year}-03-02 21:00",
+                ],
+                utc=True,
+            )  # fmt: skip  (09:25, 09:30, 15:55 and 16:00 New York, EST)
+            return pd.DataFrame({"ticker": "SPY", "ts": ts, "close": 1.0})
+
+    client = Fake()
+    assert rx.indexbars(client, tmp_path, 2016, dt.date(2017, 6, 1)) == 0
+    assert [c[2] for c in client.calls] == [2016, 2017]
+    assert client.calls[0][:2] == (("SPY", "QQQ", "IWM"), "5Min")
+    table = pd.read_parquet(tmp_path / "indexbars.parquet")
+    assert len(table) == 4  # 09:30 and 15:55 kept, 09:25 and 16:00 dropped, in both years

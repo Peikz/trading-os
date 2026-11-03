@@ -17,6 +17,9 @@
 - `openbars`: volume in the first 5, 15 and 30 minutes of each EP day (Alpaca 1-minute SIP bars,
   09:30-10:00 New York), and the 5/15/30-minute opening-range highs and lows, to test
   Qullamaggie's volume rule at his entry times.
+- `indexbars`: 5-minute bars (adjusted, regular hours) of SPY, QQQ and IWM since 2016, to test
+  whether the day's first 5, 15 and 60 minutes say where the rest of the day goes (Emil, 3 Nov
+  2026). Index ETFs only: no request list.
 - `news`: Alpaca's news headlines (Benzinga) for a list of (ticker, window end) requests, the
   study's EP / EP9M trades, each for the 4 days up to its entry. Headlines only, no article text.
 
@@ -345,11 +348,34 @@ def daymins(client, requests_file: Path, out: Path) -> int:
     return 0 if rows else 1
 
 
+INDEX_SYMBOLS = ("SPY", "QQQ", "IWM")
+
+
+def indexbars(client, out: Path, first_year: int, today: dt.date) -> int:
+    """SPY, QQQ and IWM 5-minute bars, one year a request, regular hours (09:30-16:00 New
+    York) kept."""
+    frames = []
+    for year in range(first_year, today.year + 1):
+        start = dt.datetime(year, 1, 1, tzinfo=dt.UTC)
+        end = min(dt.datetime(year + 1, 1, 1, tzinfo=dt.UTC),
+                  dt.datetime.combine(today, dt.time(), dt.UTC))  # fmt: skip
+        bars = client.bars(INDEX_SYMBOLS, "5Min", start, end)
+        ny = bars["ts"].dt.tz_convert("America/New_York")
+        minutes = ny.dt.hour * 60 + ny.dt.minute
+        frames.append(bars[(minutes >= 570) & (minutes < 960)])
+        status(f"Index bars {year}: {len(frames[-1])} bars")
+    table = pd.concat(frames, ignore_index=True)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_parquet(out / "indexbars.parquet", index=False)
+    status(f"Index bars: {len(table)} bars, {table['ticker'].nunique()} symbols")
+    return 0 if len(table) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
     parser.add_argument(
         "--mode",
-        choices=["insiders", "events8k", "news", "flow", "openbars", "daymins"],
+        choices=["insiders", "events8k", "news", "flow", "openbars", "daymins", "indexbars"],
         required=True,
     )
     parser.add_argument("--out", type=Path, default=Path("out"))
@@ -391,6 +417,8 @@ def main(argv: list[str] | None = None) -> int:
         return openbars(client, args.requests, args.out)
     if args.mode == "daymins":
         return daymins(client, args.requests, args.out)
+    if args.mode == "indexbars":
+        return indexbars(client, args.out, max(args.first_year, 2016), dt.date.today())
     return news(client, args.requests, args.out)
 
 
