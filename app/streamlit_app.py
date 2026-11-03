@@ -14,7 +14,6 @@ import contextlib
 import datetime as dt
 import io
 import os
-import re
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -50,6 +49,7 @@ from trading_os import (
     research_view,
     review,
     scan_editor,
+    scans_view,
     screens,
     search,
     sectors,
@@ -1283,76 +1283,13 @@ elif page == "Screener":
 
 elif page == "Scans":
     st.header("Scans")
-    st.caption(
-        "Every scan: when it runs, when its hits are pushed, how it is graded and its "
-        "settings. Edit one below: the change is checked like the jobs check it, saved to "
-        "config/scans.yaml on this PC, and used by GitHub's jobs after Commit & push. Run times "
-        "come from the timer (trading_os/timer.py) and change in code, not here."
-    )
-    today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
-    graded = {}
-    for strategy, rule in (CFG.grading.get("quality") or {}).items():
-        grades = ", ".join(f"{g} at {pts}+ points" for pts, g in rule.get("grades", []))
-        for live in rule.get("live_scans", []):
-            graded[live] = f"{grades} ({strategy})"
-    hidden = {"push_tier", "push_slot", "push_ungraded", "label", "note"}
+    st.caption(scans_view.CAPTION)
 
     def scan_label(name: str) -> str:
-        return CFG.scans[name].params.get("label") or notify.SCAN_LABELS.get(name, name)
+        return scans_view.label(CFG, name)
 
-    def runs_text(scan) -> str:
-        parts = []
-        for slot in scan.slots:
-            start = dashboard.slot_start(slot, today)
-            parts.append(f"{slot} {clock.both_times(start)}" if start else slot)
-        return " · ".join(parts)
-
-    def name_of(scan) -> str:
-        return scan.name
-
-    def pushed_text(scan) -> str:
-        if scan.action != "push":
-            return "saved only"
-        if name_of(scan) == "breadth":
-            return "market lines of the EOD push"
-        names = {"pm": "next pre-market 07:17"}
-        slots = notify.push_slots(scan)
-        parts = ["at its run" if s in scan.slots else names.get(s, s) for s in slots]
-        return " + ".join(dict.fromkeys(parts))
-
-    rows = []
-    for name, scan in CFG.scans.items():
-        if scan.action != "push" or name == "breadth":
-            grade = "-"
-        elif scan.slot == "weekly":
-            grade = "list, shown in full"
-        else:
-            grade = graded.get(name) or (
-                "C, pushed in full" if scan.params.get("push_ungraded") else "C (only counted)"
-            )
-        settings = ", ".join(f"{k} {v}" for k, v in scan.params.items() if k not in hidden)
-        rows.append(
-            {
-                "scan": scan_label(name),
-                "on": scan.enabled,
-                "runs (NY · CPH)": runs_text(scan),
-                "pushed": pushed_text(scan),
-                "grade": grade,
-                "settings": settings,
-                "note": scan.params.get("note", ""),
-                "key": name,
-            }
-        )
-
-    def best_grade(text: str) -> int:
-        # Best grade a scan can give first, C last, lists and unpushed scans after (Emil,
-        # 26 Oct 2026)
-        found = re.findall(r"A\+|\bA\b|\bB\b|\bC\b", text)
-        return min((notify.GRADE_RANK[g] for g in found), default=4 if text != "-" else 5)
-
-    rows.sort(key=lambda r: best_grade(r["grade"]))  # stable: config order within a grade
     st.dataframe(
-        pd.DataFrame(rows),
+        pd.DataFrame(scans_view.table(CFG)),
         hide_index=True,
         width="stretch",
         column_config={"on": st.column_config.CheckboxColumn("on")},
@@ -1362,65 +1299,46 @@ elif page == "Scans":
     pick = st.selectbox(
         "Scan", list(CFG.scans), format_func=lambda n: f"{scan_label(n)} ({n})", key="sc_pick"
     )
-    scan = CFG.scans[pick]
-    params = dict(scan.params)
+    fields = scans_view.form(CFG, pick)
     with st.form(f"sc-edit-{pick}"):
         a, b = st.columns(2)
-        new = {"enabled": a.toggle("On", value=scan.enabled)}
+        new = {"enabled": a.toggle("On", value=fields["enabled"])}
         new["action"] = b.radio(
             "Hits",
             ["push", "log"],
-            index=0 if scan.action == "push" else 1,
+            index=0 if fields["action"] == "push" else 1,
             horizontal=True,
             format_func={"push": "pushed", "log": "saved only"}.get,
         )
-        if "push_slot" in params:
-            own = scan.slots[0]
-            options = {"at its run": [own], "next pre-market": "pm", "both": [own, "pm"]}
-            current = params["push_slot"]
-            current = list(current) if isinstance(current, tuple) else current
-            names = [k for k, v in options.items() if v == current or [v] == current]
-            choice = st.radio(
-                "Pushed",
-                list(options),
-                index=list(options).index(names[0]) if names else 0,
-                horizontal=True,
+        if fields["push"] is not None:
+            options = list(scans_view.PUSH_SLOTS)
+            new["push"] = st.radio(
+                "Pushed", options, index=options.index(fields["push"]), horizontal=True
             )
-            new["push_slot"] = options[choice]
         cols = st.columns(3)
-        k = 0
-        for key, value in params.items():
-            if key in hidden or isinstance(value, bool):
-                continue
-            if isinstance(value, int | float):
-                box = cols[k % 3]
-                if isinstance(value, int):
-                    new[key] = int(
-                        box.number_input(key, value=value, step=1, key=f"sc-{pick}-{key}")
-                    )
-                else:
-                    new[key] = float(
-                        box.number_input(key, value=value, format="%.4g", key=f"sc-{pick}-{key}")
-                    )
-                k += 1
-        for key, value in params.items():
-            if isinstance(value, bool) and key not in hidden:
-                new[key] = st.checkbox(key, value=value, key=f"sc-{pick}-{key}")
+        for k, field in enumerate(fields["numbers"]):
+            box, key = cols[k % 3], field["key"]
+            if field["kind"] == "int":
+                new[key] = box.number_input(
+                    key, value=field["value"], step=1, key=f"sc-{pick}-{key}"
+                )
+            else:
+                new[key] = box.number_input(
+                    key, value=field["value"], format="%.4g", key=f"sc-{pick}-{key}"
+                )
+        for field in fields["flags"]:
+            new[field["key"]] = st.checkbox(
+                field["key"], value=field["value"], key=f"sc-{pick}-{field['key']}"
+            )
         new["label"] = st.text_input(
-            "Name in the push", value=params.get("label", ""), placeholder=scan_label(pick)
+            "Name in the push", value=fields["push_label"], placeholder=scan_label(pick)
         )
         new["note"] = st.text_area(
-            "Note under its section in the push", value=params.get("note", ""), height=80
+            "Note under its section in the push", value=fields["note"], height=80
         )
         submitted = st.form_submit_button("Check and save")
     if submitted:
-        before = {"enabled": scan.enabled, "action": scan.action, **params}
-        changes = {}
-        for key, value in new.items():
-            old = before.get(key, "" if key in ("label", "note") else None)
-            old = list(old) if isinstance(old, tuple) else old
-            if value != old:
-                changes[key] = value
+        changes = scans_view.changes(CFG, pick, new)
         if not changes:
             st.info("Nothing changed.")
         else:

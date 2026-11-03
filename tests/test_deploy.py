@@ -29,3 +29,12 @@ def test_the_caddyfile_proxies_the_api_and_serves_the_app():
     caddy = (DEPLOY / "Caddyfile").read_text(encoding="utf-8")
     assert "reverse_proxy api:8000" in caddy
     assert re.search(r"try_files \{path\} /index.html", caddy)
+
+
+def test_the_api_gets_git_credentials_from_the_environment_only():
+    compose = yaml.safe_load((DEPLOY / "docker-compose.yml").read_text(encoding="utf-8"))
+    env = compose["services"]["api"]["environment"]
+    assert env["GIT_CONFIG_KEY_0"] == "credential.helper"
+    # The helper reads the token from the environment ($$ escapes Compose's interpolation)
+    assert "$${GH_TOKEN}" in env["GIT_CONFIG_VALUE_0"]
+    assert env["GIT_AUTHOR_EMAIL"].endswith(".invalid")

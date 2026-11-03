@@ -129,8 +129,9 @@ def levels_for(data_dir: Path, runs, cfg, ticker: str, read=pd.read_parquet) -> 
     positions = dashboard.latest_positions(data_dir)
     if len(positions):
         mine = positions[positions["ticker"] == ticker]
-        if len(mine) and mine.iloc[0].get("order_stop") == mine.iloc[0].get("order_stop"):
-            out["stop"] = float(mine.iloc[0]["order_stop"])
+        stop = mine.iloc[0].get("order_stop") if len(mine) else None
+        if stop is not None and pd.notna(stop):  # a position logged without a stop has none
+            out["stop"] = float(stop)
     events = plans.load(data_dir)
     if len(events):
         today = clock.ny_time(cfg.schedule, dt.datetime.now(dt.UTC)).date()
@@ -216,6 +217,8 @@ def payload(
     if data.empty:
         return {"candles": [], "lines": [], "avwaps": [], "trend": [], "markers": [],
                 "levels": [], "visible": None}  # fmt: skip
+    if fills is not None and "session_date" not in fills and "trade_date" in fills:
+        fills = fills.rename(columns={"trade_date": "session_date"})
     weekly = timeframe == "Weekly"
     if weekly:
         data = chart_series.weekly(data)
@@ -279,7 +282,7 @@ def payload(
                 }
             )
     for f in fills.to_dict("records") if fills is not None and len(fills) else []:
-        t = _day(f.get("session_date", f.get("trade_date")))
+        t = _day(f["session_date"])
         if t in shown:
             buy = f.get("side") == "buy"
             markers.append(

@@ -20,7 +20,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api import chart, pages
+from api import chart, pages, research
 from api.serialize import records, scalar
 from trading_os import board_data, chart_series, dashboard, notify, screens
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
@@ -378,6 +378,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     ctx = pages.Context(root=root, cfg=cfg, runs=runs, table=cache.table, exchanges=exchanges)
     pages.register(app, ctx)
     chart.register(app, ctx)
+    research.register(app, ctx, find_run, run_id, cfg_path)
     return app
 
 
