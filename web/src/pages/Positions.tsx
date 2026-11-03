@@ -18,7 +18,6 @@ export function Positions() {
   if (!data) return <p className="muted">Loading…</p>;
   return (
     <div>
-      <h2>Positions</h2>
       {data.cards.length === 0 ? (
         <p className="muted">
           No open positions. Your fills come in through the Journal (import or log).
@@ -35,11 +34,11 @@ export function Positions() {
             {data.cards.map((c) => (
               <article className="card" key={c.ticker} aria-label={`${c.ticker} position`}>
                 <header>
-                  <b className="ticker">{c.ticker}</b> · {c.setup}{" "}
+                  <b className="ticker">{c.ticker}</b> <span className="badge position">Held</span> {c.setup}{" "}
                   <span className="muted">
                     {c.direction} · {c.shares.toLocaleString("en-US")} sh · in {c.entry_date}
                   </span>{" "}
-                  <a href={chartLink(c.ticker)}>📈 Chart</a>
+                  <a href={chartLink(c.ticker)}>Full chart</a>
                 </header>
                 <div className="metrics">
                   <Metric

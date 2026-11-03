@@ -19,10 +19,10 @@ import { IntradayChart } from "../components/IntradayChart";
 const LINES = ["MA10", "MA20", "MA50", "MA200", "EMA9", "EMA21"];
 const SPANS = ["3M", "6M", "1Y", "2Y", "All"];
 const TOOLS: [Tool, string, string][] = [
-  ["none", "🖐", "Pan and zoom"],
-  ["draw", "✏️", "Draw a trend line (two clicks)"],
-  ["move", "✋", "Move a line's end (drag)"],
-  ["erase", "🧽", "Delete the line you click"],
+  ["none", "Pan", "Pan and zoom"],
+  ["draw", "Draw", "Draw a trend line (two clicks)"],
+  ["move", "Move", "Move a line's end (drag)"],
+  ["erase", "Erase", "Delete the line you click"],
 ];
 
 /** The ticker in `#/chart?t=XXX`. */
@@ -33,11 +33,11 @@ export function hashTicker(hash: string): string {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function Chart() {
+export function Chart({ ticker: given }: { ticker?: string } = {}) {
   const [picks, setPicks] = useState<{ ticker: string; where: string }[]>([]);
   const [quick, setQuick] = useState("");
   const [typed, setTyped] = useState(() => hashTicker(window.location.hash));
-  const ticker = (typed.trim() || quick).toUpperCase();
+  const ticker = (given ?? (typed.trim() || quick)).toUpperCase();
   const [q, setQ] = useState<ChartQuery>({
     period: "2y",
     timeframe: "Daily",
@@ -55,16 +55,18 @@ export function Chart() {
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
+    if (given) return;
     api.chartPicks().then(setPicks, () => setPicks([]));
-  }, []);
+  }, [given]);
   useEffect(() => {
+    if (given) return;
     const on = () => {
       const t = hashTicker(window.location.hash);
       if (t) setTyped(t);
     };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
-  }, []);
+  }, [given]);
 
   useEffect(() => {
     if (!ticker) return setData(null);
@@ -83,7 +85,7 @@ export function Chart() {
   }, [ticker, q, version]);
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
-  const fail = (e: Error) => setFlash(`❌ ${e.message}`);
+  const fail = (e: Error) => setFlash(`Error: ${e.message}`);
   const set = <K extends keyof ChartQuery>(k: K, v: ChartQuery[K]) => setQ((x) => ({ ...x, [k]: v }));
   const toggle = (k: "lines" | "anchors", v: string) =>
     setQ((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
@@ -107,7 +109,7 @@ export function Chart() {
   const daily = q.timeframe === "Daily";
   return (
     <div>
-      <h2>Chart</h2>
+      {!given && (
       <div className="row">
         <select aria-label="Today's hits, watchlists, open positions" value={quick} onChange={(e) => {
           setQuick(e.target.value);
@@ -127,6 +129,7 @@ export function Chart() {
           onChange={(e) => setTyped(e.target.value.toUpperCase())}
         />
       </div>
+      )}
       {!ticker && <p className="muted">Pick or type a ticker.</p>}
       {ticker && (
         <>
@@ -164,7 +167,7 @@ export function Chart() {
           {data && data.ticker === ticker && (
             <>
               {daily && (
-                <div className="pills" role="group" aria-label="Tools">
+                <div className="seg" role="group" aria-label="Tools">
                   {TOOLS.map(([id, icon, title]) => (
                     <button key={id} title={title} aria-label={title} className={tool === id ? "on" : ""} onClick={() => setTool(id)}>
                       {icon}
@@ -175,7 +178,7 @@ export function Chart() {
               {data.candles.length ? (
                 <DrawChart data={data} tool={daily ? tool : "none"} onDraw={draw} onMove={move} onErase={erase} />
               ) : (
-                <p className="muted">No daily bars for {ticker} in the data repo.</p>
+                <p className="muted">No daily bars for {ticker} in the data repo yet.</p>
               )}
               {/* Under the chart, so a message never moves the chart you are drawing on */}
               {flash && <p className="flash" role="status">{flash}</p>}
@@ -206,7 +209,7 @@ function Pills({
   onPick: (v: string) => void;
 }) {
   return (
-    <div className="pills" role="group" aria-label={label}>
+    <div className="seg" role="group" aria-label={label}>
       {options.map(([v, text]) => (
         <button key={v} className={value === v ? "on" : ""} onClick={() => onPick(v)}>
           {text}
@@ -225,7 +228,7 @@ function Notes({ ticker, onMessage }: { ticker: string; onMessage: (t: string) =
   useEffect(() => {
     api.chartNotes(ticker).then(setNotes, () => setNotes(null));
   }, [ticker]);
-  const fail = (e: Error) => onMessage(`❌ ${e.message}`);
+  const fail = (e: Error) => onMessage(`Error: ${e.message}`);
   return (
     <section>
       <h3>Notes on {ticker}</h3>
@@ -321,7 +324,7 @@ function TypeIn({
   const first = data.dates[0] ?? "";
   const [line, setLine] = useState({ d0: first, p0: "", d1: first, p1: "", label: "", extend: true });
   const [anchor, setAnchor] = useState({ day: first, label: "" });
-  const fail = (e: Error) => onMessage(`❌ ${e.message}`);
+  const fail = (e: Error) => onMessage(`Error: ${e.message}`);
   const dates = useMemo(() => data.dates, [data.dates]);
   return (
     <section>

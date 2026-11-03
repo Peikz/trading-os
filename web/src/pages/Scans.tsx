@@ -24,7 +24,6 @@ export function Scans() {
   if (!page) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
   return (
     <div>
-      <h2>Scans</h2>
       <p className="muted">{page.caption}</p>
       <Table label="Scans" columns={ROW_COLUMNS} rows={page.rows} />
       <h3>Edit a scan</h3>

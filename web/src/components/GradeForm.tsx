@@ -37,7 +37,7 @@ export function GradeForm({
         setNotes(n.notes);
         setTags(n.tags);
       },
-      (e: Error) => setMessage(`❌ ${e.message}`),
+      (e: Error) => setMessage(`Error: ${e.message}`),
     );
   }, [kind, refId]);
 
@@ -51,7 +51,7 @@ export function GradeForm({
       setFiles([]);
       setMessage(saved.message ?? "Saved.");
     } catch (e) {
-      setMessage(`❌ ${(e as Error).message}`);
+      setMessage(`Error: ${(e as Error).message}`);
     }
   };
 
@@ -81,7 +81,7 @@ export function GradeForm({
         onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
       />
       <button onClick={save}>Save</button>
-      {message && <p className={message.startsWith("❌") ? "error" : "ok"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
       <div className="shots">
         {note.attachments.map((a) => (
           <img key={a} src={`/api/attachments/${a}`} alt={a.split("/").pop()} />

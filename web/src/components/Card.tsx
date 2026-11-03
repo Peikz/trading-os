@@ -1,79 +1,49 @@
-// One candidate's card: the grade, the setup and run, then its facts (when to buy, entry,
-// stop, shares, risk, tags, history, why). All lines come from the API (trading_os.board_data).
-import type { BoardRow } from "../api";
-import { GRADE_COLOURS } from "../format";
+// Grade badges and the key-fact strip, shared by Today, Stocks and the Journal. Badges: A+ solid
+// accent, A accent tint, B neutral, C outlined, a watched stock amber, a position green.
+import type { Stat } from "../api";
+import { plain } from "../plain";
+import { stockLink } from "../routes";
 
-/** The Chart page for a stock. */
-export const chartLink = (ticker: string) => `#/chart?t=${encodeURIComponent(ticker)}`;
+/** The full chart of a stock (Stocks, with drawing, AVWAPs, intraday and notes). */
+export const chartLink = (ticker: string) => stockLink(ticker);
 
-export function GradeBadge({ grade }: { grade: string }) {
+const GRADE_CLASS: Record<string, string> = { "A+": "g-aplus", A: "g-a", B: "g-b", C: "g-c" };
+
+export function GradeBadge({ grade, large }: { grade: string; large?: boolean }) {
   return (
-    <span className="badge" style={{ background: GRADE_COLOURS[grade] ?? "#6e7781" }}>
+    <span className={`badge ${GRADE_CLASS[grade] ?? "g-c"}${large ? " lg" : ""}`} title={`Grade ${grade}`}>
       {grade}
     </span>
   );
 }
 
-export function Card({ row }: { row: BoardRow }) {
+export function KindBadge({ kind }: { kind: "watch" | "position" }) {
   return (
-    <article className="card" aria-label={`${row.ticker} card`}>
-      <header>
-        <GradeBadge grade={row.grade} /> <b className="ticker">{row.ticker}</b> · {row.scan_label}{" "}
-        <span className="muted">{row.run_label}</span>{" "}
-        <a href={chartLink(row.ticker)} title="The Chart page: drawing tools, AVWAPs, intraday">
-          📈 Chart
-        </a>
-      </header>
-      {row.facts.length > 0 ? (
-        <ul>
-          {row.facts.map((f) => (
-            <li key={f}>{f}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted">No plan for this signal.</p>
-      )}
-    </article>
+    <span className={`badge ${kind}`} title={kind === "watch" ? "On your watchlist" : "An open position"}>
+      {kind === "watch" ? "Watch" : "Held"}
+    </span>
   );
 }
 
-export function KeyStats({ row }: { row: BoardRow }) {
+/** The quiet one-row strip of key facts under a chart, in plain words. */
+const FIRST = ["Mkt cap", "ADR", "$ vol 20d", "Float", "RS", "Earnings"];
+export function FactStrip({ stats, label = "Key facts" }: { stats: Stat[]; label?: string }) {
+  const ordered = [
+    ...FIRST.flatMap((k) => stats.filter((s) => s.label === k)),
+    ...stats.filter((s) => !FIRST.includes(s.label)),
+  ];
+  if (!ordered.length) return null;
   return (
-    <div className="chips" aria-label="Key stats">
-      {row.stats.map((s) => (
-        <span className="chip" key={s.label}>
-          <span className="muted">{s.label}</span> <b>{s.value}</b>
-        </span>
-      ))}
+    <div className="strip" aria-label={label}>
+      {ordered.map((s) => {
+        const p = plain(s.label);
+        return (
+          <div key={s.label} title={p.title}>
+            <span>{p.text}</span>
+            <b className="num">{s.value}</b>
+          </div>
+        );
+      })}
     </div>
-  );
-}
-
-export function Queue({
-  rows,
-  index,
-  onPick,
-}: {
-  rows: BoardRow[];
-  index: number;
-  onPick: (i: number) => void;
-}) {
-  return (
-    <ol className="queue">
-      {rows.map((r, k) => (
-        <li key={`${r.ticker}-${r.scan}`}>
-          <button className={k === index ? "active" : ""} onClick={() => onPick(k)}>
-            {r.grade} · {r.ticker} · {r.scan_label}
-            {typeof r.chg_pct === "number" && (
-              <span className="muted">
-                {" "}
-                {r.chg_pct >= 0 ? "+" : ""}
-                {r.chg_pct.toFixed(1)}%
-              </span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ol>
   );
 }

@@ -56,8 +56,7 @@ describe("Journal", () => {
 
   it("logs a fill", async () => {
     const calls = routes();
-    render(<Journal />);
-    fireEvent.click(screen.getByRole("tab", { name: "Log a trade" }));
+    render(<Journal tab="trades" />);
     fireEvent.change(await screen.findByLabelText("Ticker"), { target: { value: A.toLowerCase() } });
     fireEvent.change(screen.getByLabelText("Shares"), { target: { value: "100" } });
     fireEvent.change(screen.getByLabelText("Price"), { target: { value: "10" } });
@@ -70,8 +69,7 @@ describe("Journal", () => {
 
   it("starts a plan from a scan hit with the suggested shares, and cancels one", async () => {
     const calls = routes();
-    render(<Journal />);
-    fireEvent.click(screen.getByRole("tab", { name: "Plans" }));
+    render(<Journal tab="plans" />);
     fireEvent.change(await screen.findByLabelText("Start from a scan hit"), {
       target: { value: plans.hits[0].label },
     });
@@ -89,13 +87,12 @@ describe("Journal", () => {
 
   it("shows closed trades with stats, the R curve and the grading form", async () => {
     routes();
-    render(<Journal />);
-    fireEvent.click(screen.getByRole("tab", { name: "Closed trades" }));
+    const { rerender } = render(<Journal tab="trades" />);
     expect(await screen.findByLabelText("Closed trades")).toHaveTextContent("-0.50");
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByTestId("curve")).toHaveTextContent("1");
     expect(await screen.findByLabelText("Grading form")).toHaveTextContent(`${A} trade`);
-    fireEvent.click(screen.getByRole("tab", { name: "Real vs study" }));
+    rerender(<Journal tab="live" />);
     expect(await screen.findByLabelText("Real vs study")).toHaveTextContent("ep_day");
   });
 });

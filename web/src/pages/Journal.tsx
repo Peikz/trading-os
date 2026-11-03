@@ -1,6 +1,8 @@
-// The Journal (trading_os/journal_view.py): Open positions, Log a trade, Plans, Closed trades
-// (stats, R curve, MFE/MAE, your grading) and Real vs study. Fills are the record; plans are
-// made before a trade. Private: it stays in the data repo. Facts, not advice.
+// The Journal place (trading_os/journal_view.py, positions_view.py, research_view.py), one tab at
+// a time: Positions (a card per open position, then the journal's open table and what each plan
+// says), Trades (log a fill, import the broker's, closed trades with stats, R curve, MFE/MAE and
+// your grading), Plans, Notes (daily notes) and Live vs study (your real R per setup and the live
+// signals against the study). Private: it stays in the data repo. Facts, not advice.
 import { useEffect, useState } from "react";
 import {
   api,
@@ -15,9 +17,9 @@ import { GradeForm } from "../components/GradeForm";
 import { RCurve } from "../components/RCurve";
 import { Metric, Table } from "../components/Table";
 import { readText, usd } from "../format";
+import { LiveResults } from "./LiveResults";
+import { Positions } from "./Positions";
 
-const TABS = ["Open positions", "Daily notes", "Log a trade", "Plans", "Closed trades", "Real vs study"] as const;
-type Tab = (typeof TABS)[number];
 const OPEN_COLUMNS = [
   "ticker", "direction", "entry_date", "entry_avg", "open_quantity", "order_stop",
   "last_close", "last_date", "open_pnl", "open_r", "at_risk_usd", "at_risk_pct", "setup",
@@ -32,35 +34,37 @@ const CLOSED_COLUMNS = [
   "signal_scan", "grade",
 ];
 
-export function Journal() {
-  const [tab, setTab] = useState<Tab>("Open positions");
+export function Journal({ tab = "positions" }: { tab?: string }) {
   return (
     <div>
-      <h2>Journal</h2>
-      <p className="muted">
-        Fills are the record: imported from the broker or logged here by hand (a broker fill
-        later replaces the matching hand-logged one). Private: stays in the data repo.
-      </p>
-      <ImportFills />
-      <div className="tabs" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            className={tab === t ? "on" : ""}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-      {tab === "Open positions" && <OpenTab />}
-      {tab === "Daily notes" && <DailyTab />}
-      {tab === "Log a trade" && <LogTab />}
-      {tab === "Plans" && <PlansTab />}
-      {tab === "Closed trades" && <ClosedTab />}
-      {tab === "Real vs study" && <RealTab />}
+      {tab === "positions" && (
+        <>
+          <Positions />
+          <h3>Open positions in the journal</h3>
+          <OpenTab />
+        </>
+      )}
+      {tab === "trades" && (
+        <>
+          <p className="muted">
+            Fills are the record: imported from the broker or logged here by hand (a broker fill
+            later replaces the matching hand-logged one). Private: stays in the data repo.
+          </p>
+          <LogTab />
+          <ImportFills />
+          <h3>Closed trades</h3>
+          <ClosedTab />
+        </>
+      )}
+      {tab === "plans" && <PlansTab />}
+      {tab === "notes" && <DailyTab />}
+      {tab === "live" && (
+        <>
+          <h3>Your real R per setup against the study</h3>
+          <RealTab />
+          <LiveResults />
+        </>
+      )}
     </div>
   );
 }
@@ -134,7 +138,7 @@ function LogTab() {
           setMessage(r.message);
           setForm({ ...form, ticker: "", shares: "", price: "", fees: "", stop: "" });
         },
-        (e: Error) => setMessage(`❌ ${e.message}`),
+        (e: Error) => setMessage(`Error: ${e.message}`),
       );
   return (
     <section className="form">
@@ -170,7 +174,7 @@ function LogTab() {
         />
         <button onClick={save}>Save fill</button>
       </div>
-      {message && <p className={message.startsWith("❌") ? "error" : "ok"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
     </section>
   );
 }
@@ -242,7 +246,7 @@ function PlansTab() {
           setMessage(d.message ?? "Plan saved.");
           setFrom("");
         },
-        (e: Error) => setMessage(`❌ ${e.message}`),
+        (e: Error) => setMessage(`Error: ${e.message}`),
       );
   const openIds = data.plans.filter((p) => p.status === "open").map((p) => String(p.plan_id));
 
@@ -289,7 +293,7 @@ function PlansTab() {
         <button onClick={save}>Save plan</button>
       </div>
       {suggestion?.text && <p className="muted">{suggestion.text}</p>}
-      {message && <p className={message.startsWith("❌") ? "error" : "ok"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
       {data.plans.length === 0 ? (
         <p className="muted">No plans yet.</p>
       ) : (
@@ -305,7 +309,7 @@ function PlansTab() {
           </select>
           <button
             disabled={!cancel}
-            onClick={() => api.cancelPlan(cancel).then(setData, (e: Error) => setMessage(`❌ ${e.message}`))}
+            onClick={() => api.cancelPlan(cancel).then(setData, (e: Error) => setMessage(`Error: ${e.message}`))}
           >
             Cancel plan
           </button>
@@ -372,7 +376,7 @@ function ImportFills() {
       const r = await api.importFills(file.name, await readText(file));
       setMessage(r.message);
     } catch (e) {
-      setMessage(`❌ ${(e as Error).message}`);
+      setMessage(`Error: ${(e as Error).message}`);
     }
   };
   return (
@@ -385,7 +389,7 @@ function ImportFills() {
           Import
         </button>
       </div>
-      {message && <p className={message.startsWith("❌") ? "error" : "ok pre"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok pre"}>{message}</p>}
     </details>
   );
 }
@@ -402,10 +406,10 @@ function DailyTab() {
   const [edit, setEdit] = useState({ day: "", tags: "", text: "" });
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
-    api.dailyNotes(tag, days).then(setData, (e: Error) => setMessage(`❌ ${e.message}`));
+    api.dailyNotes(tag, days).then(setData, (e: Error) => setMessage(`Error: ${e.message}`));
   }, [tag, days, version]);
   const reload = () => setVersion((v) => v + 1);
-  const fail = (e: Error) => setMessage(`❌ ${e.message}`);
+  const fail = (e: Error) => setMessage(`Error: ${e.message}`);
   return (
     <section className="form">
       <p className="muted">{data?.caption}</p>

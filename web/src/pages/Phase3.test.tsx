@@ -45,15 +45,19 @@ const page = {
 describe("Market", () => {
   it("shows the tiles, the setups at the heat, sectors and industries, and asks for another band", async () => {
     const calls = mockApi({ "GET /api/market/page": page });
-    render(<Market />);
+    const { rerender } = render(<Market tab="overview" />);
+    expect(await screen.findByText("GREEN")).toBeInTheDocument(); // the tile, without its icon
+    rerender(<Market tab="heat" />);
     expect(await screen.findByText("Cool market: scan count 12 (under 20)")).toBeInTheDocument();
-    expect(screen.getByText("🟢 GREEN")).toBeInTheDocument();
     expect(screen.getByLabelText("Setups at this heat", { selector: "table" })).toHaveTextContent("✅ held");
+    rerender(<Market tab="sectors" />);
     expect(screen.getByLabelText("Indexes, sectors and themes")).toHaveTextContent(X);
     expect(screen.getByLabelText("Top 15 industries")).toHaveTextContent("Software");
+    rerender(<Market tab="heat" />);
     fireEvent.click(screen.getByText("hot (60+)"));
     await waitFor(() => expect(calls.some((c) => c.url.includes("band=hot"))).toBe(true));
-    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
+    rerender(<Market tab="sectors" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Theme" }));
     await waitFor(() => expect(calls.some((c) => c.url.includes("groups=Index%2CSector"))).toBe(true));
   });
 
@@ -95,8 +99,7 @@ describe("Journal, phase 3", () => {
       "POST /api/journal/daily-notes": { note_id: "d2" },
       "DELETE /api/journal/daily-notes/": { removed: "d1" },
     });
-    render(<Journal />);
-    fireEvent.click(screen.getByRole("tab", { name: "Daily notes" }));
+    render(<Journal tab="notes" />);
     expect(await screen.findByText(`Watching $${X}`)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Daily note"), { target: { value: "Quiet day" } });
     fireEvent.change(screen.getByLabelText("Stocks (comma or space separated)"), { target: { value: X } });
@@ -115,7 +118,7 @@ describe("Journal, phase 3", () => {
       "GET /api/journal/open": { totals: { positions: 0, open_pnl: 0, at_risk_usd: 0, at_risk_pct: null }, rows: [], plan: [], plan_day: null },
       "POST /api/journal/import": { message: "2 new fills, 1 trade" },
     });
-    render(<Journal />);
+    render(<Journal tab="trades" />);
     fireEvent.click(screen.getByText("Import broker fills (CSV)"));
     const file = new File(["trade_date,ticker\n"], "fills.csv", { type: "text/csv" });
     fireEvent.change(screen.getByLabelText("Fills export"), { target: { files: [file] } });

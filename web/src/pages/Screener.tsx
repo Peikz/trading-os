@@ -1,23 +1,11 @@
-// The Screener (trading_os/screens.py, the Streamlit Screener page): filters on ~45 fields
-// over the last close's universe (or a live TradingView fetch), or over one run's scan hits;
-// sort, save and delete your own screens. A screen is a list to look at: no grade, no buy.
-import { useCallback, useEffect, useState } from "react";
-import {
-  api,
-  type Filter,
-  type RunInfo,
-  type ScreenerMeta,
-  type ScreenRequest,
-  type ScreenResult,
-  type ScreenSpec,
-  type Value,
-} from "../api";
-import { GradeBadge } from "../components/Card";
+// The Screener's parts (trading_os/screens.py), used by the Stocks place: a filter's editor, a
+// filter in words for its chip, the Today link that flips through a screen's stocks, and one
+// scan hit's grading form. A screen is a list to look at: no grade, no buy.
+import { useEffect, useState } from "react";
+import { api, type Filter, type ScreenerMeta } from "../api";
 import { GradeForm } from "../components/GradeForm";
-import { download, formatValue } from "../format";
-
-const NEW = "＋ New screen";
-const BLANK: ScreenSpec = { filters: [], sort: "rs_pct", descending: true };
+import { plain } from "../plain";
+import { Icon } from "../ui/Icon";
 
 /** The Today link that flips through a screen's stocks (app/board.py reads the same). */
 export function flipLink(name: string, tickers: string[]): string {
@@ -25,272 +13,19 @@ export function flipLink(name: string, tickers: string[]): string {
   return `?${q}#/today`;
 }
 
-export function Screener() {
-  const [meta, setMeta] = useState<ScreenerMeta | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pick, setPick] = useState(NEW);
-  const [spec, setSpec] = useState<ScreenSpec>(BLANK);
-  const [source, setSource] = useState<"all" | "hits">("all");
-  const [live, setLive] = useState(false);
-  const [runs, setRuns] = useState<RunInfo[]>([]);
-  const [run, setRun] = useState<string>("");
-  const [scans, setScans] = useState<{ id: string; label: string }[]>([]);
-  const [scan, setScan] = useState<string>("");
-  const [tiers, setTiers] = useState<string[]>(["alert", "log"]);
-  const [result, setResult] = useState<ScreenResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("");
-
-  useEffect(() => {
-    api.screenerMeta().then(setMeta, (e: Error) => setError(e.message));
-    api.runs().then((r) => {
-      setRuns(r);
-      if (r.length) setRun(r[0].id);
-    }, () => setRuns([]));
-  }, []);
-
-  useEffect(() => {
-    if (source !== "hits" || !run) return;
-    api.runScans(run).then((r) => {
-      const list = Object.entries(r.scans).map(([id, s]) => ({ id, label: s.label }));
-      setScans(list);
-      setScan((cur) => (list.some((s) => s.id === cur) ? cur : (list[0]?.id ?? "")));
-    }, (e: Error) => setError(e.message));
-  }, [source, run]);
-
-  const choose = (value: string) => {
-    setPick(value);
-    if (!meta) return;
-    if (value in meta.saved) {
-      setSpec(meta.saved[value]);
-      setName(value);
-    } else if (value.startsWith("Example: ")) {
-      setSpec(meta.examples[value.slice("Example: ".length)]);
-      setName("");
-    } else {
-      setSpec(BLANK);
-      setName("");
-    }
-  };
-
-  const go = useCallback(() => {
-    const body: ScreenRequest = {
-      ...spec,
-      source,
-      data: live ? "live" : "close",
-      run: source === "hits" ? run : null,
-      scan: source === "hits" ? scan : null,
-      tiers,
-    };
-    if (source === "hits" && !scan) return;
-    setBusy(true);
-    setError(null);
-    api
-      .runScreen(body)
-      .then(setResult, (e: Error) => setError(e.message))
-      .finally(() => setBusy(false));
-  }, [spec, source, live, run, scan, tiers]);
-
-  // Re-run shortly after the last change (typing a value runs once, not per key)
-  const ready = meta !== null;
-  useEffect(() => {
-    if (!ready) return;
-    const timer = setTimeout(go, 300);
-    return () => clearTimeout(timer);
-  }, [ready, go]);
-
-  if (!meta) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
-
-  const fields = Object.keys(meta.fields);
-  const scanLabel = scans.find((s) => s.id === scan)?.label ?? scan;
-  const setFilter = (i: number, f: Filter) =>
-    setSpec((s) => ({ ...s, filters: s.filters.map((x, k) => (k === i ? f : x)) }));
-
-  const save = () =>
-    api.saveScreen(name, spec).then(
-      (saved) => {
-        setMeta({ ...meta, saved });
-        setPick(name.trim());
-      },
-      (e: Error) => setError(e.message),
-    );
-  const remove = () =>
-    api.deleteScreen(pick).then(
-      (saved) => {
-        setMeta({ ...meta, saved });
-        choose(NEW);
-      },
-      (e: Error) => setError(e.message),
-    );
-
-  return (
-    <div className="screener">
-      <h2>Screener</h2>
-      <p className="muted">
-        Filter every US stock in the universe, or one scan's hits. A screen of all stocks is a
-        list to look at, not a tested setup: no grade, no buy. Scan hits keep their study grade.
-      </p>
-      <div className="row">
-        <select aria-label="Screen" value={pick} onChange={(e) => choose(e.target.value)}>
-          <option>{NEW}</option>
-          {Object.keys(meta.saved).map((n) => (
-            <option key={n}>{n}</option>
-          ))}
-          {Object.keys(meta.examples).map((n) => (
-            <option key={n}>{`Example: ${n}`}</option>
-          ))}
-        </select>
-        <div className="pills" role="group" aria-label="Stocks from">
-          <button className={source === "all" ? "on" : ""} onClick={() => setSource("all")}>
-            All stocks
-          </button>
-          <button className={source === "hits" ? "on" : ""} onClick={() => setSource("hits")}>
-            Scan hits
-          </button>
-        </div>
-        {source === "all" ? (
-          <div className="pills" role="group" aria-label="Data">
-            <button className={!live ? "on" : ""} onClick={() => setLive(false)}>
-              Last close
-            </button>
-            <button
-              className={live ? "on" : ""}
-              onClick={() => setLive(true)}
-              title="One TradingView fetch, at most every 5 minutes; history fields from the last close"
-            >
-              Live now
-            </button>
-          </div>
-        ) : (
-          <>
-            <select aria-label="Run" value={run} onChange={(e) => setRun(e.target.value)}>
-              {runs.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-            <select aria-label="Scan" value={scan} onChange={(e) => setScan(e.target.value)}>
-              {scans.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            {["alert", "log"].map((t) => (
-              <label key={t} className="check">
-                <input
-                  type="checkbox"
-                  checked={tiers.includes(t)}
-                  onChange={() =>
-                    setTiers((x) => (x.includes(t) ? x.filter((y) => y !== t) : [...x, t]))
-                  }
-                />
-                {t}
-              </label>
-            ))}
-          </>
-        )}
-      </div>
-
-      <h3>Filters</h3>
-      {spec.filters.map((f, i) => (
-        <FilterRow
-          key={i}
-          meta={meta}
-          fields={fields}
-          filter={f}
-          onChange={(nf) => setFilter(i, nf)}
-          onRemove={() =>
-            setSpec((s) => ({ ...s, filters: s.filters.filter((_, k) => k !== i) }))
-          }
-        />
-      ))}
-      <div className="row">
-        <button
-          onClick={() =>
-            setSpec((s) => ({
-              ...s,
-              filters: [...s.filters, { field: "adr20_pct", op: ">=", value: 4 }],
-            }))
-          }
-        >
-          ＋ Add filter
-        </button>
-        {source === "all" ? (
-          <>
-            <label>
-              Sort by{" "}
-              <select
-                aria-label="Sort by"
-                value={spec.sort ?? "rs_pct"}
-                onChange={(e) => setSpec({ ...spec, sort: e.target.value })}
-              >
-                {fields.map((f) => (
-                  <option key={f} value={f}>
-                    {meta.fields[f].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={spec.descending}
-                onChange={(e) => setSpec({ ...spec, descending: e.target.checked })}
-              />
-              Highest first
-            </label>
-          </>
-        ) : (
-          <span className="muted">Sorted best study grade first, as in the push.</span>
-        )}
-      </div>
-      <div className="row">
-        <input
-          aria-label="Screen name"
-          placeholder="Name to save as"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button onClick={save} disabled={!name.trim()}>
-          Save screen
-        </button>
-        {pick in meta.saved && <button onClick={remove}>Delete '{pick}'</button>}
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      {busy && <p className="muted">Running…</p>}
-      {result && <Results meta={meta} result={result} />}
-      {result && (
-        <div className="row">
-          <button
-            disabled={result.tickers.length === 0}
-            onClick={() => {
-              const label = source === "hits" ? scanLabel : pick in meta.saved ? pick : "unsaved";
-              window.location.href = flipLink(label, result.tickers);
-            }}
-          >
-            📈 Flip through on Today ({result.tickers.length})
-          </button>
-          <button
-            title="TradingView: Watchlist menu → Import list"
-            onClick={() =>
-              download(source === "hits" ? `${run}_${scan}.txt` : "screen.txt", result.tv_list)
-            }
-          >
-            TradingView list (.txt)
-          </button>
-        </div>
-      )}
-      {result && source === "hits" && result.tickers.length > 0 && (
-        <HitGrading result={result} scan={scan} scanLabel={scanLabel} />
-      )}
-    </div>
-  );
+/** A filter in words, for its chip: `Daily range % >= 4`, `Sector is Tech, Energy`. */
+export function describeFilter(meta: ScreenerMeta, f: Filter): string {
+  const label = plain(meta.fields[f.field]?.label ?? f.field).text;
+  const v = f.value;
+  if (meta.fields[f.field]?.kind === "bool") return `${label}: ${f.op}`;
+  if (Array.isArray(v)) {
+    if (f.op === "between") return `${label} ${v[0] ?? "…"} to ${v[1] ?? "…"}`;
+    return `${label} ${f.op} ${v.length ? v.join(", ") : "…"}`;
+  }
+  return `${label} ${f.op} ${v ?? "…"}`;
 }
 
-function FilterRow({
+export function FilterRow({
   meta,
   fields,
   filter,
@@ -326,7 +61,7 @@ function FilterRow({
       >
         {fields.map((f) => (
           <option key={f} value={f}>
-            {meta.fields[f].group} · {meta.fields[f].label}
+            {meta.fields[f].group} · {plain(meta.fields[f].label).text}
           </option>
         ))}
       </select>
@@ -378,88 +113,28 @@ function FilterRow({
           onChange={(e) => onChange({ ...filter, value: num(e.target.value) })}
         />
       )}
-      <button onClick={onRemove} title="Remove this filter" aria-label="Remove filter">
-        ✕
+      <button className="ghost icon-btn" onClick={onRemove} title="Remove this filter" aria-label="Remove filter">
+        <Icon name="x" size={16} />
       </button>
     </div>
   );
 }
 
-function Results({ meta, result }: { meta: ScreenerMeta; result: ScreenResult }) {
-  const label = (c: string) =>
-    c === "ticker" ? "Ticker" : c === "grade" ? "Grade" : (meta.fields[c]?.label ?? c);
-  return (
-    <section>
-      <p>
-        <b>{result.count} stocks</b> from {result.when}
-        <br />
-        <span className="muted">{result.summary}</span>
-      </p>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {result.columns.map((c) => (
-                <th key={c}>{label(c)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result.rows.map((r, i) => (
-              <tr key={`${r.ticker}-${i}`}>
-                {result.columns.map((c) => (
-                  <td key={c}>
-                    {c === "grade" && typeof r[c] === "string" ? (
-                      <GradeBadge grade={r[c] as string} />
-                    ) : c === "ticker" ? (
-                      <b>{r[c] as string}</b>
-                    ) : (
-                      formatValue(r[c] as Value, meta.fields[c]?.kind)
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {result.rows.length < result.count && (
-        <p className="muted">The first {result.rows.length} shown.</p>
-      )}
-    </section>
-  );
-}
-
 /** One scan hit's grading form (grade, notes, tags, screenshots), as under the Streamlit table. */
-function HitGrading({
-  result,
-  scan,
+export function HitGrading({
+  ticker,
+  signalId,
   scanLabel,
 }: {
-  result: ScreenResult;
-  scan: string;
+  ticker: string;
+  signalId: string | undefined;
   scanLabel: string;
 }) {
-  const [look, setLook] = useState(result.tickers[0]);
-  const ticker = result.tickers.includes(look) ? look : result.tickers[0];
-  const id = result.signal_ids[ticker];
   return (
     <section>
-      <h3>Grade a hit</h3>
-      <select aria-label="Look at" value={ticker} onChange={(e) => setLook(e.target.value)}>
-        {result.tickers.map((t) => (
-          <option key={t}>{t}</option>
-        ))}
-      </select>{" "}
-      <a
-        href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(ticker)}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Open in TradingView
-      </a>
-      {id ? (
-        <GradeForm kind="signal" refId={id} title={`Grade ${ticker} · ${scanLabel || scan}`} />
+      <h3>Grade this hit</h3>
+      {signalId ? (
+        <GradeForm kind="signal" refId={signalId} title={`Grade ${ticker} · ${scanLabel}`} />
       ) : (
         <p className="muted">This hit has no signal id to grade.</p>
       )}

@@ -112,7 +112,7 @@ describe("Live results and System health", () => {
     });
     render(<SystemHealth />);
     expect(await screen.findByLabelText("Runs per session")).toHaveTextContent("✅");
-    expect(screen.getByText("✅ No failure logs.")).toBeInTheDocument();
+    expect(screen.getByText("No failure logs.")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Load the latest runs from GitHub"));
     expect(await screen.findByText(/No answer from GitHub/)).toBeInTheDocument();
   });

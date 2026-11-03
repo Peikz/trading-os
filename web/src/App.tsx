@@ -1,95 +1,103 @@
-// Trading OS: the pages in the order of the trading day, as in the Streamlit sidebar: ☀️ before
-// the open, ⚡ live, 🌙 after the close, 🔬 research and settings. Hash routes (#/today,
-// #/chart?t=XXX...) keep a push link's query string (?t=A,B) working on a static server.
-// Pull latest fetches the newest runs into the dashboard's data repo copy; Save & push sends
-// your grades, notes, journal, watchlists, alerts and drawings to the private data repo.
+// Trading OS: five places with tabs inside (design review 4 Nov 2026). Today ("What do I do
+// today?"), Stocks (find and study a stock), Market, Journal and Lab; every one of the twelve
+// earlier pages lives in one of them. The top bar has the market in one word, search (Ctrl+K),
+// settings and a status dot; on a phone the places move to a bottom tab bar. Pull latest and
+// Save & push run by themselves (useSync), with the buttons kept in Settings.
 import { useEffect, useState } from "react";
-import { api } from "./api";
-import { Chart } from "./pages/Chart";
-import { Guide } from "./pages/Guide";
 import { Journal } from "./pages/Journal";
-import { LiveResults } from "./pages/LiveResults";
+import { Guide } from "./pages/Guide";
 import { Market } from "./pages/Market";
-import { Positions } from "./pages/Positions";
 import { Research } from "./pages/Research";
 import { Scans } from "./pages/Scans";
-import { Screener } from "./pages/Screener";
 import { SystemHealth } from "./pages/SystemHealth";
-import { Today } from "./pages/Today";
-import { Watchlists } from "./pages/Watchlists";
+import { Stocks } from "./places/Stocks";
+import { Today } from "./places/Today";
+import { hrefFor, parseHash, PLACES, type Route, TABS } from "./routes";
+import { CommandPalette } from "./shell/CommandPalette";
+import { TopBar } from "./shell/TopBar";
+import { useSync } from "./shell/useSync";
+import { Icon } from "./ui/Icon";
 
-const PAGES = {
-  today: ["☀️ Today", Today],
-  market: ["☀️ Market", Market],
-  watchlists: ["☀️ Watchlists", Watchlists],
-  screener: ["☀️ Screener", Screener],
-  positions: ["⚡ Positions", Positions],
-  chart: ["⚡ Chart", Chart],
-  scans: ["⚡ Scans", Scans],
-  journal: ["🌙 Journal", Journal],
-  live: ["🌙 Live results", LiveResults],
-  research: ["🔬 Research", Research],
-  health: ["🔬 System health", SystemHealth],
-  guide: ["🔬 Guide", Guide],
-} as const;
-type Page = keyof typeof PAGES;
-
-export function current(hash: string): Page {
-  const h = hash.replace(/^#\/?/, "").split("?")[0];
-  return h in PAGES ? (h as Page) : "today";
+function PlaceView({ route }: { route: Route }) {
+  const { place, tab, params } = route;
+  if (place === "today") return <Today />;
+  if (place === "stocks") return <Stocks params={params} />;
+  const meta = PLACES.find((p) => p.id === place)!;
+  return (
+    <div>
+      <div className="place-head">
+        <h1>{meta.label}</h1>
+        <span className="muted">{meta.question}</span>
+      </div>
+      <div className="tabs place-tabs" role="tablist" aria-label={`${meta.label} tabs`}>
+        {TABS[place].map(([id, text]) => (
+          <a
+            key={id}
+            role="tab"
+            aria-selected={id === tab}
+            href={hrefFor(place, id)}
+            className={`tab-link${id === tab ? " on" : ""}`}
+          >
+            {text}
+          </a>
+        ))}
+      </div>
+      {place === "market" && <Market tab={tab} />}
+      {place === "journal" && <Journal tab={tab} />}
+      {place === "lab" && tab === "research" && <Research />}
+      {place === "lab" && tab === "scans" && <Scans />}
+      {place === "lab" && tab === "health" && <SystemHealth />}
+      {place === "lab" && tab === "guide" && <Guide />}
+    </div>
+  );
 }
 
 export function App() {
-  const [page, setPage] = useState<Page>(() => current(window.location.hash));
-  const [sync, setSync] = useState<{ ok: boolean; message: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash));
+  const [palette, setPalette] = useState(false);
+  const [version, setVersion] = useState(0);
+  const sync = useSync();
+
   useEffect(() => {
-    const on = () => setPage(current(window.location.hash));
+    const on = () => setRoute(parseHash(window.location.hash));
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
-  const run = (call: () => Promise<{ ok: boolean; message: string }>) => {
-    setBusy(true);
-    call()
-      .then(setSync, (e: Error) => setSync({ ok: false, message: e.message }))
-      .finally(() => setBusy(false));
-  };
-  const Shown = PAGES[page][1];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((p) => !p);
+      }
+    };
+    const refresh = () => setVersion((v) => v + 1);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("trading-os:refresh", refresh);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("trading-os:refresh", refresh);
+    };
+  }, []);
+  useEffect(() => {
+    const label = PLACES.find((p) => p.id === route.place)?.label ?? "Today";
+    document.title = `${label} · Trading OS`;
+  }, [route.place]);
+
   return (
-    <>
-      <header className="top">
-        <b>Trading OS</b>
-        <nav>
-          {(Object.keys(PAGES) as Page[]).map((p) => (
-            <a key={p} href={`#/${p}`} className={p === page ? "on" : ""}>
-              {PAGES[p][0]}
-            </a>
-          ))}
-        </nav>
-        <div className="sync">
-          <button disabled={busy} title="Fetch the newest runs from GitHub" onClick={() => run(api.pull)}>
-            Pull latest
-          </button>
-          <button
-            disabled={busy}
-            title="Send your grades, notes, journal, watchlists, alerts and drawings to the private data repo"
-            onClick={() => run(api.push)}
-          >
-            Save & push
-          </button>
-        </div>
-      </header>
-      {sync && (
-        <p className={`sync-msg ${sync.ok ? "ok" : "error"}`} role="status">
-          {sync.message}{" "}
-          <button className="link" aria-label="Dismiss" onClick={() => setSync(null)}>
-            ✕
-          </button>
-        </p>
-      )}
-      <main>
-        <Shown />
+    <div className="shell">
+      <TopBar place={route.place} sync={sync} onSearch={() => setPalette(true)} />
+      <main className="place" key={version}>
+        <PlaceView route={route} />
       </main>
-    </>
+      <nav className="tabbar" aria-label="Places (phone)">
+        {PLACES.map((p) => (
+          <a key={p.id} href={hrefFor(p.id)} aria-current={p.id === route.place ? "page" : undefined}>
+            <Icon name={p.icon} size={22} />
+            {p.label}
+          </a>
+        ))}
+      </nav>
+      {palette && <CommandPalette onClose={() => setPalette(false)} onPull={sync.pullNow} onPush={sync.pushNow} />}
+    </div>
   );
 }
