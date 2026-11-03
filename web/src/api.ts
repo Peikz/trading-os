@@ -285,6 +285,79 @@ export interface WatchAdded {
 
 export type ScanWatchlists = Record<string, { label: string; rows: Row[] }>;
 
+export interface TrendLine {
+  id: string;
+  label: string;
+  colour: string;
+  x0: string;
+  y0: number;
+  x1: string;
+  y1: number;
+  extend: boolean;
+  pts: { time: string; value: number }[];
+}
+
+export interface Level {
+  name: string;
+  price: number;
+  colour: string;
+}
+
+export interface ChartMarker {
+  time: string;
+  position: "aboveBar" | "belowBar";
+  shape: "arrowUp" | "arrowDown";
+  color: string;
+  text: string;
+}
+
+export interface ChartData {
+  ticker: string;
+  period: string;
+  timeframe: string;
+  candles: Candle[];
+  lines: Line[];
+  avwaps: { name: string; colour: string; pts: { time: string; value: number }[] }[];
+  trend: TrendLine[];
+  markers: ChartMarker[];
+  levels: Level[];
+  visible: { from: string; to: string } | null;
+  quick_anchors: Record<string, string>;
+  marks: Row[];
+  dates: string[];
+  tradingview: string;
+  note: string;
+}
+
+export interface ChartNotes {
+  notes: { note_id: string; note_date: string; text: string; written: string | null; edited: string | null }[];
+  daily: { note_date: string; text: string; also: string[] }[];
+}
+
+export interface IntradayDays {
+  study_days: string[];
+  live: boolean;
+  live_sessions: string[];
+  no_keys: string;
+}
+
+export interface Intraday {
+  candles: { time: number; open: number; high: number; low: number; close: number; volume: number; extended: boolean }[];
+  vwap: { time: number; value: number }[];
+  levels: Level[];
+}
+
+export interface ChartQuery {
+  period: string;
+  timeframe: string;
+  span: string;
+  lines: string[];
+  hits: boolean;
+  fills: boolean;
+  levels: boolean;
+  anchors: string[];
+}
+
 export const INDICATORS = [
   "MA 10",
   "MA 20",
@@ -365,6 +438,38 @@ export const api = {
     }),
   removeFromWatchlist: (name: string, tickers: string[]) =>
     post<WatchList>(`/api/watchlists/${enc(name)}/remove`, { tickers }),
+  chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
+  chart: (ticker: string, q: ChartQuery) => {
+    const p = new URLSearchParams({
+      period: q.period,
+      timeframe: q.timeframe,
+      span: q.span,
+      lines: q.lines.join(","),
+      hits: String(q.hits),
+      fills: String(q.fills),
+      levels: String(q.levels),
+      anchors: q.anchors.join(","),
+    });
+    return request<ChartData>(`/api/chart/${enc(ticker)}?${p}`);
+  },
+  addLine: (ticker: string, body: { x0: string; y0: number; x1: string; y1: number; label?: string; extend: boolean }) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/lines`, body),
+  moveLine: (ticker: string, id: string, body: { x0: string; y0: number; x1: string; y1: number; extend: boolean }) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/lines/${enc(id)}`, body, "PUT"),
+  addAnchor: (ticker: string, day: string, label: string) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/anchors`, { day, label }),
+  removeMark: (ticker: string, id: string) =>
+    request<{ removed: string }>(`/api/chart/${enc(ticker)}/marks/${enc(id)}`, { method: "DELETE" }),
+  chartNotes: (ticker: string) => request<ChartNotes>(`/api/chart/${enc(ticker)}/notes`),
+  addChartNote: (ticker: string, text: string, day: string) =>
+    post<ChartNotes>(`/api/chart/${enc(ticker)}/notes`, { text, day }),
+  editChartNote: (ticker: string, id: string, text: string, day: string) =>
+    post<ChartNotes>(`/api/chart/${enc(ticker)}/notes/${enc(id)}`, { text, day }, "PUT"),
+  removeChartNote: (ticker: string, id: string) =>
+    request<ChartNotes>(`/api/chart/${enc(ticker)}/notes/${enc(id)}`, { method: "DELETE" }),
+  intradayDays: (ticker: string) => request<IntradayDays>(`/api/chart/${enc(ticker)}/intraday-days`),
+  intraday: (ticker: string, day: string, every: number, source: "study" | "live") =>
+    request<Intraday>(`/api/chart/${enc(ticker)}/intraday?day=${day}&every=${every}&source=${source}`),
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),

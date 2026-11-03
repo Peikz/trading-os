@@ -180,25 +180,15 @@ def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkey
 
 
 def test_the_grade_rules_read_from_config_in_words():
-    import importlib.util
-
     from trading_os.config import load_config
 
     cfg = load_config()
     quality = cfg.grading.get("quality")
     if not quality:
         pytest.skip("no quality grades in config")
-    spec = importlib.util.spec_from_file_location("app_helpers", APP)
-    assert spec is not None  # the helpers are plain functions in the app module
-    src = APP.read_text(encoding="utf-8")
-    start, end = src.index("FEATURE_TEXT = {"), src.index("def grade_blocks(")
-    import pandas as pd_  # noqa: F401  (the helpers use pd)
+    from trading_os import research_view  # moved from the app (React dashboard, Nov 2026)
 
-    from trading_os import notify, report
-
-    scope = {"pd": pd, "notify": notify, "report": report}
-    exec(src[start:end], scope)
-    table = scope["quality_rules"](cfg.grading)
+    table = research_view.quality_rules(cfg.grading)
     assert len(table) == len(quality)
     first = table.iloc[0]
     assert "1." in first["Points (one each)"] and "= C" in first["Grade by points"]

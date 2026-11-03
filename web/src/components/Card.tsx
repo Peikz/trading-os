@@ -3,6 +3,9 @@
 import type { BoardRow } from "../api";
 import { GRADE_COLOURS } from "../format";
 
+/** The Chart page for a stock. */
+export const chartLink = (ticker: string) => `#/chart?t=${encodeURIComponent(ticker)}`;
+
 export function GradeBadge({ grade }: { grade: string }) {
   return (
     <span className="badge" style={{ background: GRADE_COLOURS[grade] ?? "#6e7781" }}>
@@ -16,7 +19,10 @@ export function Card({ row }: { row: BoardRow }) {
     <article className="card" aria-label={`${row.ticker} card`}>
       <header>
         <GradeBadge grade={row.grade} /> <b className="ticker">{row.ticker}</b> · {row.scan_label}{" "}
-        <span className="muted">{row.run_label}</span>
+        <span className="muted">{row.run_label}</span>{" "}
+        <a href={chartLink(row.ticker)} title="The Chart page: drawing tools, AVWAPs, intraday">
+          📈 Chart
+        </a>
       </header>
       {row.facts.length > 0 ? (
         <ul>

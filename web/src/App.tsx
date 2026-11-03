@@ -2,6 +2,7 @@
 // the open: Today, Watchlists, Screener; live: Positions; after the close: Journal). Hash routes
 // (#/today, #/journal...) keep a push link's query string (?t=A,B) working on a static server.
 import { useEffect, useState } from "react";
+import { Chart } from "./pages/Chart";
 import { Journal } from "./pages/Journal";
 import { Positions } from "./pages/Positions";
 import { Screener } from "./pages/Screener";
@@ -13,12 +14,13 @@ const PAGES = {
   watchlists: ["☀️ Watchlists", Watchlists],
   screener: ["☀️ Screener", Screener],
   positions: ["⚡ Positions", Positions],
+  chart: ["⚡ Chart", Chart],
   journal: ["🌙 Journal", Journal],
 } as const;
 type Page = keyof typeof PAGES;
 
 function current(): Page {
-  const h = window.location.hash.replace(/^#\/?/, "");
+  const h = window.location.hash.replace(/^#\/?/, "").split("?")[0];
   return h in PAGES ? (h as Page) : "today";
 }
 

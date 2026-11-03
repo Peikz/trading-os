@@ -1,0 +1,266 @@
+// The Chart page's chart: candles with volume, MA/EMA lines, anchored VWAPs, saved trend lines,
+// scan-hit and fill markers and the price levels (all from /api/chart), drawn with TradingView's
+// Lightweight Charts. On the daily bars three tools edit trend lines: ✏️ draw (two clicks; a
+// click past the last bar makes it extend each day), ✋ move (drag a line's end) and 🧽 erase
+// (click a line). The page saves each change at once through the API.
+import {
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type MouseEventParams,
+  type SeriesMarker,
+  type Time,
+} from "lightweight-charts";
+import { useEffect, useRef, useState } from "react";
+import type { ChartData, TrendLine } from "../api";
+
+export type Tool = "none" | "draw" | "move" | "erase";
+export interface Point {
+  time: string;
+  price: number;
+}
+
+interface Props {
+  data: ChartData;
+  height?: number;
+  tool: Tool;
+  onDraw?: (a: Point, b: Point, extend: boolean) => void;
+  onMove?: (line: TrendLine, a: Point, b: Point) => void;
+  onErase?: (line: TrendLine) => void;
+}
+
+const NEAR_PX = 9;
+
+/** A Time from the chart as YYYY-MM-DD (strings come back as BusinessDay objects). */
+export function dayOf(t: Time | undefined): string | null {
+  if (t === undefined) return null;
+  if (typeof t === "string") return t;
+  if (typeof t === "number") return new Date(t * 1000).toISOString().slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${t.year}-${pad(t.month)}-${pad(t.day)}`;
+}
+
+/** Distance in pixels from p to the segment a-b. */
+export function toSegment(p: [number, number], a: [number, number], b: [number, number]): number {
+  const [px, py] = p;
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const k = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
+  return Math.hypot(px - (ax + k * dx), py - (ay + k * dy));
+}
+
+export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }: Props) {
+  const box = useRef<HTMLDivElement>(null);
+  const chart = useRef<IChartApi | null>(null);
+  const candles = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const trend = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const first = useRef<Point | null>(null);
+  const drag = useRef<{ line: TrendLine; end: 0 | 1; a: Point; b: Point } | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const props = useRef({ data, tool, onDraw, onMove, onErase });
+  props.current = { data, tool, onDraw, onMove, onErase };
+
+  // Build the chart once per data set
+  useEffect(() => {
+    if (!box.current) return;
+    const c = createChart(box.current, {
+      height,
+      autoSize: true,
+      layout: { background: { type: ColorType.Solid, color: "#0e1117" }, textColor: "#d1d4dc" },
+      grid: { vertLines: { color: "#1f242c" }, horzLines: { color: "#1f242c" } },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: "#30363d" },
+      timeScale: { borderColor: "#30363d", rightOffset: 8 },
+    });
+    chart.current = c;
+    const price = c.addCandlestickSeries({
+      upColor: "#26a69a",
+      downColor: "#ef5350",
+      borderVisible: false,
+      wickUpColor: "#26a69a",
+      wickDownColor: "#ef5350",
+    });
+    candles.current = price;
+    price.setData(
+      data.candles.map((k) => ({ time: k.time as Time, open: k.open, high: k.high, low: k.low, close: k.close })),
+    );
+    const vol = c.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" } });
+    c.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    vol.setData(
+      data.candles.map((k) => ({
+        time: k.time as Time,
+        value: k.volume,
+        color: k.close >= k.open ? "#26a69a55" : "#ef535055",
+      })),
+    );
+    for (const l of data.lines) {
+      const s = c.addLineSeries({ color: l.colour, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      s.setData(l.pts.map((p) => ({ time: p.time as Time, value: p.value })));
+    }
+    for (const l of data.avwaps) {
+      const s = c.addLineSeries({
+        color: l.colour,
+        lineWidth: 2,
+        lineStyle: LineStyle.Dotted,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        title: l.name,
+      });
+      s.setData(l.pts.map((p) => ({ time: p.time as Time, value: p.value })));
+    }
+    trend.current = new Map();
+    for (const l of data.trend) {
+      const s = c.addLineSeries({
+        color: l.colour,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        title: l.label,
+      });
+      s.setData(l.pts.map((p) => ({ time: p.time as Time, value: p.value })));
+      trend.current.set(l.id, s);
+    }
+    for (const lv of data.levels) {
+      price.createPriceLine({
+        price: lv.price,
+        color: lv.colour,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: lv.name,
+      });
+    }
+    price.setMarkers(data.markers.map((m) => ({ ...m, time: m.time as Time })) as SeriesMarker<Time>[]);
+    if (data.visible) c.timeScale().setVisibleRange({ from: data.visible.from as Time, to: data.visible.to as Time });
+    else c.timeScale().fitContent();
+    return () => {
+      c.remove();
+      chart.current = null;
+    };
+  }, [data, height]);
+
+  // The tools
+  useEffect(() => {
+    const c = chart.current;
+    const el = box.current;
+    if (!c || !el) return;
+    first.current = null;
+    setHint(
+      tool === "draw" ? "Click the line's first point." : tool === "move" ? "Drag a line's end." : tool === "erase" ? "Click the line to delete." : null,
+    );
+    const locked = tool === "move";
+    c.applyOptions({ handleScroll: !locked, handleScale: !locked });
+
+    const at = (x: number, y: number): { point: Point; past: boolean } | null => {
+      const series = candles.current;
+      const bars = props.current.data.candles;
+      if (!series || !bars.length) return null;
+      const logical = c.timeScale().coordinateToLogical(x);
+      const price = series.coordinateToPrice(y);
+      if (logical === null || price === null) return null;
+      const i = Math.round(logical);
+      const k = Math.max(0, Math.min(bars.length - 1, i));
+      return { point: { time: bars[k].time, price: Math.round(price * 100) / 100 }, past: i >= bars.length - 1 };
+    };
+    const pixel = (p: Point): [number, number] | null => {
+      const x = c.timeScale().timeToCoordinate(p.time as Time);
+      const y = candles.current?.priceToCoordinate(p.price);
+      return x === null || y === null || y === undefined ? null : [x, y];
+    };
+
+    const onClick = (param: MouseEventParams<Time>) => {
+      if (!param.point) return;
+      const { tool: now, onDraw: draw, onErase: erase, data: d } = props.current;
+      if (now === "draw") {
+        const hit = at(param.point.x, param.point.y);
+        if (!hit) return;
+        if (!first.current) {
+          first.current = hit.point;
+          setHint(`First point ${hit.point.time} ${hit.point.price.toFixed(2)}: click the second.`);
+        } else {
+          const a = first.current;
+          first.current = null;
+          setHint("Click the line's first point.");
+          if (a.time !== hit.point.time) draw?.(a, hit.point, hit.past);
+        }
+      } else if (now === "erase") {
+        const p: [number, number] = [param.point.x, param.point.y];
+        let best: { line: TrendLine; dist: number } | null = null;
+        for (const l of d.trend) {
+          const ends = [l.pts[0], l.pts[l.pts.length - 1]].map((x) => ({ time: x.time, price: x.value }));
+          const a = pixel(ends[0]);
+          const b = pixel(ends[1]);
+          if (!a || !b) continue;
+          const dist = toSegment(p, a, b);
+          if (dist <= NEAR_PX && (!best || dist < best.dist)) best = { line: l, dist };
+        }
+        if (best) erase?.(best.line);
+      }
+    };
+    c.subscribeClick(onClick);
+
+    const xy = (e: MouseEvent): [number, number] => {
+      const r = el.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    const down = (e: MouseEvent) => {
+      if (props.current.tool !== "move") return;
+      const p = xy(e);
+      for (const l of props.current.data.trend) {
+        const ends: Point[] = [
+          { time: l.x0, price: l.y0 },
+          { time: l.x1, price: l.y1 },
+        ];
+        for (const end of [0, 1] as const) {
+          const q = pixel(ends[end]);
+          if (q && Math.hypot(q[0] - p[0], q[1] - p[1]) <= NEAR_PX + 3) {
+            drag.current = { line: l, end, a: ends[0], b: ends[1] };
+            e.preventDefault();
+            return;
+          }
+        }
+      }
+    };
+    const move = (e: MouseEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const hit = at(...xy(e));
+      if (!hit) return;
+      if (d.end === 0) d.a = hit.point;
+      else d.b = hit.point;
+      trend.current.get(d.line.id)?.setData(
+        [d.a, d.b]
+          .sort((x, y) => (x.time < y.time ? -1 : 1))
+          .map((p) => ({ time: p.time as Time, value: p.price })),
+      );
+    };
+    const up = () => {
+      const d = drag.current;
+      drag.current = null;
+      if (d && d.a.time !== d.b.time) props.current.onMove?.(d.line, d.a, d.b);
+    };
+    el.addEventListener("mousedown", down, true);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      c.unsubscribeClick(onClick);
+      el.removeEventListener("mousedown", down, true);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [tool, data]);
+
+  return (
+    <div>
+      <div ref={box} className={`chart tool-${tool}`} style={{ height }} aria-label="Chart" />
+      {hint && <p className="muted hint">{hint}</p>}
+    </div>
+  );
+}

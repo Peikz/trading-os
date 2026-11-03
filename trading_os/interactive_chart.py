@@ -221,6 +221,30 @@ def session_vwap(minutes: pd.DataFrame) -> pd.Series:
     return out.where(minutes["minute"] >= 570)
 
 
+def resample_minutes(minutes: pd.DataFrame, every: int = 1) -> pd.DataFrame:
+    """Minute bars to `every`-minute candles counted from the 09:30 open (first open, high,
+    low, last close, summed volume, mean bar VWAP), oldest first."""
+    data = minutes.sort_values("ts").reset_index(drop=True)
+    if every <= 1:
+        return data
+    key = (data["minute"] - 570) // every
+    return (
+        data.assign(key=key)
+        .groupby("key")
+        .agg(
+            ts=("ts", "first"),
+            minute=("minute", "first"),
+            open=("open", "first"),
+            high=("high", "max"),
+            low=("low", "min"),
+            close=("close", "last"),
+            volume=("volume", "sum"),
+            vwap=("vwap", "mean"),
+        )
+        .reset_index(drop=True)
+    )
+
+
 def intraday_figure(
     minutes: pd.DataFrame,
     *,
@@ -233,24 +257,7 @@ def intraday_figure(
     """One day's minute bars (`every` minutes per candle): candles, VWAP, volume, the prior
     close and `levels`. `minutes`: ts (New York), minute (after midnight), open, high, low,
     close, volume, vwap. Pre- and post-market are shaded."""
-    data = minutes.sort_values("ts").reset_index(drop=True)
-    if every > 1:
-        key = (data["minute"] - 570) // every
-        data = (
-            data.assign(key=key)
-            .groupby("key")
-            .agg(
-                ts=("ts", "first"),
-                minute=("minute", "first"),
-                open=("open", "first"),
-                high=("high", "max"),
-                low=("low", "min"),
-                close=("close", "last"),
-                volume=("volume", "sum"),
-                vwap=("vwap", "mean"),
-            )
-            .reset_index(drop=True)
-        )
+    data = resample_minutes(minutes, every)
     vwap = session_vwap(data)
     x = [t.strftime("%H:%M") for t in data["ts"]]
     fig = make_subplots(

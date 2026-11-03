@@ -3,6 +3,7 @@
 // distance to the stop, and what the plan says today, with earnings within two sessions.
 import { useEffect, useState } from "react";
 import { api, type Positions as Data } from "../api";
+import { chartLink } from "../components/Card";
 import { Metric } from "../components/Table";
 import { signed, usd } from "../format";
 
@@ -37,7 +38,8 @@ export function Positions() {
                   <b className="ticker">{c.ticker}</b> · {c.setup}{" "}
                   <span className="muted">
                     {c.direction} · {c.shares.toLocaleString("en-US")} sh · in {c.entry_date}
-                  </span>
+                  </span>{" "}
+                  <a href={chartLink(c.ticker)}>📈 Chart</a>
                 </header>
                 <div className="metrics">
                   <Metric
