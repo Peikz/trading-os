@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  type DailyNotes,
   type JournalClosed,
   type JournalOpen,
   type JournalPlans,
@@ -13,9 +14,9 @@ import {
 import { GradeForm } from "../components/GradeForm";
 import { RCurve } from "../components/RCurve";
 import { Metric, Table } from "../components/Table";
-import { usd } from "../format";
+import { readText, usd } from "../format";
 
-const TABS = ["Open positions", "Log a trade", "Plans", "Closed trades", "Real vs study"] as const;
+const TABS = ["Open positions", "Daily notes", "Log a trade", "Plans", "Closed trades", "Real vs study"] as const;
 type Tab = (typeof TABS)[number];
 const OPEN_COLUMNS = [
   "ticker", "direction", "entry_date", "entry_avg", "open_quantity", "order_stop",
@@ -40,6 +41,7 @@ export function Journal() {
         Fills are the record: imported from the broker or logged here by hand (a broker fill
         later replaces the matching hand-logged one). Private: stays in the data repo.
       </p>
+      <ImportFills />
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button
@@ -54,6 +56,7 @@ export function Journal() {
         ))}
       </div>
       {tab === "Open positions" && <OpenTab />}
+      {tab === "Daily notes" && <DailyTab />}
       {tab === "Log a trade" && <LogTab />}
       {tab === "Plans" && <PlansTab />}
       {tab === "Closed trades" && <ClosedTab />}
@@ -355,6 +358,139 @@ function RealTab() {
     <section>
       <Table label="Real vs study" columns={data.columns} rows={data.rows} />
       <p className="muted">{data.caption}</p>
+    </section>
+  );
+}
+
+/** A broker's fills export (CSV), imported into the journal (columns mapped in config). */
+function ImportFills() {
+  const [file, setFile] = useState<File | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const run = async () => {
+    if (!file) return;
+    try {
+      const r = await api.importFills(file.name, await readText(file));
+      setMessage(r.message);
+    } catch (e) {
+      setMessage(`❌ ${(e as Error).message}`);
+    }
+  };
+  return (
+    <details>
+      <summary>Import broker fills (CSV)</summary>
+      <p className="muted">Column names are mapped in config/scans.yaml → journal.csv_columns.</p>
+      <div className="row">
+        <input aria-label="Fills export" type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <button onClick={run} disabled={!file}>
+          Import
+        </button>
+      </div>
+      {message && <p className={message.startsWith("❌") ? "error" : "ok pre"}>{message}</p>}
+    </details>
+  );
+}
+
+const DAY_LABEL = (d: number) => (d === 3650 ? "all" : `${d} days`);
+
+function DailyTab() {
+  const [tag, setTag] = useState("");
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<DailyNotes | null>(null);
+  const [version, setVersion] = useState(0);
+  const [form, setForm] = useState({ day: today(), tags: "", text: "" });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [edit, setEdit] = useState({ day: "", tags: "", text: "" });
+  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    api.dailyNotes(tag, days).then(setData, (e: Error) => setMessage(`❌ ${e.message}`));
+  }, [tag, days, version]);
+  const reload = () => setVersion((v) => v + 1);
+  const fail = (e: Error) => setMessage(`❌ ${e.message}`);
+  return (
+    <section className="form">
+      <p className="muted">{data?.caption}</p>
+      <div className="row">
+        <input aria-label="Day" type="date" value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+        <input
+          aria-label="Stocks (comma or space separated)"
+          placeholder="Stocks (comma or space separated)"
+          value={form.tags}
+          onChange={(e) => setForm({ ...form, tags: e.target.value })}
+        />
+      </div>
+      <textarea aria-label="Daily note" rows={5} value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} />
+      <button
+        disabled={!form.text.trim()}
+        onClick={() =>
+          api.addDailyNote(form).then(() => {
+            setForm({ day: today(), tags: "", text: "" });
+            reload();
+          }, fail)
+        }
+      >
+        Save note
+      </button>
+      <div className="row">
+        <select aria-label="Show" value={tag} onChange={(e) => setTag(e.target.value)}>
+          <option value="">All notes</option>
+          {(data?.tags ?? []).map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+        <div className="pills" role="group" aria-label="From the last">
+          {(data?.days ?? [7, 30, 90, 365, 3650]).map((d) => (
+            <button key={d} className={days === d ? "on" : ""} onClick={() => setDays(d)}>
+              {DAY_LABEL(d)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {message && <p className="error">{message}</p>}
+      {data && data.notes.length === 0 && <p className="muted">No daily notes here yet.</p>}
+      {data?.notes.map((n) => (
+        <div key={n.note_id} className="note">
+          <b>{n.note_date}</b>
+          {n.tags.length > 0 && <span className="muted"> · {n.tags.join(" · ")}</span>}
+          {editing === n.note_id ? (
+            <div>
+              <div className="row">
+                <input aria-label="Edit day" type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} />
+                <input aria-label="Edit stocks" value={edit.tags} onChange={(e) => setEdit({ ...edit, tags: e.target.value })} />
+              </div>
+              <textarea aria-label="Edit note" rows={4} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} />
+              <button
+                disabled={!edit.text.trim()}
+                onClick={() =>
+                  api.editDailyNote(n.note_id, edit).then(() => {
+                    setEditing(null);
+                    reload();
+                  }, fail)
+                }
+              >
+                Save
+              </button>
+              <button onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          ) : (
+            <>
+              <p className="pre">{n.text}</p>
+              <button
+                className="link"
+                onClick={() => {
+                  setEditing(n.note_id);
+                  setEdit({ day: n.note_date, tags: n.tags.join(", "), text: n.text });
+                }}
+              >
+                Edit
+              </button>
+              <button className="link" onClick={() => api.removeDailyNote(n.note_id).then(reload, fail)}>
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+      ))}
+      <p className="muted">{data?.kept}</p>
     </section>
   );
 }

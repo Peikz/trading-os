@@ -267,8 +267,9 @@ def register(app: FastAPI, ctx: Context) -> None:
             levels = chart_view.levels_for(ctx.root(), ctx.runs(), ctx.cfg(), t, read)
         else:
             minutes = chart_view.minute_bars(ctx.root(), t, day)
+        marks = chart_view.LIVE_MARKS if source == "live" else None
         out = chart_view.intraday_payload(
-            minutes, every, chart_view.prior_close(daily, day), levels
+            minutes, every, chart_view.prior_close(daily, day), levels, marks
         )
         return out | {"ticker": t, "day": day.isoformat(), "every": every, "source": source}
 

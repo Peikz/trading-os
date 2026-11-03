@@ -42,6 +42,7 @@ LINE_COLOUR = "#e53935"
 LEVEL_COLOURS = {"pivot": "#2da44e", "order stop": "#ef5350", "stop": "#ef5350",
                  "plan entry": "#2f81f7"}  # fmt: skip
 HIT_COLOUR = "#f2c94c"
+LIVE_MARKS = {630: "10:30"}  # the live intraday chart: the EP entry time
 NO_KEYS = (
     "Live minute bars need the Alpaca keys where the dashboard runs (ALPACA_API_KEY_ID and "
     "ALPACA_API_SECRET_KEY in its environment)."
@@ -393,12 +394,15 @@ def intraday_payload(
     every: int = 1,
     prev_close: float | None = None,
     levels: Mapping[str, float] | None = None,
+    mark_minutes: Mapping[int, str] | None = None,
 ) -> dict:
     """One day's `every`-minute candles for a Lightweight Chart: times as UTC seconds shifted
     to New York wall time (so the axis reads New York), the VWAP from the 09:30 open, whether
-    each bar is outside regular hours, the prior close and the levels."""
+    each bar is outside regular hours, the prior close and the levels. `mark_minutes`: minute
+    after midnight -> text, marked on the first candle at or after it (the live chart's 10:30,
+    the EP entry time)."""
     if minutes.empty:
-        return {"candles": [], "vwap": [], "levels": []}
+        return {"candles": [], "vwap": [], "levels": [], "markers": []}
     if "vwap" not in minutes:
         minutes = minutes.assign(vwap=float("nan"))
     data = ichart.resample_minutes(minutes, every)
@@ -421,4 +425,10 @@ def intraday_payload(
     ]
     if prev_close is not None:
         lv.append({"name": "prior close", "price": float(prev_close), "colour": "#8b949e"})
-    return {"candles": candles, "vwap": vw, "levels": lv}
+    markers = []
+    for minute, text in (mark_minutes or {}).items():
+        at = next((w for w, m in zip(wall, data["minute"], strict=True) if int(m) >= minute), None)
+        if at is not None:
+            markers.append({"time": at, "position": "aboveBar", "shape": "arrowDown",
+                            "color": "#9e9e9e", "text": text})  # fmt: skip
+    return {"candles": candles, "vwap": vw, "levels": lv, "markers": markers}

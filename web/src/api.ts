@@ -345,6 +345,8 @@ export interface Intraday {
   candles: { time: number; open: number; high: number; low: number; close: number; volume: number; extended: boolean }[];
   vwap: { time: number; value: number }[];
   levels: Level[];
+  /** The live chart's 10:30 (the EP entry time) */
+  markers?: { time: number; position: "aboveBar" | "belowBar"; shape: "arrowDown" | "arrowUp"; color: string; text: string }[];
 }
 
 /** A table from the API: column names and JSON rows; `total` counts rows before any limit. */
@@ -485,6 +487,47 @@ export interface ScanForm {
   push_label: string;
   note: string;
   push_slots: string[];
+}
+
+export interface MarketPage {
+  empty: boolean;
+  tiles?: Tile[];
+  ibd?: ApiTable;
+  ibd_caption?: string;
+  heat?: {
+    bands: { band: string; label: string }[];
+    now: string;
+    count: number;
+    band: string;
+    table: ApiTable;
+    caption: string;
+  } | null;
+  periods?: string[];
+  period?: string;
+  groups?: string[];
+  picked?: string[];
+  sectors?: ApiTable | null;
+  sector_caption?: string;
+  rotation?: { ticker: string; name: string | null; group: string; x: number; y: number }[];
+  back?: string;
+  industries?: { top: ApiTable; climbing: ApiTable; caption: string } | null;
+  breadth?: ApiTable;
+  ratios?: { time: string; ratio_5d: number | null; ratio_10d: number | null }[];
+}
+
+export interface DailyNote {
+  note_id: string;
+  note_date: string;
+  text: string;
+  tags: string[];
+}
+
+export interface DailyNotes {
+  notes: DailyNote[];
+  tags: string[];
+  days: number[];
+  caption: string;
+  kept: string;
 }
 
 export interface ChartQuery {
@@ -649,6 +692,19 @@ export const api = {
   commitScan: (name: string) => post<{ ok: boolean; message: string }>(`/api/scans/${enc(name)}/commit`, {}),
   pull: () => post<{ ok: boolean; message: string }>("/api/sync/pull", {}),
   push: () => post<{ ok: boolean; message: string }>("/api/sync/push", {}),
+  marketPage: (p: Record<string, string>) =>
+    request<MarketPage>(`/api/market/page?${new URLSearchParams(p)}`),
+  guide: () => request<{ text: string | null }>("/api/guide"),
+  importFills: (name: string, content: string) =>
+    post<{ message: string }>("/api/journal/import", { name, content }),
+  dailyNotes: (tag: string, days: number) =>
+    request<DailyNotes>(`/api/journal/daily-notes?${new URLSearchParams({ ...(tag ? { tag } : {}), days: String(days) })}`),
+  addDailyNote: (body: { text: string; day: string; tags: string }) =>
+    post<{ note_id: string }>("/api/journal/daily-notes", body),
+  editDailyNote: (id: string, body: { text: string; day: string; tags: string }) =>
+    post<{ note_id: string }>(`/api/journal/daily-notes/${enc(id)}`, body, "PUT"),
+  removeDailyNote: (id: string) =>
+    request<{ removed: string }>(`/api/journal/daily-notes/${enc(id)}`, { method: "DELETE" }),
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),

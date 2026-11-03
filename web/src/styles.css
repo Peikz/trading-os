@@ -148,3 +148,17 @@ summary { cursor: pointer; }
   .top .sync { margin-left: 0; }
 }
 select, input:not([type="checkbox"]):not([type="radio"]) { max-width: 100%; }
+.chart.tool-move { touch-action: none; }
+.rotation { width: 100%; max-width: 720px; height: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.guide .markdown { max-width: 980px; }
+.markdown { overflow-wrap: anywhere; }
+.markdown table { display: block; overflow-x: auto; max-width: 100%; }
+.markdown pre { max-width: 100%; }
+.markdown img { max-width: 100%; }
+.two > div { min-width: 0; }
+.top b { white-space: nowrap; }
+.top nav { overflow-x: auto; flex: 1 1 auto; min-width: 0; }
+.top a { white-space: nowrap; }
+.top .sync button { white-space: nowrap; }

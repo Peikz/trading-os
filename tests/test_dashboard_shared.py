@@ -87,3 +87,11 @@ def test_add_checked_reports_added_already_and_unknown(tmp_path):
     assert my_watchlists.add_checked(tmp_path, "", [A], known)["lines"][0].startswith("Give")
     members = my_watchlists.current(my_watchlists.load(tmp_path))
     assert sorted(members["ticker"]) == sorted([A, B])
+
+
+def test_save_and_push_sends_everything_the_dashboards_write():
+    from trading_os import dashboard
+
+    wrote = {"data/journal", "data/my_watchlists", "data/chart_marks", "data/my_alerts",
+             "data/screens", "docs"}  # fmt: skip
+    assert wrote <= set(dashboard.SAVED_BY_YOU)  # screens: Emil, 4 Nov 2026

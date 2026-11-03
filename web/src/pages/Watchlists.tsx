@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Alerts, type ScanWatchlists, type WatchAdded, type WatchList } from "../api";
 import { Marked, Table } from "../components/Table";
-import { download } from "../format";
+import { download, readText } from "../format";
 
 const NEW = "＋ New list";
 
@@ -40,7 +40,7 @@ export function Watchlists() {
   }, [choice]);
 
   const add = async () => {
-    const exportText = file ? await file.text() : "";
+    const exportText = file ? await readText(file) : "";
     try {
       const out = await api.addToWatchlist(name, typed, exportText, note);
       setAdded(out);

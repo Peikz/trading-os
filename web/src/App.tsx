@@ -6,8 +6,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { Chart } from "./pages/Chart";
+import { Guide } from "./pages/Guide";
 import { Journal } from "./pages/Journal";
 import { LiveResults } from "./pages/LiveResults";
+import { Market } from "./pages/Market";
 import { Positions } from "./pages/Positions";
 import { Research } from "./pages/Research";
 import { Scans } from "./pages/Scans";
@@ -18,6 +20,7 @@ import { Watchlists } from "./pages/Watchlists";
 
 const PAGES = {
   today: ["☀️ Today", Today],
+  market: ["☀️ Market", Market],
   watchlists: ["☀️ Watchlists", Watchlists],
   screener: ["☀️ Screener", Screener],
   positions: ["⚡ Positions", Positions],
@@ -27,6 +30,7 @@ const PAGES = {
   live: ["🌙 Live results", LiveResults],
   research: ["🔬 Research", Research],
   health: ["🔬 System health", SystemHealth],
+  guide: ["🔬 Guide", Guide],
 } as const;
 type Page = keyof typeof PAGES;
 

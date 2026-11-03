@@ -40,6 +40,9 @@ export function IntradayChart({ data, height = 460 }: { data: Intraday; height?:
     for (const lv of data.levels) {
       price.createPriceLine({ price: lv.price, color: lv.colour, lineStyle: LineStyle.Dashed, lineWidth: 1, title: lv.name, axisLabelVisible: true });
     }
+    if (data.markers?.length) {
+      price.setMarkers(data.markers.map((m) => ({ ...m, time: m.time as Time })));
+    }
     c.timeScale().fitContent();
     return () => c.remove();
   }, [data, height]);

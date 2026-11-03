@@ -30,6 +30,7 @@ from api.serialize import records, scalar
 from trading_os import (
     alerts,
     board_data,
+    daily_notes,
     dashboard,
     journal,
     journal_view,
@@ -109,6 +110,17 @@ class FillIn(BaseModel):
     fees: float = 0.0
     setup: str | None = None
     stop: float | None = None
+
+
+class CsvIn(BaseModel):
+    name: str
+    content: str  # the export's text
+
+
+class DailyIn(BaseModel):
+    text: str
+    day: dt.date | None = None
+    tags: str = ""  # typed stocks, comma or space separated ($TICKER in the text counts too)
 
 
 class PlanIn(BaseModel):
@@ -426,6 +438,61 @@ def register(app: FastAPI, ctx: Context) -> None:
             "rows": records(table.round(2)),
             "caption": journal_view.REAL_CAPTION,
         }
+
+    @app.post("/api/journal/import")
+    def journal_import(f: CsvIn) -> dict:
+        """Import a broker's fills export (`journal.main --csv`; columns mapped in config)."""
+        data = f.content.encode("utf-8")
+        if len(data) > MAX_SHOT_BYTES:
+            raise HTTPException(400, "The file is over 10 MB.")
+        try:
+            out = journal_view.import_csv(ctx.root(), f.name, data)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(400, f"Not imported: {exc}") from exc
+        return {"message": out}
+
+    @app.get("/api/journal/daily-notes")
+    def daily_list(tag: str | None = None, days: int = 30) -> dict:
+        notes = journal_view.daily_notes_list(ctx.root(), tag, days)
+        rows = []
+        for n in notes.to_dict("records") if len(notes) else []:
+            rows.append(
+                {"note_id": n["note_id"], "note_date": scalar(n["note_date"]),
+                 "text": n["text"], "tags": list(n["tag_list"])}
+            )  # fmt: skip
+        return {
+            "notes": rows,
+            "tags": daily_notes.all_tags(ctx.root()),
+            "days": list(journal_view.DAYS_BACK),
+            "caption": journal_view.DAILY_CAPTION,
+            "kept": journal_view.DAILY_KEPT,
+        }
+
+    @app.post("/api/journal/daily-notes")
+    def daily_add(n: DailyIn) -> dict:
+        if not n.text.strip():
+            raise HTTPException(400, "The note is empty.")
+        note_id = daily_notes.add(ctx.root(), n.text, n.day, n.tags)
+        return {"note_id": note_id}
+
+    def daily_known(note_id: str) -> None:
+        live = daily_notes.current(ctx.root())
+        if not len(live) or note_id not in set(live["note_id"]):
+            raise HTTPException(404, "No such daily note.")
+
+    @app.put("/api/journal/daily-notes/{note_id}")
+    def daily_edit(note_id: str, n: DailyIn) -> dict:
+        daily_known(note_id)
+        if not n.text.strip():
+            raise HTTPException(400, "The note is empty.")
+        daily_notes.edit(ctx.root(), note_id, n.text, n.day or dt.date.today(), n.tags)
+        return {"note_id": note_id}
+
+    @app.delete("/api/journal/daily-notes/{note_id}")
+    def daily_remove(note_id: str) -> dict:
+        daily_known(note_id)
+        daily_notes.remove(ctx.root(), note_id)
+        return {"removed": note_id}
 
     # --- Positions
 
