@@ -28,6 +28,7 @@ from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawabl
 
 from trading_os import (
     alerts,
+    board_data,
     breadth,
     chart_marks,
     clock,
@@ -292,29 +293,12 @@ def read_big(path: str, columns: tuple | None = None) -> pd.DataFrame:
 @st.cache_data(ttl=600)
 def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
     """One stock's 2-year daily bars from the compact bars-2y file (fetched from GitHub)."""
-    import pyarrow.dataset as ds
-
-    path = bars_file(folder, ticker)
-    if path is None:
-        return pd.DataFrame(columns=["session_date", "open", "high", "low", "close", "volume"])
-    table = ds.dataset(path, format="parquet").to_table(filter=ds.field("ticker") == ticker)
-    bars = table.to_pandas()
-    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
-    return bars.drop_duplicates("session_date").sort_values("session_date")
+    return board_data.ticker_bars(bars_file(folder, ticker), ticker)
 
 
 def bars_file(folder: str, ticker: str) -> Path | None:
-    """The compact 2-year bars file holding `ticker` (the data repo's bars-2y release: one
-    small file per first letter, refreshed each morning); older cached copies are removed."""
-    from trading_os.bars_pack import shard_of
-
-    pattern = f"bars_2y_*_{shard_of(ticker)}.parquet"
-    with contextlib.suppress(Exception):  # offline or gh missing: use what the cache has
-        remote_data.fetch(data_repo(folder), "bars-2y", pattern)
-    files = sorted((remote_data.CACHE / "bars-2y").glob(pattern))
-    for old in files[:-1]:
-        old.unlink(missing_ok=True)
-    return files[-1] if files else None
+    """The compact 2-year bars file holding `ticker` (`board_data.bars_file`)."""
+    return board_data.bars_file(Path(folder), ticker)
 
 
 def bars_date(folder: str):
@@ -335,13 +319,7 @@ def scan_frames(path: str) -> dict[str, pd.DataFrame]:
     """A run's hits split per scan, each with only the columns that scan fills. A run file
     holds every scan's fields (hundreds of columns), and every filter on it copied them all:
     the Today page spent ~1 s a click on that."""
-    cands = read_parquet(path)
-    if cands.empty or "scan" not in cands:
-        return {}
-    return {
-        scan: hits.dropna(axis=1, how="all").reset_index(drop=True)
-        for scan, hits in cands.groupby("scan", sort=False)
-    }
+    return board_data.scan_frames(path)
 
 
 FORMATS = {"money": "compact", "shares": "compact", "int": "%d"}
@@ -351,14 +329,7 @@ FORMATS = {"money": "compact", "shares": "compact", "int": "%d"}
 def live_universe(snapshot_path: str) -> pd.DataFrame:
     """The Screener's live data (Emil, 29 Oct 2026): one TradingView fetch of the universe
     (at most once per 5 minutes), with the last close's history fields joined in."""
-    from trading_os import metrics, universe
-
-    raw = tv.fetch_universe(CFG.universe)
-    raw["earnings_flag"] = False
-    live = universe.build_universe(metrics.add_phase1_metrics(raw, CFG.proxies), CFG.universe, "am")
-    snap = read_parquet(snapshot_path).drop_duplicates("ticker").set_index("ticker")
-    keep = [c for c in snap.columns if c not in live.columns]
-    return live.join(snap[keep], on="ticker")
+    return screens.live_data(CFG, read_parquet(snapshot_path))
 
 
 def tradingview_url(ticker: str, exchange: str | None = None) -> str:
@@ -376,13 +347,7 @@ def tradingview_list(tickers, exchanges: dict | None = None) -> str:
 @st.cache_data(ttl=600)
 def exchanges_of(universe_path: str) -> dict[str, str]:
     """Ticker -> exchange from a run's universe snapshot (intraday runs have none)."""
-    path = Path(universe_path)
-    if not path.exists():
-        return {}
-    uni = pd.read_parquet(path)
-    if "exchange" not in uni:
-        return {}
-    return dict(zip(uni["ticker"], uni["exchange"], strict=True))
+    return board_data.exchanges_of(universe_path)
 
 
 def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> None:
@@ -1438,20 +1403,8 @@ if page == "Today":
         st.stop()
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
-    tile_run = latest_pm if latest_pm is not None and latest_pm.breadth_pm is not None else None
-    tile_row = None
-    if latest_eod is not None and latest_eod.breadth is not None:
-        tile_row = read_parquet(str(latest_eod.breadth)).iloc[0].to_dict()
-    if tile_run is not None and (latest_eod is None or tile_run.session > latest_eod.session):
-        tile_row = {**(tile_row or {}), **read_parquet(str(tile_run.breadth_pm)).iloc[0].to_dict()}
-    try:
-        from trading_os import ibd
-
-        tile_ibd = ibd.state_at(data_dir, dt.date.today())
-    except Exception:  # noqa: BLE001 - the tile shows n/a
-        tile_ibd = None
-    tile_heat = heat.short_line(heat.load(data_dir), (tile_row or {}).get("scan_count"))
-    board.market_strip(tile_row, tile_ibd, tile_heat[0].replace("🌡 ", "") if tile_heat else None)
+    tile_row, tile_ibd, tile_heat = board_data.market_inputs(data_dir, runs)
+    board.market_strip(tile_row, tile_ibd, tile_heat)
     board_account = sizing.load_account(data_dir)
     board_fragment(
         runs,
@@ -1692,8 +1645,7 @@ elif page == "Screener":
     if hit_scan:
         # The hits plus the universe's fields they lack, so every filter works on them
         snap = read_parquet(str(run.universe)) if run.universe.exists() else snapshot
-        snap = snap.drop_duplicates("ticker").set_index("ticker")
-        data = hits.join(snap[[c for c in snap.columns if c not in hits.columns]], on="ticker")
+        data = screens.with_universe(hits, snap)
         when = f"{report.SCAN_LABELS.get(hit_scan, hit_scan)} hits, {run.label}"
         if "exchange" not in data:
             data["exchange"] = data["ticker"].map(exchanges_of(str(eod_runs[0].universe)))

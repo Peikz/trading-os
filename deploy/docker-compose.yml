@@ -1,0 +1,90 @@
+# Trading OS React dashboard on one small server (deploy/DEPLOY.md).
+#
+#   cd deploy && cp .env.example .env   # fill in the placeholders, chmod 600 .env
+#   docker compose up -d --build
+#
+# Nothing is published on the server's public address: no `ports:` anywhere. Caddy shares the
+# Tailscale container's network, so the site answers only inside your tailnet
+# (http://<ts-hostname>.<your-tailnet>.ts.net/).
+
+name: trading-os
+
+services:
+  tailscale:
+    image: tailscale/tailscale:v1.78.3
+    hostname: ${TS_HOSTNAME:-trading-os}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in deploy/.env}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      TRADING_OS_DATA: /data
+      TRADING_OS_CACHE: /cache
+      # The gh CLI reads it to fetch the data repo's bar releases (charts). Never logged.
+      GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN in deploy/.env}
+    volumes:
+      - ${DATA_DIR:?set DATA_DIR in deploy/.env}:/data  # writes only data/screens/
+      - cache:/cache
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  # Builds the React app once and copies the static files into the `site` volume, then exits.
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    volumes:
+      - site:/site
+    restart: "no"
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    network_mode: service:tailscale  # listens only on the tailnet
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - site:/srv:ro
+      - caddy-data:/data
+    depends_on:
+      tailscale:
+        condition: service_started
+      api:
+        condition: service_started
+      web:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Pulls the private data repo every PULL_EVERY seconds (default 10 minutes), so new runs
+  # show without a restart. The token is passed to git through a credential helper that reads
+  # the environment; it is never written to the clone's config.
+  data-sync:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile  # the API image: it has git, and runs as uid 1000
+    environment:
+      GH_TOKEN: ${GH_TOKEN}
+      PULL_EVERY: ${PULL_EVERY:-600}
+    volumes:
+      - ${DATA_DIR}:/data
+      - ./data-sync.sh:/data-sync.sh:ro
+    entrypoint: ["/bin/sh", "/data-sync.sh"]
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
+  cache:
+  site:
+  caddy-data:
