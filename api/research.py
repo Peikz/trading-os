@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.pages import Context
-from api.serialize import records
+from api.serialize import records, scalar
 from trading_os import (
     chart_view,
     dashboard,
@@ -97,7 +97,8 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
         labels = [x[0] for x in research_view.STRATEGY_RULES]
         pick = label if label in labels else labels[0]
         found = research_view.strategy_rules(cfg(), root(), pick)
-        return {"labels": labels, "label": pick, **found}
+        # scalar(): the rules carry numpy numbers from the stats files (a 500 on real data)
+        return scalar({"labels": labels, "label": pick, **found})
 
     @app.get("/api/research/how-tested")
     def how_tested() -> dict:

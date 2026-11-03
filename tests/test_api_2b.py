@@ -284,3 +284,12 @@ def test_pull_and_save_push_report_git_errors(client):
     assert pulled["ok"] is False and pulled["message"]
     pushed = client.post("/api/sync/push").json()
     assert set(pushed) == {"ok", "message"}
+
+
+def test_strategy_rules_serialize_numpy_numbers():
+    import numpy as np
+
+    from api.serialize import scalar
+
+    found = {"rows": [{"trades": np.int64(3), "mean_r": np.float64(0.5)}], "n": np.int32(2)}
+    assert scalar(found) == {"rows": [{"trades": 3, "mean_r": 0.5}], "n": 2}
