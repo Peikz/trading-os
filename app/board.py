@@ -203,15 +203,11 @@ def notes_and_alerts(row, data_dir) -> None:
     from trading_os import alerts, my_watchlists, stock_notes
 
     t = str(row["ticker"])
-    cols = st.columns(3)
-    for col, (icon, name) in zip(cols, FLAGS.items(), strict=True):
-        if col.button(icon, key=f"flag_{name}_{t}", help=f"Add to '{name}'", width="stretch"):
+    for icon, name in FLAGS.items():
+        if st.button(f"{icon} {name}", key=f"flag_{name}_{t}", help=f"Add to '{name}' (F)"):
             my_watchlists.add(data_dir, name, [t])
             st.toast(f"{t} → {name}")
-    st.caption(
-        "The flags are your own watchlists, for sorting stocks as you look: 🟥 Flag red, "
-        "🟨 Flag yellow, 🟩 Flag green (F). Pick one in Show above to flip through it."
-    )
+    st.caption("Flag green is a watchlist: pick 📋 Flag green in Show to flip through it.")
     with st.form(f"note_{t}", clear_on_submit=True):
         text = st.text_area(
             "Note",
@@ -370,7 +366,7 @@ def show(
     with_c = scope != "A+ / A / B"
     if hits.empty:
         st.info(
-            "This watchlist is empty: flag a stock here (F, or 🟥 🟨 🟩 under Notes & alerts) "
+            "This watchlist is empty: flag a stock here (F, or 🟩 under Notes & alerts) "
             "or add to it on the Watchlists page (also from a TradingView export)."
             if scope.startswith(LIST_MARK)
             else "No signals in the latest runs."

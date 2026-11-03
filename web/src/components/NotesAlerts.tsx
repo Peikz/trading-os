@@ -1,14 +1,11 @@
-// Notes & alerts for the stock in focus (app/board.py notes_and_alerts): 🟥 🟨 🟩 flags to the
-// matching watchlists, a note on the stock, and a price alert (pushed to your phone when hit
+// Notes & alerts for the stock in focus (app/board.py notes_and_alerts): the 🟩 flag to the
+// Flag green watchlist, a note on the stock, and a price alert (pushed to your phone when hit
 // by the alert watcher) that starts at the pivot or the plan's entry.
 import { type RefObject, useEffect, useState } from "react";
 import { api, type Alert, type BoardRow, type StockNote } from "../api";
 
-export const FLAGS: [string, string][] = [
-  ["🟥", "Flag red"],
-  ["🟨", "Flag yellow"],
-  ["🟩", "Flag green"],
-];
+// Green only (Emil, 4 Nov 2026)
+export const FLAGS: [string, string][] = [["🟩", "Flag green"]];
 
 export function NotesAlerts({
   row,

@@ -230,7 +230,7 @@ def register(app: FastAPI, ctx: Context) -> None:
 
     @app.post("/api/flags")
     def flag(f: Flag) -> dict:
-        """🟥 🟨 🟩: the stock onto the matching watchlist."""
+        """🟩: the stock onto Flag green."""
         if f.name not in board_data.FLAGS.values():
             raise HTTPException(400, "Not a flag list.")
         tickers = my_watchlists.parse_tickers(f.ticker)

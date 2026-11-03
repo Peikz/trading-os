@@ -30,9 +30,9 @@ const LIST = "wl:";
 const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M"];
 type View = "Focus" | "Grid" | "List";
 type Tab = "plan" | "list" | "notes";
-const GREEN = FLAGS[2][1];
+const GREEN = FLAGS[0][1];
 const NO_WATCHLISTS =
-  "No stocks in your watchlists yet: flag one here (F, or 🟥 🟨 🟩 under Notes & alerts) or " +
+  "No stocks in your watchlists yet: flag one here (F, or 🟩 under Notes & alerts) or " +
   "add lists on the Watchlists page (also from a TradingView export).";
 
 /** The push link's stocks (`?t=A,B`), as the Streamlit board reads them. */

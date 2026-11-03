@@ -449,7 +449,9 @@ def fx_rate(data_dir, cfg, currency: str, runs=None) -> float | None:
 
 # --- Notes & alerts on the focus view
 
-FLAGS = {"🟥": "Flag red", "🟨": "Flag yellow", "🟩": "Flag green"}
+# Green only (Emil, 4 Nov 2026): a stock not worth a look is simply skipped, so red and yellow
+# went. Lists already called Flag red / Flag yellow stay as ordinary watchlists.
+FLAGS = {"🟩": "Flag green"}
 
 
 def alert_default(row: Mapping[str, Any]) -> float:
