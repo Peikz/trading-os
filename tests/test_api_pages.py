@@ -229,3 +229,10 @@ def test_fired_alerts_show_for_today(data, client, monkeypatch):
     alerts.record(data, today, {"kind": "own", "ticker": A, "level": 11.0, "price": 11.1})
     fired = client.get("/api/alerts").json()["fired"]
     assert fired[0]["ticker"] == A and fired[0]["price"] == 11.1
+
+
+def test_scan_hits_carry_their_signal_ids_for_the_grading_form(client):
+    body = {"source": "hits", "run": f"{SESSION}_eod", "scan": "ep_ah", "filters": []}
+    out = client.post("/api/screener/run", json=body).json()
+    assert out["tickers"] == [B, A, C]
+    assert out["signal_ids"] == {A: "sig-0", B: "sig-1", C: "sig-2"}

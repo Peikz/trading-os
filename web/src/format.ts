@@ -38,3 +38,41 @@ export function deltaColour(label: string, delta: string | null): string | undef
   const up = !delta.startsWith("-");
   return up !== (label === "VIX") ? "var(--up)" : "var(--down)";
 }
+
+/** A table cell for the Journal / Watchlists tables: money columns as $, the rest plain. */
+const MONEY = /(pnl|_usd|risk_to_stop)$/;
+const STAMP = /^\d{4}-\d\d-\d\dT/;
+export function cell(column: string, v: Value | undefined): string {
+  if (v === null || v === undefined || v === "") return "–";
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  if (typeof v === "string") return STAMP.test(v) ? v.slice(0, 16).replace("T", " ") : v;
+  if (MONEY.test(column)) return usd(v);
+  if (Number.isInteger(v)) return v.toLocaleString("en-US");
+  return v.toFixed(2);
+}
+
+export function signed(x: number | null | undefined, digits = 2, unit = ""): string {
+  if (x === null || x === undefined || Number.isNaN(x)) return "n/a";
+  return `${x >= 0 ? "+" : ""}${x.toFixed(digits)}${unit}`;
+}
+
+export function usd(x: number | null | undefined): string {
+  if (x === null || x === undefined || Number.isNaN(x)) return "n/a";
+  const whole = Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return `${x < 0 ? "-" : ""}$${whole}`;
+}
+
+/** A text file to save (the TradingView list): a download link clicked once. */
+export function download(name: string, text: string): void {
+  if (typeof URL.createObjectURL !== "function") return; // jsdom
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function copy(text: string): Promise<void> {
+  return navigator.clipboard?.writeText(text) ?? Promise.resolve();
+}

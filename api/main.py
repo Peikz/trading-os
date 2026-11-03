@@ -344,6 +344,12 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             "columns": cols,
             "rows": records(result[cols].head(req.limit)),
             "tickers": [str(x) for x in result["ticker"].head(200)],
+            # A scan hit's id per ticker, for its grading form
+            "signal_ids": (
+                {str(t): str(i) for t, i in zip(result["ticker"], result["signal_id"], strict=True)}
+                if scan and "signal_id" in result
+                else {}
+            ),
             "tv_list": board_data.tradingview_list(
                 result["ticker"].head(1000),
                 dict(zip(result["ticker"], result["exchange"], strict=False))

@@ -76,8 +76,50 @@ th, td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: r
 th:first-child, td:first-child { text-align: left; }
 th { position: sticky; top: 0; background: var(--panel); }
 
+textarea {
+  width: 100%;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  margin: 4px 0;
+}
+.ok { color: var(--up); }
+.warn { color: #d29922; }
+.flash { padding: 4px 10px; border: 1px solid var(--accent); border-radius: 6px; display: inline-block; }
+.msg { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); margin: 6px 0; }
+.msg.success { border-color: var(--up); }
+.msg.warning { border-color: #d29922; }
+.msg.error { border-color: var(--down); }
+.row label { display: inline-flex; gap: 4px; align-items: center; }
+.tabs { display: flex; gap: 4px; margin: 6px 0; flex-wrap: wrap; }
+.hotkeys { font-size: 0.8em; }
+
+.metrics { display: flex; flex-wrap: wrap; gap: 18px; margin: 8px 0; }
+.metric { display: flex; flex-direction: column; min-width: 110px; }
+.metric b { font-size: 1.3em; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.ticket { margin-top: 6px; }
+.ticket .lines { margin: 6px 0; }
+.ticket .lines div { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ticket dt { font-size: 0.85em; }
+.ticket dd { margin: 0; }
+.ticket code { font-size: 1.05em; }
+.shots img { max-width: 100%; margin-top: 6px; border: 1px solid var(--border); border-radius: 6px; }
+.form .row input { min-width: 0; }
+
 /* Phone: chart on top, the card under it; the toolbar scrolls sideways instead of wrapping */
 @media (max-width: 760px) {
   .focus { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
   main { padding: 8px 10px 24px; }
+  .top { flex-wrap: wrap; gap: 8px; }
+  .top nav { overflow-x: auto; max-width: 100%; }
+  .top a { white-space: nowrap; }
+  .hotkeys { display: none; }
 }
