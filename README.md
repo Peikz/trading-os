@@ -150,7 +150,17 @@ TRADING_OS_DATA=../trading-os-data uv run --group api uvicorn api.main:app --por
 cd web && npm ci && npm run dev    # http://localhost:5173, /api goes to port 8000
 ```
 
-`npm run lint`, `npm test` and `npm run build` are what CI runs. The server kit (Docker
+`npm run lint`, `npm test` and `npm run build` are what CI runs. The end-to-end tests click
+through every page of the built app in Chromium, against the real API over a synthetic data
+repo (`tests/e2e/make_repo.py`; `tests/e2e/serve.py` serves both on one port, offline):
+
+```bash
+cd web && npm run build && npm run e2e    # Playwright starts and stops the server itself
+uv run --group api --group app pytest tests/e2e    # every Streamlit page over the same repo
+```
+
+A console error or a failed API request fails a test unless the test provokes it. CI's `e2e`
+job runs both when `api/`, `web/`, `trading_os/`, `app/` or `config/` change. The server kit (Docker
 Compose, Caddy, Tailscale as the only way in, a data-repo pull every 10 minutes) and its
 step-by-step setup are in [deploy/DEPLOY.md](deploy/DEPLOY.md).
 

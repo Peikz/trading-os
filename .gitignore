@@ -19,3 +19,7 @@ START-HERE.md
 
 # Copied from the plotly package when the dashboard starts
 app/components/chart_draw/plotly.min.js
+
+# Playwright (web/e2e)
+web/test-results/
+web/playwright-report/
