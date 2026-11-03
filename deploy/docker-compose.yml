@@ -33,10 +33,21 @@ services:
     environment:
       TRADING_OS_DATA: /data
       TRADING_OS_CACHE: /cache
-      # The gh CLI reads it to fetch the data repo's bar releases (charts). Never logged.
+      # The gh CLI reads it to fetch the data repo's bar releases (charts), and git reads it
+      # through the credential helper below for Save & push. Never logged, never on disk.
       GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN in deploy/.env}
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: credential.helper
+      GIT_CONFIG_VALUE_0: '!f() { echo username=x-access-token; echo "password=$${GH_TOKEN}"; }; f'
+      # Who the dashboard's commits to the data repo are from (Save & push)
+      GIT_AUTHOR_NAME: Trading OS dashboard
+      GIT_AUTHOR_EMAIL: dashboard@trading-os.invalid
+      GIT_COMMITTER_NAME: Trading OS dashboard
+      GIT_COMMITTER_EMAIL: dashboard@trading-os.invalid
     volumes:
-      - ${DATA_DIR:?set DATA_DIR in deploy/.env}:/data  # writes only data/screens/
+      # Writes what Streamlit writes: journal, plans, notes, grades, watchlists, alerts, chart
+      # drawings, screens and docs/validation.md; Save & push commits and pushes them.
+      - ${DATA_DIR:?set DATA_DIR in deploy/.env}:/data
       - cache:/cache
     expose:
       - "8000"

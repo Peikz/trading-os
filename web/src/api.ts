@@ -285,6 +285,219 @@ export interface WatchAdded {
 
 export type ScanWatchlists = Record<string, { label: string; rows: Row[] }>;
 
+export interface TrendLine {
+  id: string;
+  label: string;
+  colour: string;
+  x0: string;
+  y0: number;
+  x1: string;
+  y1: number;
+  extend: boolean;
+  pts: { time: string; value: number }[];
+}
+
+export interface Level {
+  name: string;
+  price: number;
+  colour: string;
+}
+
+export interface ChartMarker {
+  time: string;
+  position: "aboveBar" | "belowBar";
+  shape: "arrowUp" | "arrowDown";
+  color: string;
+  text: string;
+}
+
+export interface ChartData {
+  ticker: string;
+  period: string;
+  timeframe: string;
+  candles: Candle[];
+  lines: Line[];
+  avwaps: { name: string; colour: string; pts: { time: string; value: number }[] }[];
+  trend: TrendLine[];
+  markers: ChartMarker[];
+  levels: Level[];
+  visible: { from: string; to: string } | null;
+  quick_anchors: Record<string, string>;
+  marks: Row[];
+  dates: string[];
+  tradingview: string;
+  note: string;
+}
+
+export interface ChartNotes {
+  notes: { note_id: string; note_date: string; text: string; written: string | null; edited: string | null }[];
+  daily: { note_date: string; text: string; also: string[] }[];
+}
+
+export interface IntradayDays {
+  study_days: string[];
+  live: boolean;
+  live_sessions: string[];
+  no_keys: string;
+}
+
+export interface Intraday {
+  candles: { time: number; open: number; high: number; low: number; close: number; volume: number; extended: boolean }[];
+  vwap: { time: number; value: number }[];
+  levels: Level[];
+}
+
+/** A table from the API: column names and JSON rows; `total` counts rows before any limit. */
+export interface ApiTable {
+  columns: string[];
+  rows: Row[];
+  total: number;
+}
+
+export interface StrategyRules {
+  labels: string[];
+  label: string;
+  heading: string;
+  rules: string;
+  settings: Row[];
+  heat: Row[];
+  heat_note: string | null;
+}
+
+export interface HowTested {
+  setups: { setup: string; grades: string; points: string[]; buy: string; stop: string; exit: string }[];
+  caption: string;
+  write_up: string | null;
+}
+
+export interface StudyGrades {
+  period: string | null;
+  source: string | null;
+  sizes: Row[];
+  ungraded: string;
+  strategies: {
+    title: string;
+    entry: string;
+    stop: string;
+    exit: string;
+    bands: string;
+    base: string;
+    history: Row[];
+    features: Row[];
+  }[];
+  costs: string[];
+  report: string | null;
+}
+
+export interface HistoryQuery {
+  period: "2y" | "10y";
+  strategies: string[] | null;
+  years: number[] | null;
+  states: string[];
+  ep: { gap_min: number; rvol_min: number; months_min: number; earnings: string; must: string[] } | null;
+  split: string;
+  one: string | null;
+}
+
+export interface HistoryView {
+  empty: boolean;
+  graded: { summary: ApiTable; by_grade: ApiTable; caption: string };
+  caption?: string;
+  strategies?: string[];
+  years?: number[];
+  picked?: string[];
+  chosen_years?: number[];
+  ep_flags?: string[];
+  splits?: string[];
+  split?: string;
+  count?: number;
+  summary?: ApiTable;
+  summary_caption?: string;
+  compared?: ApiTable;
+  one?: string;
+  events?: ApiTable;
+}
+
+export interface Entries {
+  published: boolean;
+  caption?: string;
+  best?: ApiTable | null;
+  exits?: string[];
+  exit?: string;
+  strategies?: string[];
+  strategy?: string;
+  by_year?: ApiTable;
+  splits?: string[];
+  split?: string;
+  picked?: string[];
+  shown?: string[];
+  table?: ApiTable;
+}
+
+export interface Regime {
+  published: boolean;
+  caption?: string;
+  mix?: ApiTable;
+  strategies?: string[];
+  strategy?: string;
+  exits?: string[];
+  exit?: string;
+  entries?: string[];
+  entry?: string | null;
+  stops?: string[];
+  stop?: string | null;
+  filters?: ApiTable;
+  by_year?: ApiTable;
+}
+
+export interface LiveGrades {
+  compare: ApiTable | null;
+  gaps: ApiTable | null;
+  signals: ApiTable | null;
+  monthly: string | null;
+  caption: string;
+}
+
+export interface Jobs {
+  grid: ApiTable;
+  freshness: ApiTable;
+  failures: ApiTable;
+  cache: { used_gb: number; limit_gb: number };
+}
+
+export interface ScansPage {
+  caption: string;
+  rows: Row[];
+  names: { key: string; label: string }[];
+  writable: boolean;
+  checkout: boolean;
+  note: string | null;
+}
+
+export interface ScanForm {
+  name: string;
+  label: string;
+  enabled: boolean;
+  action: string;
+  push: string | null;
+  numbers: { key: string; value: number; kind: "int" | "float" }[];
+  flags: { key: string; value: boolean }[];
+  push_label: string;
+  note: string;
+  push_slots: string[];
+}
+
+export interface ChartQuery {
+  period: string;
+  timeframe: string;
+  span: string;
+  lines: string[];
+  hits: boolean;
+  fills: boolean;
+  levels: boolean;
+  anchors: string[];
+}
+
 export const INDICATORS = [
   "MA 10",
   "MA 20",
@@ -365,6 +578,77 @@ export const api = {
     }),
   removeFromWatchlist: (name: string, tickers: string[]) =>
     post<WatchList>(`/api/watchlists/${enc(name)}/remove`, { tickers }),
+  chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
+  chart: (ticker: string, q: ChartQuery) => {
+    const p = new URLSearchParams({
+      period: q.period,
+      timeframe: q.timeframe,
+      span: q.span,
+      lines: q.lines.join(","),
+      hits: String(q.hits),
+      fills: String(q.fills),
+      levels: String(q.levels),
+      anchors: q.anchors.join(","),
+    });
+    return request<ChartData>(`/api/chart/${enc(ticker)}?${p}`);
+  },
+  addLine: (ticker: string, body: { x0: string; y0: number; x1: string; y1: number; label?: string; extend: boolean }) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/lines`, body),
+  moveLine: (ticker: string, id: string, body: { x0: string; y0: number; x1: string; y1: number; extend: boolean }) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/lines/${enc(id)}`, body, "PUT"),
+  addAnchor: (ticker: string, day: string, label: string) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/anchors`, { day, label }),
+  removeMark: (ticker: string, id: string) =>
+    request<{ removed: string }>(`/api/chart/${enc(ticker)}/marks/${enc(id)}`, { method: "DELETE" }),
+  chartNotes: (ticker: string) => request<ChartNotes>(`/api/chart/${enc(ticker)}/notes`),
+  addChartNote: (ticker: string, text: string, day: string) =>
+    post<ChartNotes>(`/api/chart/${enc(ticker)}/notes`, { text, day }),
+  editChartNote: (ticker: string, id: string, text: string, day: string) =>
+    post<ChartNotes>(`/api/chart/${enc(ticker)}/notes/${enc(id)}`, { text, day }, "PUT"),
+  removeChartNote: (ticker: string, id: string) =>
+    request<ChartNotes>(`/api/chart/${enc(ticker)}/notes/${enc(id)}`, { method: "DELETE" }),
+  intradayDays: (ticker: string) => request<IntradayDays>(`/api/chart/${enc(ticker)}/intraday-days`),
+  intraday: (ticker: string, day: string, every: number, source: "study" | "live") =>
+    request<Intraday>(`/api/chart/${enc(ticker)}/intraday?day=${day}&every=${every}&source=${source}`),
+  strategyRules: (label?: string) =>
+    request<StrategyRules>(`/api/research/strategy-rules${label ? `?label=${enc(label)}` : ""}`),
+  howTested: () => request<HowTested>("/api/research/how-tested"),
+  studyGrades: () => request<StudyGrades>("/api/research/grades"),
+  studyNotes: (name?: string) =>
+    request<{ names: string[]; name: string | null; text: string | null }>(
+      `/api/research/notes${name ? `?name=${enc(name)}` : ""}`,
+    ),
+  history: (q: HistoryQuery) => post<HistoryView>("/api/research/history", q),
+  historyEvent: (p: Record<string, string>) =>
+    request<ChartData>(`/api/research/history/event?${new URLSearchParams(p)}`),
+  entries: (p: Record<string, string>) =>
+    request<Entries>(`/api/research/entries?${new URLSearchParams(p)}`),
+  entryTrades: (strategy: string) => request<ApiTable>(`/api/research/entries/trades/${enc(strategy)}`),
+  regime: (p: Record<string, string>) => request<Regime>(`/api/research/regime?${new URLSearchParams(p)}`),
+  liveGrades: () => request<LiveGrades>("/api/live/grades"),
+  liveStats: (minimum?: number) =>
+    request<{ minimum: number; total: number; table: ApiTable }>(
+      `/api/live/stats${minimum ? `?minimum=${minimum}` : ""}`,
+    ),
+  liveGraded: () => request<ApiTable>("/api/live/graded"),
+  jobs: () => request<Jobs>("/api/system/jobs"),
+  clearCache: () => post<{ message: string }>("/api/system/cache/clear", {}),
+  github: () => request<{ answered: boolean; timer?: ApiTable; runs?: ApiTable }>("/api/system/github"),
+  validationRuns: () =>
+    request<{ runs: { id: string; label: string }[]; scans: { id: string; label: string }[] }>(
+      "/api/system/validation/runs",
+    ),
+  validate: (body: { run: string; scan: string; csv_text: string }) =>
+    post<ApiTable>("/api/system/validation", body),
+  appendValidation: (body: { run: string; scan: string; csv_text: string }) =>
+    post<{ message: string }>("/api/system/validation/append", body),
+  scans: () => request<ScansPage>("/api/scans"),
+  scanForm: (name: string) => request<ScanForm>(`/api/scans/${enc(name)}/form`),
+  saveScan: (name: string, values: Record<string, unknown>) =>
+    post<{ saved: boolean; message: string; diff: string }>(`/api/scans/${enc(name)}`, { values }),
+  commitScan: (name: string) => post<{ ok: boolean; message: string }>(`/api/scans/${enc(name)}/commit`, {}),
+  pull: () => post<{ ok: boolean; message: string }>("/api/sync/pull", {}),
+  push: () => post<{ ok: boolean; message: string }>("/api/sync/push", {}),
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),

@@ -5,6 +5,7 @@ Streamlit focus chart (`app/lwchart.py`) and the API (`api/`).
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 INDICATORS = {  # name -> (kind, length, colour)
@@ -77,3 +78,90 @@ def indicator_lines(
             {"name": name, "colour": colour, "scale": scale, "pts": _points(b["time"], values)}
         )
     return out
+
+
+# --- moved from interactive_chart (React dashboard, Nov 2026): plain pandas, no plotly, so the
+# API image (which has no plotly) can draw AVWAPs, trend lines and minute candles too.
+
+AVWAP_COLORS = ["#6a1b9a", "#ad1457", "#283593", "#00695c", "#ef6c00"]
+
+
+def session_vwap(minutes: pd.DataFrame) -> pd.Series:
+    """VWAP from the regular-session open (bar VWAP x volume, cumulative)."""
+    regular = minutes["minute"].between(570, 959)
+    pv = (minutes["vwap"].fillna(minutes["close"]) * minutes["volume"]).where(regular, 0.0)
+    v = minutes["volume"].where(regular, 0.0)
+    out = pv.cumsum() / v.cumsum().replace(0, np.nan)
+    return out.where(minutes["minute"] >= 570)
+
+
+def resample_minutes(minutes: pd.DataFrame, every: int = 1) -> pd.DataFrame:
+    """Minute bars to `every`-minute candles counted from the 09:30 open (first open, high,
+    low, last close, summed volume, mean bar VWAP), oldest first."""
+    data = minutes.sort_values("ts").reset_index(drop=True)
+    if every <= 1:
+        return data
+    key = (data["minute"] - 570) // every
+    return (
+        data.assign(key=key)
+        .groupby("key")
+        .agg(
+            ts=("ts", "first"),
+            minute=("minute", "first"),
+            open=("open", "first"),
+            high=("high", "max"),
+            low=("low", "min"),
+            close=("close", "last"),
+            volume=("volume", "sum"),
+            vwap=("vwap", "mean"),
+        )
+        .reset_index(drop=True)
+    )
+
+
+def anchored_vwap(bars: pd.DataFrame, anchor) -> pd.Series:
+    """VWAP from the session `anchor` on (NaN before it): each day's own VWAP weighted by its
+    volume (the typical price (H+L+C)/3 where a bar has no VWAP)."""
+    data = bars.sort_values("session_date").reset_index(drop=True)
+    typical = (data["high"] + data["low"] + data["close"]) / 3
+    price = data["vwap"].fillna(typical) if "vwap" in data else typical
+    after = pd.to_datetime(data["session_date"]) >= pd.Timestamp(anchor)
+    pv = (price * data["volume"]).where(after, 0.0).cumsum()
+    v = data["volume"].where(after, 0.0).cumsum()
+    return (pv / v.replace(0, np.nan)).where(after)
+
+
+def quick_anchors(bars: pd.DataFrame, lookback: int = 250) -> dict[str, object]:
+    """Common AVWAP anchors: the highest high and lowest low of the last `lookback` sessions,
+    and the start of the current year."""
+    data = bars.sort_values("session_date").tail(lookback).reset_index(drop=True)
+    if data.empty:
+        return {}
+    last = pd.Timestamp(data["session_date"].iloc[-1])
+    year = data[pd.to_datetime(data["session_date"]) >= pd.Timestamp(last.year, 1, 1)]
+    out = {
+        "highest high": data.loc[data["high"].idxmax(), "session_date"],
+        "lowest low": data.loc[data["low"].idxmin(), "session_date"],
+    }
+    if len(year):
+        out["year start"] = year["session_date"].iloc[0]
+    return out
+
+
+def trend_line(dates: list[str], x0, y0: float, x1, y1: float, extend: bool = True):
+    """Points of a straight line through (x0, y0) and (x1, y1) on the trading-day axis, from
+    x0 to x1 or, `extend`ed, on to the last date. None when a point isn't on the chart."""
+    labels = list(dates)
+    a, b = pd.Timestamp(x0).strftime("%Y-%m-%d"), pd.Timestamp(x1).strftime("%Y-%m-%d")
+    if a not in labels or b not in labels:
+        return None
+    i0, i1 = labels.index(a), labels.index(b)
+    if i0 == i1:
+        return None
+    if i0 > i1:
+        i0, i1, y0, y1 = i1, i0, y1, y0
+    end = len(labels) - 1 if extend else i1
+    slope = (y1 - y0) / (i1 - i0)
+    xs = labels[i0 : end + 1]
+    ys = [y0 + slope * (i - i0) for i in range(i0, end + 1)]
+    return xs, ys

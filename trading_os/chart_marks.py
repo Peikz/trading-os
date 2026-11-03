@@ -127,6 +127,19 @@ def drawn_changes(rendered: dict, shapes: list[dict]):
     return new, erased, moved
 
 
+def move(data_dir, ticker, mark_id: str, points, old=None, past_end: bool = False) -> str:
+    """Move a saved line to new `points` (x0, y0, x1, y1): the old one is removed and a new one
+    added, keeping its name and extension (`past_end`: drawn past the last bar, so extended).
+    Returns the new id."""
+    old = {} if old is None else old
+    label = old.get("label") if isinstance(old.get("label"), str) else ""
+    extend = bool(old.get("extend") == 1) or past_end  # NaN/None: not extended
+    remove(data_dir, mark_id)
+    return add_line(
+        data_dir, ticker, points["x0"], points["y0"], points["x1"], points["y1"], label, extend
+    )
+
+
 def apply_drawn(data_dir, ticker: str, report: dict, saved: pd.DataFrame) -> dict[str, int]:
     """Save the chart's report (see `drawn_changes`): new lines are added (extended to today
     when drawn past the last bar), erased ones removed, moved ones replaced keeping their name
@@ -141,8 +154,5 @@ def apply_drawn(data_dir, ticker: str, report: dict, saved: pd.DataFrame) -> dic
         remove(data_dir, mark_id)
     for mark_id, s in moved.items():
         old = known.loc[mark_id] if mark_id in known.index else {}
-        label = old.get("label") if isinstance(old.get("label"), str) else ""
-        extend = bool(old.get("extend") == 1) or bool(s["past_end"])  # NaN/None: not extended
-        remove(data_dir, mark_id)
-        add_line(data_dir, ticker, s["x0"], s["y0"], s["x1"], s["y1"], label, extend)
+        move(data_dir, ticker, mark_id, s, old, bool(s["past_end"]))
     return {"added": len(new), "removed": len(erased), "moved": len(moved)}

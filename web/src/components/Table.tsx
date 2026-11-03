@@ -1,7 +1,7 @@
 // A plain table of API rows (Journal, Watchlists, Plans). Values are shown as the API sends
 // them, formatted per column (`cell`); nothing is computed here.
 import type { ReactNode } from "react";
-import type { Row, Value } from "../api";
+import type { ApiTable, Row, Value } from "../api";
 import { cell } from "../format";
 
 export function Table({
@@ -44,6 +44,52 @@ export function Table({
 export function Marked({ text }: { text: string }) {
   const parts = text.split(/\*\*(.+?)\*\*/g);
   return <>{parts.map((p, i) => (i % 2 ? <b key={i}>{p}</b> : p))}</>;
+}
+
+/** An API table ({columns, rows, total}), with a note when only the first rows came. */
+export function ApiTableView({
+  table,
+  label,
+  empty,
+}: {
+  table: ApiTable | null | undefined;
+  label: string;
+  empty?: string;
+}) {
+  if (!table || !table.rows.length) return empty ? <p className="muted">{empty}</p> : null;
+  return (
+    <>
+      <Table label={label} columns={table.columns} rows={table.rows} />
+      {table.total > table.rows.length && (
+        <p className="muted">
+          The first {table.rows.length} of {table.total}.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** One section at a time (Research, Live results, System health), like Streamlit's radio. */
+export function Sections<T extends string>({
+  label,
+  options,
+  value,
+  onPick,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onPick: (v: T) => void;
+}) {
+  return (
+    <div className="tabs" role="tablist" aria-label={label}>
+      {options.map((o) => (
+        <button key={o} role="tab" aria-selected={value === o} className={value === o ? "on" : ""} onClick={() => onPick(o)}>
+          {o}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** A labelled number, like Streamlit's metric: label, value, an optional delta under it. */

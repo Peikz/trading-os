@@ -123,3 +123,28 @@ textarea {
   .top a { white-space: nowrap; }
   .hotkeys { display: none; }
 }
+
+/* Phase 2b: Chart, Research, Scans, the sync buttons */
+.top .sync { margin-left: auto; display: flex; gap: 6px; }
+.sync-msg { margin: 6px 16px; white-space: pre-wrap; }
+.chart.tool-draw, .chart.tool-erase { cursor: crosshair; }
+.chart.tool-move { cursor: grab; }
+.hint { font-size: 0.85em; margin: 4px 0; }
+.pre { white-space: pre-wrap; margin: 4px 0; }
+.note { border-top: 1px solid var(--border); padding: 6px 0; }
+.markdown { line-height: 1.55; }
+.markdown table { width: auto; }
+.markdown pre, .diff { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; }
+.markdown code { background: var(--panel); padding: 0 4px; border-radius: 4px; }
+.markdown a { color: var(--accent); }
+.multi summary { cursor: pointer; }
+.pills.wrap { flex-wrap: wrap; }
+.scroll-box { max-height: 320px; overflow: auto; }
+.numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin: 6px 0; }
+.numbers label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+details { margin: 8px 0; }
+summary { cursor: pointer; }
+@media (max-width: 760px) {
+  .top .sync { margin-left: 0; }
+}
+select, input:not([type="checkbox"]):not([type="radio"]) { max-width: 100%; }

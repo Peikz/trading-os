@@ -3,7 +3,7 @@
 // page by four) and List (every card). Show: A+ / A / B, pushed incl. C, every scan hit, your
 // watchlists, or a push link's / a screen's stocks. Hotkeys: ← → flip, W 1D/1W, F flags green,
 // N jumps to the note, T shows or hides the ticket.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   DEFAULT_INDICATORS,
@@ -98,7 +98,9 @@ export function Today() {
   const current = Math.min(index, Math.max(0, pages - 1));
   const row: BoardRow | undefined = view === "Focus" ? rows[current] : undefined;
 
-  useEffect(() => {
+  // A layout effect: the listener is current as soon as a new queue is on screen (a passive
+  // effect left a moment where an arrow key still saw the old, empty queue).
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
