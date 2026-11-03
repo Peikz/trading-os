@@ -31,7 +31,7 @@ from trading_os import (
     plans,
     remote_data,
 )
-from trading_os import interactive_chart as ichart
+from trading_os import chart_series as ichart  # the plotly-free chart helpers
 
 SPANS = {"3M": 63, "6M": 126, "1Y": 252, "2Y": 504, "All": None}
 # The Chart page's lines (Streamlit's OVERLAYS) as the chart series' names
