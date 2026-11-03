@@ -82,17 +82,27 @@ export const orderText = (row: BoardRow, view: TicketView | null) =>
   view?.ticket?.summary ? `${row.ticker}: ${view.ticket.summary}` : null;
 
 export function CopyOrder({ row, view, big }: { row: BoardRow; view: TicketView | null; big?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => setCopied(false), [row.ticker, view]);
+  const [copied, setCopied] = useState<"yes" | "blocked" | null>(null);
+  useEffect(() => setCopied(null), [row.ticker, view]);
   const text = orderText(row, view);
   return (
     <button
       className={`primary block${big ? " big" : ""}`}
       disabled={!text}
-      onClick={() => text && copy(text).then(() => setCopied(true))}
+      onClick={() =>
+        text &&
+        copy(text).then(
+          () => setCopied("yes"),
+          () => setCopied("blocked"),
+        )
+      }
     >
-      <Icon name={copied ? "check" : "copy"} />
-      {copied ? "Copied: paste or type it into Saxo" : "Copy order for Saxo"}
+      <Icon name={copied === "yes" ? "check" : "copy"} />
+      {copied === "yes"
+        ? "Copied: paste or type it into Saxo"
+        : copied === "blocked"
+          ? "The browser blocked copying: use the order line"
+          : "Copy order for Saxo"}
     </button>
   );
 }
@@ -199,7 +209,7 @@ export function PlanCard({ row }: { row: BoardRow }) {
                       <button
                         className="ghost icon-btn"
                         aria-label={`Copy ${l.label}`}
-                        onClick={() => copy(l.value).then(() => setCopiedLine(l.label))}
+                        onClick={() => copy(l.value).then(() => setCopiedLine(l.label), () => setCopiedLine(null))}
                       >
                         <Icon name={copiedLine === l.label ? "check" : "copy"} size={16} />
                       </button>

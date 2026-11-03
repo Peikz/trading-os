@@ -1,4 +1,5 @@
-// Research (every section, Strategy rules for every label) and Live results (every section).
+// Lab · Research (every section, Strategy rules for every label) and Journal · Live vs study
+// (the live results' every section).
 import type { Page } from "@playwright/test";
 import { expect, open, test, TICKERS } from "./fixtures";
 
@@ -22,7 +23,7 @@ async function section(page: Page, name: string) {
 test("Strategy rules: every label shows its rules", async ({ page, request }) => {
   const first = (await (await request.get("/api/research/strategy-rules")).json()) as { labels: string[] };
   expect(first.labels.length).toBeGreaterThan(5);
-  await open(page, "research");
+  await open(page, "lab/research");
   const pick = page.getByLabel("Strategy", { exact: true });
   for (const label of first.labels) {
     const answer = page.waitForResponse((r) => r.url().includes("/api/research/strategy-rules?"));
@@ -35,12 +36,12 @@ test("Strategy rules: every label shows its rules", async ({ page, request }) =>
 });
 
 test("every Research section renders", async ({ page }) => {
-  await open(page, "research");
+  await open(page, "lab/research");
   for (const name of SECTIONS) await section(page, name);
 });
 
 test("History: filters, a split and an event chart", async ({ page }) => {
-  await open(page, "research");
+  await open(page, "lab/research");
   await section(page, "History");
   // 10 years is a release the fixture leaves out: the page says so; 2 years is in the repo
   await expect(page.getByText("No history here yet.")).toBeVisible();
@@ -55,7 +56,7 @@ test("History: filters, a split and an event chart", async ({ page }) => {
 });
 
 test("Entries & exits on two years, Study notes rendered from Markdown", async ({ page }) => {
-  await open(page, "research");
+  await open(page, "lab/research");
   await section(page, "Entries & exits");
   await page.getByRole("group", { name: "Period" }).getByRole("button", { name: "2 years (all trades)" }).click();
   await expect(page.locator("h3", { hasText: "Best entry, stop and exit per strategy" })).toBeVisible();
@@ -73,7 +74,7 @@ test("Live results: every section, and the fixture's graded signal", async ({ pa
   const graded = (await (await request.get("/api/live/graded")).json()) as { rows: { ticker: string }[] };
   expect(graded.rows.length).toBeGreaterThan(0);
   expect(TICKERS).toContain(graded.rows[0].ticker);
-  await open(page, "live");
+  await open(page, "journal/live");
   for (const name of ["Grades live vs study", "All signals", "Signals you graded"]) await section(page, name);
   await expect(page.getByRole("table", { name: "Signals you graded" })).toContainText(graded.rows[0].ticker);
 });

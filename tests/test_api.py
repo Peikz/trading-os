@@ -219,7 +219,7 @@ def test_a_screen_over_one_of_your_lists(data, client):
     every = client.post("/api/screener/run", json={"source": "list", "watchlist": "Leaders"}).json()
     assert sorted(every["tickers"]) == sorted([A, C])
     missing = client.post("/api/screener/run", json={"source": "list", "watchlist": "Nope"})
-    assert missing.status_code == 404
+    assert missing.status_code == 200 and missing.json()["count"] == 0
 
 
 def test_status_dot(client):

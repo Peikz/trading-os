@@ -346,7 +346,6 @@ function Results({
     setSpec((s) => ({ ...s, filters: s.filters.map((x, k) => (k === i ? f : x)) }));
   const removeFilter = (i: number) => setSpec((s) => ({ ...s, filters: s.filters.filter((_, k) => k !== i) }));
   const fields = Object.keys(meta.fields);
-  const empty404 = kind === "list" && error?.startsWith("No stocks");
 
   const save = (as: string) =>
     api.saveScreen(as, spec).then(
@@ -448,9 +447,12 @@ function Results({
         )}
       </div>
       {kind === "list" && <AddToList name={name} onAdded={() => { setVersion((v) => v + 1); onListsChanged(); }} />}
-      {error && !empty404 && <p className="error">{error}</p>}
-      {empty404 && <p className="muted">No stocks in this list yet. Add some above.</p>}
-      {result && result.count === 0 && <p className="muted">No stocks match these filters.</p>}
+      {error && <p className="error">{error}</p>}
+      {result && result.count === 0 && (
+        <p className="muted">
+          {kind === "list" && !spec.filters.length ? "No stocks in this list yet. Add some above." : "No stocks match these filters."}
+        </p>
+      )}
       {result && result.count > 0 && (
         <>
           {view === "grid" ? (
@@ -757,7 +759,7 @@ function StockDetail({
   return (
     <section aria-label={`${ticker} full chart`}>
       <div className="detail-head">
-        <button className="ghost" onClick={onBack}>
+        <button className="ghost" onClick={onBack} aria-label={`Back to ${back}`}>
           <Icon name="back" size={16} />
           {back}
         </button>

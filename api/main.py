@@ -368,9 +368,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             members = my_watchlists.current(my_watchlists.load(root()))
             names = members["list"] if "list" in members else pd.Series(dtype=str)
             mine = members[names == (req.watchlist or "")]["ticker"].astype(str).tolist()
-            if not mine:
-                raise HTTPException(404, "No stocks in that list.")
-            data = snap[snap["ticker"].isin(mine)]
+            data = snap[snap["ticker"].isin(mine)]  # an empty list: no rows, not an error
             when = f"{req.watchlist}, the {eod.session:%d %b} close"
         elif req.data == "live":
             now = time.time()
