@@ -1,10 +1,20 @@
-// Trading OS: Today (the candidate board) and the Screener. Hash routes (#/today, #/screener)
-// keep a push link's query string (?t=A,B) working on a static file server.
+// Trading OS: the pages in the order of the trading day, as in the Streamlit sidebar (before
+// the open: Today, Watchlists, Screener; live: Positions; after the close: Journal). Hash routes
+// (#/today, #/journal...) keep a push link's query string (?t=A,B) working on a static server.
 import { useEffect, useState } from "react";
+import { Journal } from "./pages/Journal";
+import { Positions } from "./pages/Positions";
 import { Screener } from "./pages/Screener";
 import { Today } from "./pages/Today";
+import { Watchlists } from "./pages/Watchlists";
 
-const PAGES = { today: "Today", screener: "Screener" } as const;
+const PAGES = {
+  today: ["☀️ Today", Today],
+  watchlists: ["☀️ Watchlists", Watchlists],
+  screener: ["☀️ Screener", Screener],
+  positions: ["⚡ Positions", Positions],
+  journal: ["🌙 Journal", Journal],
+} as const;
 type Page = keyof typeof PAGES;
 
 function current(): Page {
@@ -19,6 +29,7 @@ export function App() {
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
+  const Shown = PAGES[page][1];
   return (
     <>
       <header className="top">
@@ -26,12 +37,14 @@ export function App() {
         <nav>
           {(Object.keys(PAGES) as Page[]).map((p) => (
             <a key={p} href={`#/${p}`} className={p === page ? "on" : ""}>
-              {PAGES[p]}
+              {PAGES[p][0]}
             </a>
           ))}
         </nav>
       </header>
-      <main>{page === "today" ? <Today /> : <Screener />}</main>
+      <main>
+        <Shown />
+      </main>
     </>
   );
 }

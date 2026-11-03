@@ -275,3 +275,189 @@ def ticker_bars(path: Path | None, ticker: str) -> pd.DataFrame:
 def daily_bars(data_dir: Path, ticker: str) -> pd.DataFrame:
     """One stock's 2-year daily bars: the same source as the Streamlit charts."""
     return ticker_bars(bars_file(data_dir, ticker), ticker)
+
+
+# --- the board's other sources: your watchlists and a screen's results (moved from app/board.py)
+
+
+def _newest_snapshot(runs) -> tuple[Any, pd.DataFrame]:
+    """The newest run with a universe file and that file, one row per ticker, by ticker."""
+    with_universe = next((r for r in runs if r.universe.exists()), None)
+    if with_universe is None:
+        return None, pd.DataFrame()
+    uni = pd.read_parquet(with_universe.universe).drop_duplicates("ticker").set_index("ticker")
+    return with_universe, uni
+
+
+def watchlist_rows(runs, data_dir) -> pd.DataFrame:
+    """Your own watchlists' stocks as board rows, with the newest EOD snapshot's numbers."""
+    from trading_os import my_watchlists
+
+    members = my_watchlists.current(my_watchlists.load(data_dir))
+    if members.empty:
+        return pd.DataFrame()
+    name_col = "list_name" if "list_name" in members else members.columns[0]
+    with_universe, uni = _newest_snapshot(runs)
+    rows = []
+    for m in members.to_dict("records"):
+        t = str(m["ticker"])
+        base = uni.loc[t].to_dict() if t in uni.index else {}
+        rows.append(
+            {
+                **base,
+                "ticker": t,
+                "scan": "watchlist",
+                "grade": "–",
+                "run_label": f"watchlist: {m.get(name_col)}",
+                "run_slot": "eod",
+                "run_session": with_universe.session if with_universe else None,
+            }
+        )
+    return pd.DataFrame(rows).drop_duplicates("ticker")
+
+
+def ticker_rows(runs, tickers: list[str], label: str) -> pd.DataFrame:
+    """Any stocks as board rows (a screen's results, Emil 29 Oct 2026), in the given order,
+    with the newest EOD snapshot's numbers. No grade: a screen is a list, not a tested setup."""
+    with_universe, uni = _newest_snapshot(runs)
+    rows = [
+        {
+            **(uni.loc[t].to_dict() if t in uni.index else {}),
+            "ticker": t,
+            "scan": "screen",
+            "grade": "–",
+            "run_label": label,
+            "run_slot": "eod",
+            "run_session": with_universe.session if with_universe else None,
+        }
+        for t in dict.fromkeys(tickers)
+    ]
+    return pd.DataFrame(rows)
+
+
+# --- the Saxo ticket (moved from app/board.py; the order maths is `ticket`)
+
+PRICE_LABELS = {
+    "stop": "Trigger price",
+    "stop_limit": "Trigger price",
+    "limit": "Limit price",
+    "limit_ext": "Limit price",
+    "market": "Expected price (sizing)",
+    "moc": "Expected price (sizing)",
+}
+UNGRADED_NOTE = "Not graded A+ / A / B: sized as a B for reference (no study edge)."
+NO_TICKET = "No ticket: the price must be over the stop, and the plan needs both."
+NO_ACCOUNT = "Add settings/account.yaml in the data repo for share sizes."
+
+
+def plan_session(row: Mapping[str, Any], cfg) -> dt.date:
+    """The session the order is for: an EOD find trades the next session."""
+    from trading_os import clock
+
+    day = pd.Timestamp(row["run_session"]).date()
+    if row.get("run_slot") == "eod":
+        return clock.sessions_after(cfg.schedule, day, 1, day + dt.timedelta(days=10))[0]
+    return day
+
+
+def risk_mult(row: Mapping[str, Any], cfg) -> tuple[float, bool]:
+    """The grade's risk multiple and whether the row has one (A+ / A / B). Anything else is
+    sized as a B for reference."""
+    mult = row.get("grade_risk_mult")
+    if mult is None or pd.isna(mult):
+        mult = cfg.grading["risk_mult"].get(row.get("grade"), 0.0)
+    if not mult:
+        return float(cfg.grading["risk_mult"].get("B", 1.0)), False
+    return float(mult), True
+
+
+def make_ticket(row: Mapping[str, Any], kind: str, cfg, account, usd_rate: float, price=None):
+    """The ticket for `row` as order type `kind` at the grade's risk (`ticket.build`); `price`:
+    your own price (else the plan's). None when the plan lacks an entry or a stop."""
+    from trading_os import ticket
+
+    mult, _ = risk_mult(row, cfg)
+    return ticket.build(
+        row,
+        kind,
+        account.risk_usd(usd_rate) * mult,
+        account.size_usd(usd_rate),
+        account.max_position_pct,
+        price or None,
+    )
+
+
+def ticket_caption(t, usd_rate: float, currency: str) -> str:
+    """The line under the ticket: the risk in USD and your currency, the position, the price."""
+    return (
+        f"Risk {t.risk_usd:,.0f} USD ({t.risk_usd * usd_rate:,.0f} {currency}) · position "
+        f"{t.position_usd:,.0f} USD · sized on {t.est_entry:.2f}"
+        + (" · capped by your max position" if t.capped else "")
+    )
+
+
+def place_plan(data_dir, row: Mapping[str, Any], cfg, t, kind: str) -> str:
+    """'Placed in Saxo': the ticket saved as a plan so the fill matches it in the Journal."""
+    from trading_os import plans, ticket
+
+    return plans.create(
+        data_dir,
+        plan_session(row, cfg),
+        str(row["ticker"]),
+        "long",
+        t.est_entry,
+        t.stop,
+        t.shares,
+        str(row["scan"]),
+        f"board: {ticket.ORDER_TYPES[kind]}, {row.get('grade')}",
+    )
+
+
+def fx_rate(data_dir, cfg, currency: str, runs=None) -> float | None:
+    """Units of the account currency per USD: live from TradingView, else the rate stored with
+    the newest planned alerts, else None (then sizes are not suggested)."""
+    from trading_os import dashboard, tv
+
+    if currency == "USD":
+        return 1.0
+    try:
+        return tv.fetch_fx(cfg.sizing["fx_symbol"].format(currency=currency))
+    except Exception:  # noqa: BLE001 - offline or TradingView down: the stored rate
+        found = runs if runs is not None else dashboard.list_runs(Path(data_dir))
+        for run in found[:10]:
+            cands = pd.read_parquet(run.candidates)
+            if "plan_fx_rate" in cands and cands["plan_fx_rate"].notna().any():
+                return float(cands["plan_fx_rate"].dropna().iloc[0])
+    return None
+
+
+# --- Notes & alerts on the focus view
+
+FLAGS = {"🟥": "Flag red", "🟨": "Flag yellow", "🟩": "Flag green"}
+
+
+def alert_default(row: Mapping[str, Any]) -> float:
+    """A new price alert's level: the pivot, else the plan's entry, else its stop, else 0."""
+    for k in ("pivot", "plan_entry", "plan_stop"):
+        v = row.get(k)
+        with contextlib.suppress(TypeError, ValueError):
+            f = float(v)
+            if f == f and f:
+                return f
+    return 0.0
+
+
+# --- TradingView links and list files (moved from app/streamlit_app.py)
+
+
+def tradingview_url(ticker: str, exchange: str | None = None) -> str:
+    """The stock's TradingView chart (exchange-qualified when known)."""
+    symbol = f"{exchange}:{ticker}" if exchange else str(ticker)
+    return f"https://www.tradingview.com/chart/?symbol={symbol.replace(':', '%3A')}"
+
+
+def tradingview_list(tickers, exchanges: Mapping[str, str] | None = None) -> str:
+    """A TradingView import (Watchlist → Import list): EXCHANGE:TICKER, comma-separated."""
+    listing = {t: e for t, e in (exchanges or {}).items() if isinstance(e, str) and e}
+    symbols = [f"{listing[t]}:{t}" if t in listing else str(t) for t in tickers]
+    return ",".join(dict.fromkeys(symbols))

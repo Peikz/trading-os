@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Screener } from "./Screener";
+import { flipLink, Screener } from "./Screener";
 
 const A = ["W", "Z", "Q", "W"].join(""); // synthetic
 
@@ -31,6 +31,9 @@ beforeEach(() => {
           summary: "ADR % (20d) >= 4",
           columns: ["ticker", "adr20_pct"],
           rows: [{ ticker: A, adr20_pct: 5.25 }],
+          tickers: [A],
+          tv_list: `NASDAQ:${A}`,
+          signal_ids: {},
         };
       }
       if (url.startsWith("/api/screens/")) body = { Mine: meta.examples["Momentum leaders"] };
@@ -59,5 +62,17 @@ describe("Screener", () => {
     fireEvent.change(await screen.findByLabelText("Screen name"), { target: { value: "Mine" } });
     fireEvent.click(screen.getByText("Save screen"));
     expect(await screen.findByText("Delete 'Mine'")).toBeInTheDocument();
+  });
+});
+
+describe("Flip through on Today", () => {
+  it("links the screen's stocks to Today", () => {
+    expect(flipLink("Mine", [A, "XZQX"])).toBe(`?screen=Mine&t=${A}%2CXZQX#/today`);
+  });
+
+  it("shows the flip and TradingView buttons under the results", async () => {
+    render(<Screener />);
+    expect(await screen.findByText("📈 Flip through on Today (1)")).toBeInTheDocument();
+    expect(screen.getByText("TradingView list (.txt)")).toBeInTheDocument();
   });
 });

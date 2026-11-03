@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --group api
-      - run: uv run pytest tests/test_api.py
+      - run: uv run pytest tests/test_api.py tests/test_api_pages.py
 
   # The React dashboard (web/): lint, type check and build, unit tests.
   web:

@@ -13,10 +13,17 @@ import {
   type Value,
 } from "../api";
 import { GradeBadge } from "../components/Card";
-import { formatValue } from "../format";
+import { GradeForm } from "../components/GradeForm";
+import { download, formatValue } from "../format";
 
 const NEW = "＋ New screen";
 const BLANK: ScreenSpec = { filters: [], sort: "rs_pct", descending: true };
+
+/** The Today link that flips through a screen's stocks (app/board.py reads the same). */
+export function flipLink(name: string, tickers: string[]): string {
+  const q = new URLSearchParams({ screen: name, t: tickers.join(",") });
+  return `?${q}#/today`;
+}
 
 export function Screener() {
   const [meta, setMeta] = useState<ScreenerMeta | null>(null);
@@ -95,6 +102,7 @@ export function Screener() {
   if (!meta) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
 
   const fields = Object.keys(meta.fields);
+  const scanLabel = scans.find((s) => s.id === scan)?.label ?? scan;
   const setFilter = (i: number, f: Filter) =>
     setSpec((s) => ({ ...s, filters: s.filters.map((x, k) => (k === i ? f : x)) }));
 
@@ -254,6 +262,30 @@ export function Screener() {
       {error && <p className="error">{error}</p>}
       {busy && <p className="muted">Running…</p>}
       {result && <Results meta={meta} result={result} />}
+      {result && (
+        <div className="row">
+          <button
+            disabled={result.tickers.length === 0}
+            onClick={() => {
+              const label = source === "hits" ? scanLabel : pick in meta.saved ? pick : "unsaved";
+              window.location.href = flipLink(label, result.tickers);
+            }}
+          >
+            📈 Flip through on Today ({result.tickers.length})
+          </button>
+          <button
+            title="TradingView: Watchlist menu → Import list"
+            onClick={() =>
+              download(source === "hits" ? `${run}_${scan}.txt` : "screen.txt", result.tv_list)
+            }
+          >
+            TradingView list (.txt)
+          </button>
+        </div>
+      )}
+      {result && source === "hits" && result.tickers.length > 0 && (
+        <HitGrading result={result} scan={scan} scanLabel={scanLabel} />
+      )}
     </div>
   );
 }
@@ -393,6 +425,43 @@ function Results({ meta, result }: { meta: ScreenerMeta; result: ScreenResult })
       </div>
       {result.rows.length < result.count && (
         <p className="muted">The first {result.rows.length} shown.</p>
+      )}
+    </section>
+  );
+}
+
+/** One scan hit's grading form (grade, notes, tags, screenshots), as under the Streamlit table. */
+function HitGrading({
+  result,
+  scan,
+  scanLabel,
+}: {
+  result: ScreenResult;
+  scan: string;
+  scanLabel: string;
+}) {
+  const [look, setLook] = useState(result.tickers[0]);
+  const ticker = result.tickers.includes(look) ? look : result.tickers[0];
+  const id = result.signal_ids[ticker];
+  return (
+    <section>
+      <h3>Grade a hit</h3>
+      <select aria-label="Look at" value={ticker} onChange={(e) => setLook(e.target.value)}>
+        {result.tickers.map((t) => (
+          <option key={t}>{t}</option>
+        ))}
+      </select>{" "}
+      <a
+        href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(ticker)}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open in TradingView
+      </a>
+      {id ? (
+        <GradeForm kind="signal" refId={id} title={`Grade ${ticker} · ${scanLabel || scan}`} />
+      ) : (
+        <p className="muted">This hit has no signal id to grade.</p>
       )}
     </section>
   );
