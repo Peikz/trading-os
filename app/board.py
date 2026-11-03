@@ -202,8 +202,7 @@ def notes_and_alerts(row, data_dir) -> None:
         if st.form_submit_button("Save note") and text.strip():
             stock_notes.add(data_dir, t, text.strip())
             st.toast("Note saved")
-    mine = stock_notes.current(data_dir, t)
-    for n in mine.tail(3).to_dict("records")[::-1] if len(mine) else []:
+    for n in stock_notes.latest(data_dir, t).to_dict("records"):
         st.caption(f"{n.get('note_date')}: {n.get('text')}")
     default = board_data.alert_default(row)
     with st.form(f"alert_{t}", clear_on_submit=False):

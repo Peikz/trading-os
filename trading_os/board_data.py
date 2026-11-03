@@ -458,5 +458,6 @@ def tradingview_url(ticker: str, exchange: str | None = None) -> str:
 
 def tradingview_list(tickers, exchanges: Mapping[str, str] | None = None) -> str:
     """A TradingView import (Watchlist → Import list): EXCHANGE:TICKER, comma-separated."""
-    symbols = [f"{exchanges[t]}:{t}" if (exchanges or {}).get(t) else str(t) for t in tickers]
+    listing = {t: e for t, e in (exchanges or {}).items() if isinstance(e, str) and e}
+    symbols = [f"{listing[t]}:{t}" if t in listing else str(t) for t in tickers]
     return ",".join(dict.fromkeys(symbols))

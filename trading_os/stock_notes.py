@@ -90,3 +90,8 @@ def current(data_dir, ticker: str | None = None) -> pd.DataFrame:
         out = out[out["ticker"] == normalize_ticker(ticker)]
     out = out.sort_values(["note_date", "created_ts"], ascending=False)
     return out.reset_index(drop=True)
+
+
+def latest(data_dir, ticker: str, n: int = 3) -> pd.DataFrame:
+    """A stock's `n` newest live notes, newest first (the focus view's Notes & alerts)."""
+    return current(data_dir, ticker).head(n)

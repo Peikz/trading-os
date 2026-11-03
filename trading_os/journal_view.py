@@ -73,7 +73,8 @@ def latest_hits(runs, read: Callable[[str], pd.DataFrame] = pd.read_parquet) -> 
     if "plan_entry" not in cands:
         return pd.DataFrame()
     keep = cands.dropna(subset=["plan_entry", "plan_stop"])
-    return keep.sort_values(["scan", "rank"])[["ticker", "scan", "plan_entry", "plan_stop"]]
+    order = [c for c in ("scan", "rank") if c in keep]
+    return keep.sort_values(order)[["ticker", "scan", "plan_entry", "plan_stop"]]
 
 
 def hit_label(r: dict[str, Any]) -> str:

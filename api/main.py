@@ -4,7 +4,8 @@
 
 Every number comes from the `trading_os` package (runs from `dashboard`, the board from
 `board_data`, chart lines from `chart_series`, screens from `screens`); nothing is computed
-here. Read-only except saving and deleting your own screens. No orders, no pushes, no AI.
+here. Writes: your own screens here, and in `api.pages` the same data-repo files Streamlit
+writes (plans, fills, grades, notes, watchlists, alerts). No orders, no pushes, no AI.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from api import pages
 from api.serialize import records, scalar
 from trading_os import board_data, chart_series, dashboard, notify, screens
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
@@ -29,6 +31,7 @@ SCOPES = {
     "graded": "A+ / A / B",
     "pushed": "Pushed, incl. C",
     "all": "Every scan hit",
+    "watchlists": "My watchlists",
 }
 LIVE_EVERY_S = 300  # the Screener's live TradingView fetch: at most once per 5 minutes
 
@@ -136,6 +139,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         out["facts"] = facts
         out["stats"] = [{"label": k, "value": v} for k, v in board_data.key_stats(row)]
         out["levels"] = board_data.levels(row)
+        out["alert_default"] = board_data.alert_default(row)
         return out
 
     @app.get("/api/health")
@@ -175,11 +179,29 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         return {"run": rid, "label": run.label, "scans": out}
 
     @app.get("/api/today")
-    def today(scope: Literal["graded", "pushed", "all"] = "graded", t: str | None = None) -> dict:
+    def today(
+        scope: Literal["graded", "pushed", "all", "watchlists"] = "graded",
+        t: str | None = None,
+        screen: str | None = None,
+    ) -> dict:
         """The board's queue: the newest runs' A+ / A / B first (C with scope pushed / all).
-        `t`: a push link's stocks (`?t=A,B`), in the push's order, from every scan's hits."""
+        `t`: a push link's stocks (`?t=A,B`), in the push's order, from every scan's hits.
+        `screen` with `t`: a screen's results to flip through (no grade). Scope `watchlists`:
+        your own lists' stocks."""
         found = runs(manual=False)
         wanted = [x for x in (t or "").split(",") if x]
+        if (screen and wanted) or scope == "watchlists":
+            if scope == "watchlists" and not (screen and wanted):
+                rows_ = board_data.watchlist_rows(found, root())
+            else:
+                rows_ = board_data.ticker_rows(found, wanted, f"screen: {screen}")
+                scope = "screen"
+            if len(rows_) and "exchange" not in rows_:
+                with_uni = next((r for r in found if r.universe.exists()), None)
+                listing = exchanges(str(with_uni.universe)) if with_uni else {}
+                rows_["exchange"] = rows_["ticker"].map(listing)
+            rows = [board_row(r) for r in rows_.to_dict("records")]
+            return {"scope": scope, "rows": rows, "hidden_c": 0, "total": len(rows)}
         every = scope == "all" or bool(wanted)
         hits = board_data.collect(found, cfg(), cache.scan_frames, exchanges, everything=every)
         if wanted and len(hits):
@@ -321,6 +343,13 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             "summary": summary or ("no filters: every hit" if scan else "no filters: every stock"),
             "columns": cols,
             "rows": records(result[cols].head(req.limit)),
+            "tickers": [str(x) for x in result["ticker"].head(200)],
+            "tv_list": board_data.tradingview_list(
+                result["ticker"].head(1000),
+                dict(zip(result["ticker"], result["exchange"], strict=False))
+                if "exchange" in result
+                else None,
+            ),
         }
 
     @app.get("/api/screens")
@@ -340,6 +369,16 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         screens.delete(root(), name)
         return screens.load(root())
 
+    pages.register(
+        app,
+        pages.Context(
+            root=root,
+            cfg=cfg,
+            runs=runs,
+            table=cache.table,
+            exchanges=exchanges,
+        ),
+    )
     return app
 
 
