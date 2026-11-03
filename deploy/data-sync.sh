@@ -6,7 +6,10 @@ set -eu
 # shellcheck disable=SC2016
 git config --global credential.helper '!f() { echo username=x-access-token; echo "password=${GH_TOKEN}"; }; f'
 while true; do
-  if git -C /data pull --quiet --rebase --autostash >/dev/null 2>&1; then
+  # The clone's git lock (trading_os/gitlock.py): never pull while the API or the alerts
+  # service is pulling or pushing.
+  if flock -w 600 /data/.git/trading-os-git.lock \
+    git -C /data pull --quiet --rebase --autostash >/dev/null 2>&1; then
     echo "$(date -u +%FT%TZ) data repo pulled"
   else
     echo "$(date -u +%FT%TZ) data repo pull failed (will retry)"

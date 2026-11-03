@@ -79,7 +79,7 @@ services:
     restart: unless-stopped
 
   # Pulls the private data repo every PULL_EVERY seconds (default 10 minutes), so new runs
-  # show without a restart. The token is passed to git through a credential helper that reads
+  # show without a restart. Each pull holds the clone's git lock (see `alerts`). The token is passed to git through a credential helper that reads
   # the environment; it is never written to the clone's config.
   data-sync:
     build:
@@ -92,6 +92,34 @@ services:
       - ${DATA_DIR}:/data
       - ./data-sync.sh:/data-sync.sh:ro
     entrypoint: ["/bin/sh", "/data-sync.sh"]
+    restart: unless-stopped
+
+  # Price alerts during each regular NYSE session (scripts/alert_server.py): sleeps until
+  # 09:25 New York, runs the GitHub job's watcher to the close (13:00 on an early close), then
+  # commits and pushes what fired. OFF unless ALERTS_ENABLED=true in deploy/.env, so the server
+  # and the GitHub job never both push the same alert (DEPLOY.md, "Price alerts on the server").
+  # Its git pulls and pushes share the clone's lock (.git/trading-os-git.lock) with data-sync
+  # and the API, so two writers never race.
+  alerts:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      ALERTS_ENABLED: ${ALERTS_ENABLED:-false}
+      ALPACA_API_KEY_ID: ${ALPACA_API_KEY_ID:-}
+      ALPACA_API_SECRET_KEY: ${ALPACA_API_SECRET_KEY:-}
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      GH_TOKEN: ${GH_TOKEN}
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: credential.helper
+      GIT_CONFIG_VALUE_0: '!f() { echo username=x-access-token; echo "password=$${GH_TOKEN}"; }; f'
+      GIT_AUTHOR_NAME: trading-os-bot
+      GIT_AUTHOR_EMAIL: alerts@trading-os.invalid
+      GIT_COMMITTER_NAME: trading-os-bot
+      GIT_COMMITTER_EMAIL: alerts@trading-os.invalid
+    volumes:
+      - ${DATA_DIR}:/data
+    command: ["uv", "run", "--no-sync", "python", "scripts/alert_server.py", "--data-dir", "/data"]
     restart: unless-stopped
 
 volumes:

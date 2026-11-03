@@ -47,6 +47,12 @@ def is_session(schedule: Schedule, day: dt.date) -> bool:
     return bool(_calendar(schedule.calendar).is_session(pd.Timestamp(day)))
 
 
+def session_close(schedule: Schedule, session: dt.date) -> dt.datetime:
+    """The session's close in New York time: 16:00, or 13:00 on an early close."""
+    close = _calendar(schedule.calendar).session_close(pd.Timestamp(session))
+    return close.to_pydatetime().astimezone(ZoneInfo(schedule.timezone))
+
+
 def previous_session(schedule: Schedule, session: dt.date) -> dt.date:
     """The last session before `session`, which need not be a session itself: a Saturday or a
     holiday gives the session before it (the dashboard and the alert watcher ask on weekends)."""

@@ -1,0 +1,110 @@
+# The server's Docker images (deploy/): every image is built, and api + web + caddy + alerts
+# are started without Tailscale (deploy/docker-compose.ci.yml) on an empty synthetic data
+# clone, then /api/health and the web root are fetched through Caddy. Nothing is pushed to any
+# registry, and no secret is used: the .env is deploy/.env.example's placeholders.
+# This repo is public and so are these logs: synthetic data only, status lines only.
+
+name: Docker build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "api/**"
+      - "web/**"
+      - "trading_os/**"
+      - "config/**"
+      - "scripts/alert_watch.py"
+      - "scripts/alert_server.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/docker.yml"
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "api/**"
+      - "web/**"
+      - "trading_os/**"
+      - "config/**"
+      - "scripts/alert_watch.py"
+      - "scripts/alert_server.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/docker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_FILE: deploy/docker-compose.yml:deploy/docker-compose.ci.yml
+      COMPOSE_PROJECT_NAME: trading-os-ci
+      DATA_DIR: ${{ github.workspace }}/ci-data
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Exposes the Actions cache's URL and token to buildx (cache type=gha)
+      - uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Dummy .env and an empty synthetic data clone
+        run: |
+          cp deploy/.env.example deploy/.env
+          mkdir -p "$DATA_DIR/data"
+          git init -q "$DATA_DIR"
+          sudo chown -R 1000:1000 "$DATA_DIR"
+          docker compose config --quiet
+
+      - name: Build every image
+        run: docker compose build
+
+      - name: Start api, web, caddy and alerts
+        run: docker compose up -d api web caddy alerts
+
+      - name: /api/health and the web root through Caddy
+        run: |
+          get() { docker compose exec -T caddy wget -q -O - "http://127.0.0.1$1"; }
+          for _ in $(seq 1 30); do
+            if get /api/health > health.json 2>/dev/null; then break; fi
+            sleep 2
+          done
+          jq -e '.ok == true' health.json
+          get / > index.html
+          grep -q '<div id="root"' index.html
+          echo "Caddy: /api/health ok, web root served"
+
+      - name: The alerts service is off by default
+        run: |
+          for _ in $(seq 1 15); do
+            if docker compose logs alerts | grep -q "ALERTS_ENABLED is not true, idle"; then
+              docker compose run --rm --no-deps alerts \
+                uv run --no-sync python scripts/alert_server.py --data-dir /data --check
+              echo "Alerts: off by default, watcher loads in the image"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Alerts: no 'off' line in the service log"
+          exit 1
+
+      - name: Status on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail 50 api caddy web alerts
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

@@ -1,4 +1,5 @@
 # The API image: the trading_os package and api/ from this repo, run with uvicorn.
+# The data-sync and alerts services run from the same image.
 FROM python:3.12-slim
 
 ARG GH_VERSION=2.63.2
@@ -18,6 +19,8 @@ COPY trading_os ./trading_os
 COPY config ./config
 COPY api ./api
 COPY docs/GUIDE.md ./docs/GUIDE.md
+# The price-alert watcher and its server loop (service `alerts`)
+COPY scripts/alert_watch.py scripts/alert_server.py ./scripts/
 RUN uv sync --frozen --no-dev --group api
 
 RUN useradd --create-home --uid 1000 app

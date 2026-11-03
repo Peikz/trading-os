@@ -1,0 +1,36 @@
+# CI only (.github/workflows/docker.yml): the stack without Tailscale, so GitHub's runner can
+# build every image and start api + web + caddy + alerts on synthetic data.
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml ...
+#
+# The `tailscale` service becomes an idle container that only holds the network namespace
+# Caddy shares (network_mode: service:tailscale, as on the server), so the path a request takes
+# from Caddy to the API is the same. Still no `ports:`: CI curls from inside the namespace.
+# The build cache lives in GitHub's Actions cache (type=gha), one scope per Dockerfile.
+
+services:
+  tailscale:
+    image: alpine:3.21
+    command: ["sleep", "infinity"]
+    environment: !reset {}
+    volumes: !reset []
+    devices: !reset []
+    cap_add: !reset []
+
+  api:
+    build:
+      cache_from: ["type=gha,scope=api"]
+      cache_to: ["type=gha,scope=api,mode=max"]
+
+  data-sync:
+    build:
+      cache_from: ["type=gha,scope=api"]
+
+  alerts:
+    build:
+      cache_from: ["type=gha,scope=api"]
+
+  web:
+    build:
+      cache_from: ["type=gha,scope=web"]
+      cache_to: ["type=gha,scope=web,mode=max"]

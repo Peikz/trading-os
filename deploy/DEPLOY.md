@@ -14,6 +14,11 @@ What runs (`deploy/docker-compose.yml`):
 | `api` | FastAPI over the data repo clone (`api/main.py`). Writes only what the Streamlit dashboard writes (journal, plans, grades, notes, watchlists, alerts, drawings, screens) and pushes it on *Save & push*. Places no orders, sends no pushes, uses no AI. |
 | `web` | Builds `web/` to static files once, copies them into a volume, exits. |
 | `data-sync` | Pulls the private data repo every 10 minutes (`PULL_EVERY`), so new runs appear without a restart. |
+| `alerts` | Price alerts (`scripts/alert_server.py`): from 09:25 New York to the close of each regular NYSE session (13:00 on an early close; weekends and XNYS holidays skipped), the same watcher as the GitHub job, then commits and pushes what fired. **Off** until `ALERTS_ENABLED=true` (see [Price alerts on the server](#price-alerts-on-the-server)). Places no orders. |
+
+The API, `data-sync` and `alerts` share one data repo clone. Every git pull and push takes the
+clone's lock (`.git/trading-os-git.lock`, `trading_os/gitlock.py`; `data-sync.sh` uses
+`flock` on the same file), so two of them never run git at once.
 
 Everything below uses placeholders: `<server-ip>`, `<your-tailnet>`, `<owner>`. Never commit
 real values; secrets live only in `deploy/.env` on the server.
@@ -84,6 +89,45 @@ Check that nothing is public: from a machine **without** Tailscale,
 Install Tailscale on the host too (`curl -fsSL https://tailscale.com/install.sh | sh` then
 `tailscale up --ssh`), check `ssh root@<host-tailscale-name>` works from your PC, then delete
 the SSH rule from the Hetzner firewall. The server now accepts nothing from the internet.
+
+## Price alerts on the server
+
+Today the price alerts run in GitHub Actions (`.github/workflows/alerts.yml`), started twice a
+session by the cron-job.org timer. The `alerts` service does the same job on the server in one
+process, and is **off** until you switch it on. Never run both: each would push every alert,
+so you would get two of each and two commits of what fired. Do these steps in order, on a
+weekday evening or a weekend (outside 09:25–16:00 New York).
+
+1. **Keys on the server.** In `deploy/.env` set `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`
+   and `NTFY_TOPIC` to the same values as the code repo's Actions secrets of the same names.
+   `GH_TOKEN` is already there (it pushes what fired). Keep `ALERTS_ENABLED=false` for now.
+2. **Check the service.** It should log that it is off and when the next watch is:
+
+   ```bash
+   cd /opt/trading-os/trading-os/deploy
+   docker compose up -d --build alerts
+   docker compose logs --tail 5 alerts        # "Alerts server: off; next watch ..."
+   ```
+
+   Don't test with `alert_watch.py --once` here: even with `--no-push` it records what it
+   finds as fired in the clone, and the service would then commit that and skip those alerts.
+3. **Switch the GitHub job off.** Two places, both by hand:
+   - At cron-job.org, disable the two jobs titled `trading-os: alerts 09:25 ET` and
+     `trading-os: alerts 12:45 ET` (they start `alerts.yml`). Disabling, not deleting, keeps
+     the way back open.
+   - Later, in a commit to the code repo: remove the two `alerts` `TimerJob` entries in
+     `trading_os/timer.py` (`scripts/timer_setup.py` would otherwise re-create the jobs at
+     cron-job.org, and the System health page would report them as missed), and then
+     `alerts.yml` itself, or keep it as a `workflow_dispatch`-only fallback.
+4. **Switch the server on.** In `deploy/.env` set `ALERTS_ENABLED=true`, then
+   `docker compose up -d alerts`. `docker compose logs --tail 5 alerts` now says `on`.
+5. **The first session.** At 09:25 New York the log says `watching until 16:00 NY`, then
+   `watching N {...}` every 5 minutes; after the close `Data: committed and pushed` (or
+   `nothing new to commit`). The data repo's history shows `alerts <date>: fired (server)`.
+
+To go back: `ALERTS_ENABLED=false` and `docker compose up -d alerts`, then re-enable the two
+cron-job.org jobs. A failed watch restarts after a minute; missing keys stop the container
+(`docker compose ps` shows it restarting, and its log says which).
 
 ## Updating
 
