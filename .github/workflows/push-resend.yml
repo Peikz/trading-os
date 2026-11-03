@@ -36,9 +36,9 @@ jobs:
             | @tsv' history.jsonl
           python3 - <<'EOF'
           import json, os, urllib.request
-          # Under Apple's 4 KB like the live pushes (notify.APNS_BUDGET): lines are cut from
-          # the end until title + text + tap link fit.
-          BUDGET = 3300
+          # Under Apple's 4 KB like the live pushes (notify.payload_size): ntfy relays title and
+          # text twice, so lines are cut from the end until (title + text) x 2 + link fit.
+          BUDGET = 1550
           topic, match = os.environ["NTFY_TOPIC"], os.environ["MATCH"].split("|")
           n = total = 0
           for line in open("history.jsonl", encoding="utf-8"):
@@ -52,7 +52,7 @@ jobs:
               title += " (resent)"
               click = m.get("click", "")
               lines = m.get("message", "").split("\n")
-              room = BUDGET - len(title.encode()) - len(click.encode())
+              room = BUDGET - len(title.encode()) - len(click.encode()) // 2
               cut = 0
               while len("\n".join(lines).encode()) > room - 40 and len(lines) > 1:
                   lines.pop()

@@ -10,6 +10,7 @@ one line at the end. Tapping the notification opens the run's full report.
 
 from __future__ import annotations
 
+import json
 import os
 import urllib.parse
 from collections.abc import Iterable, Mapping
@@ -220,9 +221,20 @@ def afterhours_line(row: Mapping[str, Any]) -> str | None:
 WIDTH = 40  # characters per line that fit a phone notification without wrapping
 INDENT = "   "
 NTFY_LIMIT = 3900  # ntfy turns longer messages into attachments (4096 bytes)
-# Apple's push payload is 4096 bytes; ntfy's own fields take some. Title + text + tap link stay
-# under this, so the iPhone gets the message itself (28 Oct 2026: bigger ones went missing).
-APNS_BUDGET = 3300
+# Apple's push payload is 4096 bytes, and ntfy's relay to the iPhone carries the title and the
+# text twice (once for the app, once for Apple's alert) plus its own fields. Pushes are sized so
+# that whole payload stays under PAYLOAD_LIMIT, the text never gets cut on the way and iOS shows
+# the message itself (28 Oct 2026: bigger ones went missing; 3 Nov 2026: the text counted twice).
+PAYLOAD_LIMIT = 3600
+RELAY_OVERHEAD = 500  # ntfy's id, time, topic, event, priority, tags and Apple's own keys
+APNS_BUDGET = (PAYLOAD_LIMIT - RELAY_OVERHEAD) // 2  # title + text, before the tap link
+
+
+def payload_size(title: str, body: str, click: str | None = None) -> int:
+    """Bytes of the push as ntfy relays it to an iPhone: title and text twice, JSON-escaped."""
+    escaped = len(json.dumps(title, ensure_ascii=False).encode("utf-8"))
+    escaped += len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+    return 2 * escaped + len((click or "").encode("utf-8")) + RELAY_OVERHEAD
 
 
 @dataclass(frozen=True)
@@ -769,10 +781,14 @@ def build_message(
     first = (header_lines or [""])[0][:1]
     icon = first if first in LIGHT_ICONS.values() else ""
     title = _title(ctx, counts, icon)
-    # Title, text and tap link together under Apple's 4 KB (Emil, 28 Oct 2026): a bigger push
-    # goes to the iPhone as a silent "fetch it" signal, which iOS often skips.
-    extra = len(title.encode("utf-8")) + len((click or "").encode("utf-8"))
-    body = fit(lines, max(1000, APNS_BUDGET - extra)) or "No pushing scans ran."
+    # The whole relayed payload under Apple's 4 KB (Emil, 28 Oct and 3 Nov 2026): a bigger push
+    # is cut by ntfy or reaches the iPhone as a silent "fetch it" signal, which iOS often skips.
+    more = "in the report" if click and "github.com" in click else "on Today"
+    limit = APNS_BUDGET - len(title.encode("utf-8")) - len((click or "").encode("utf-8")) // 2
+    body = fit(lines, limit, more) or "No pushing scans ran."
+    while payload_size(title, body, click) > PAYLOAD_LIMIT and limit > 400:
+        limit -= 100  # escaped newlines and quotes made it bigger than the plain text
+        body = fit(lines, limit, more)
     return Message(title=title, body=body, click=click)
 
 
@@ -826,7 +842,7 @@ def _join(lines: list[Line]) -> str:
     return "\n".join(out)
 
 
-def fit(lines: list[Line], limit: int = NTFY_LIMIT) -> str:
+def fit(lines: list[Line], limit: int = NTFY_LIMIT, more: str = "on Today") -> str:
     """The message under ntfy's size limit. Drops headlines from the bottom up, then facts
     from the bottom up (the top names keep theirs), then whole stocks from the end."""
     lines = list(lines)
@@ -843,10 +859,10 @@ def fit(lines: list[Line], limit: int = NTFY_LIMIT) -> str:
     if not too_big():
         return _join(lines)
     cut = 0
-    while lines and len((_join(lines) + f"\n… {cut} more on Today").encode("utf-8")) > limit:
+    while lines and len((_join(lines) + f"\n… {cut} more {more}").encode("utf-8")) > limit:
         if lines.pop().role == "hit":
             cut += 1
-    marker = Line("note", f"… {cut} more on Today")
+    marker = Line("note", f"… {cut} more {more}")
     return _join([*lines, marker])
 
 

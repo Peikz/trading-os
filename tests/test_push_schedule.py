@@ -114,5 +114,18 @@ def test_a_push_fits_apples_4kb_with_its_title_and_link():
     selected = notify.select_for_push({"ep_am": hits}, cfg, "am")
     click = "http://dash.example/?push=am&session=2026-10-28&t=" + ",".join(hits["ticker"])
     msg = notify.build_message(ctx, {"ep_am": hits}, selected, cfg, click=click)
-    total = len(msg.title.encode()) + len(msg.body.encode()) + len(msg.click.encode())
-    assert total <= notify.APNS_BUDGET
+    # 3 Nov 2026: ntfy relays the title and text twice, so the whole payload is what counts
+    assert notify.payload_size(msg.title, msg.body, msg.click) <= notify.PAYLOAD_LIMIT
+
+
+def test_long_text_with_many_lines_still_fits_once_escaped():
+    lines = [notify.Line("hit", 'ÆØÅ "quoted" 🟢 ' + "x" * 30) for _ in range(200)]
+    title, click = "Trading OS · EOD 2026-11-03 🟢", "https://github.com/o/r/blob/main/x.md"
+    body = notify.fit(lines, notify.APNS_BUDGET, "in the report")
+    msg = notify.Message(title, body, click)
+    limit = notify.APNS_BUDGET
+    while notify.payload_size(msg.title, msg.body, msg.click) > notify.PAYLOAD_LIMIT:
+        limit -= 100
+        msg = notify.Message(title, notify.fit(lines, limit, "in the report"), click)
+    assert msg.body.endswith("more in the report")
+    assert notify.payload_size(msg.title, msg.body, msg.click) <= notify.PAYLOAD_LIMIT

@@ -254,7 +254,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
                 wait_s=NTFY_RETRY_WAIT_S,
             )
             pushed = {name: set(hits["ticker"]) for name, hits in selected.items()}
-            status("Push: sent")
+            size = notify.payload_size(message.title, message.body, message.click)
+            status(f"Push: sent ({size} of {notify.PAYLOAD_LIMIT} bytes as relayed)")
         except requests.RequestException as exc:
             push_error = exc
             status(f"Push: FAILED ({type(exc).__name__}), saving data anyway")
