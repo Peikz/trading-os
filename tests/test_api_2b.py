@@ -54,6 +54,25 @@ def test_the_chart_has_bars_lines_levels_and_fills(client):
     assert client.get("/api/chart/1x").status_code == 400
 
 
+def test_the_chart_has_monthly_bars_like_streamlit(client):
+    """Monthly on the Chart page (Emil, 4 Nov 2026): the API refused it with a 422."""
+    fill = {"date": "2026-06-10", "ticker": A, "side": "buy", "shares": 10, "price": 11.0}
+    client.post("/api/journal/fills", json=fill)
+    out = client.get(f"/api/chart/{A}?timeframe=Monthly&anchors=year%20start")
+    assert out.status_code == 200
+    month = out.json()
+    # 80 sessions from 1 June 2026: June, July, August and part of September
+    assert [c["time"] for c in month["candles"]] == [
+        "2026-06-01", "2026-07-01", "2026-08-03", "2026-09-01",
+    ]  # fmt: skip
+    june = month["candles"][0]  # opens 10.0, 22 sessions (closes 10.2 + 0.1 i)
+    assert june["open"] == 10.0 and june["close"] == pytest.approx(10.2 + 0.1 * 21)
+    assert june["volume"] == sum(1000 + i for i in range(22))
+    [marker] = month["markers"]  # the June fill, on June's bar
+    assert marker["time"] == "2026-06-01" and marker["text"] == "buy 11.00"
+    assert month["avwaps"] == [] and month["trend"] == []  # daily bars only
+
+
 def test_trend_lines_draw_move_and_erase(data, client):  # noqa: F811
     line = {"x0": "2026-06-01", "y0": 10.0, "x1": "2026-06-11", "y1": 11.0, "extend": True}
     mark_id = client.post(f"/api/chart/{A}/lines", json=line).json()["mark_id"]

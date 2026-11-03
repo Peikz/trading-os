@@ -223,11 +223,15 @@ def payload(
                 "levels": [], "visible": None}  # fmt: skip
     if fills is not None and "session_date" not in fills and "trade_date" in fills:
         fills = fills.rename(columns={"trade_date": "session_date"})
-    weekly = timeframe == "Weekly"
-    if weekly:
+    coarse = timeframe in ("Weekly", "Monthly")  # not daily: no AVWAPs or trend lines
+    if timeframe == "Weekly":
         data = chart_series.weekly(data)
         hits, fills = to_weeks(hits, data), to_weeks(fills, data)
         sessions = sessions // 5 if sessions else None
+    elif timeframe == "Monthly":  # as on the Streamlit Chart page (Emil, 4 Nov 2026)
+        data = chart_series.monthly(data)
+        hits, fills = to_weeks(hits, data, "M"), to_weeks(fills, data, "M")
+        sessions = max(sessions // 21, 12) if sessions else None
     data["time"] = [_day(d) for d in data["session_date"]]
     candles = [
         {"time": t, "open": float(o), "high": float(h), "low": float(lo), "close": float(c),
@@ -238,7 +242,7 @@ def payload(
     names = [LINES[n] for n in lines or [] if n in LINES]
     out_lines = chart_series.indicator_lines(data, names)
     avwaps = []
-    if anchors and not weekly:
+    if anchors and not coarse:
         for k, (label, anchor) in enumerate(anchors.items()):
             values = ichart.anchored_vwap(data, anchor)
             pts = [
@@ -250,7 +254,7 @@ def payload(
                 colour = AVWAP_COLOURS[k % len(AVWAP_COLOURS)]
                 avwaps.append({"name": f"AVWAP {label}", "colour": colour, "pts": pts})
     trend = []
-    if not weekly:
+    if not coarse:
         dates = list(data["time"])
         for m in marks or []:
             pts = ichart.trend_line(

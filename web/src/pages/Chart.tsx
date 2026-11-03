@@ -1,4 +1,4 @@
-// Chart (trading_os/chart_view.py): any stock, interactive. Daily or weekly bars, 2 or 10 years,
+// Chart (trading_os/chart_view.py): any stock, interactive. Daily, weekly or monthly bars, 2 or 10 years,
 // MA 10/20/50/200 and EMA 9/21, the scans' past hits, your buys and sells, the pivot, stops and
 // plan entry, anchored VWAPs (quick ones or any day you save), trend lines you draw, move or
 // erase (or type in), the stock's notes, and minute bars (study days, or live from Alpaca when
@@ -132,7 +132,7 @@ export function Chart() {
         <>
           <div className="row">
             <Pills label="History" value={q.period} options={[["2y", "2 years"], ["10y", "10 years"]]} onPick={(v) => set("period", v)} />
-            <Pills label="Bars" value={q.timeframe} options={[["Daily", "Daily"], ["Weekly", "Weekly"]]} onPick={(v) => set("timeframe", v)} />
+            <Pills label="Bars" value={q.timeframe} options={[["Daily", "Daily"], ["Weekly", "Weekly"], ["Monthly", "Monthly"]]} onPick={(v) => set("timeframe", v)} />
             <Pills label="Show" value={q.span} options={SPANS.map((s) => [s, s])} onPick={(v) => set("span", v)} />
           </div>
           <div className="row">
