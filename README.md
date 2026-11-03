@@ -139,6 +139,21 @@ computer only. Never deploy it from this public repo with data in it.
    only; the app itself stays on localhost.
 3. Open that address on your phone (the PC has to be on).
 
+### React dashboard (phase 1, Nov 2026)
+
+A React rebuild of the dashboard, meant for an always-on server: `api/` (FastAPI over the
+`trading_os` package, read-only except your saved screens) and `web/` (React + TypeScript,
+TradingView's Lightweight Charts). Phase 1 has Today (the Focus view) and the Screener.
+
+```bash
+TRADING_OS_DATA=../trading-os-data uv run --group api uvicorn api.main:app --port 8000
+cd web && npm ci && npm run dev    # http://localhost:5173, /api goes to port 8000
+```
+
+`npm run lint`, `npm test` and `npm run build` are what CI runs. The server kit (Docker
+Compose, Caddy, Tailscale as the only way in, a data-repo pull every 10 minutes) and its
+step-by-step setup are in [deploy/DEPLOY.md](deploy/DEPLOY.md).
+
 ## Secrets
 
 Set as GitHub Actions secrets on this repo, never in code:

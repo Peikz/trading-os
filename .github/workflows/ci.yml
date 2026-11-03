@@ -22,3 +22,34 @@ jobs:
       - run: uv run ruff format --check .
       # Tests use synthetic data only; nothing market-related reaches this public log.
       - run: uv run pytest
+
+  # The React dashboard's API (api/): its tests need the api group (FastAPI). Synthetic data only.
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --group api
+      - run: uv run pytest tests/test_api.py
+
+  # The React dashboard (web/): lint, type check and build, unit tests.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test

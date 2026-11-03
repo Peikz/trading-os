@@ -433,6 +433,9 @@ address in Safari (Share → Add to Home Screen for one tap). The PC has to be o
 
 To have it without the PC: [SERVER.md](SERVER.md) moves the dashboard to a small cloud server (about €5 a month), private to your devices the same way, updating and restarting itself.
 
+The new React dashboard (Today and Screener so far; Nov 2026) has its own server kit in
+[deploy/DEPLOY.md](../deploy/DEPLOY.md): Docker Compose with Caddy and Tailscale as the only way in.
+
 After the code or `config/scans.yaml` changes, restart the dashboard (Ctrl-C in its terminal, then `scripts\start_dashboard.ps1` again). A running dashboard reloads its own page but keeps the older `trading_os` code it started with, so new config keys can stop it with an error such as `unknown slot`.
 
 ## 13. Glossary

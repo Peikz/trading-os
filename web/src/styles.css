@@ -1,0 +1,83 @@
+/* Dark theme, close to the Streamlit dashboard's and TradingView's dark mode. */
+:root {
+  --bg: #0e1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #d1d4dc;
+  --muted: #8b949e;
+  --accent: #2f81f7;
+  --up: #3fb950;
+  --down: #f85149;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { padding: 12px 16px 32px; max-width: 1600px; margin: 0 auto; }
+h2 { margin: 8px 0; font-size: 1.2rem; }
+h3 { margin: 12px 0 6px; font-size: 1rem; }
+.muted { color: var(--muted); }
+.error { color: var(--down); }
+button, select, input {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.on, .pills button.on, .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.link { background: none; border: none; color: var(--accent); padding: 2px 6px; }
+input[type="number"] { width: 110px; }
+
+.top { display: flex; gap: 20px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.top nav { display: flex; gap: 6px; }
+.top a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+.top a.on { color: var(--text); background: var(--panel); }
+
+.tiles, .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.tile { padding: 3px 9px; border: 1px solid var(--border); border-radius: 8px; }
+.chip { padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85em; }
+.details { margin: 4px 0 8px; padding-left: 20px; color: var(--muted); }
+
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.flip { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.flip span { flex: 1; text-align: center; }
+.flip button { min-width: 64px; }
+.pills { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; margin: 4px 0; }
+.pills button { white-space: nowrap; padding: 2px 9px; }
+.pills .sep { width: 8px; flex: none; }
+
+.focus { display: grid; grid-template-columns: minmax(0, 5fr) minmax(260px, 2fr); gap: 14px; }
+.focus-side .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.chart { position: relative; width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.chart-legend { position: absolute; top: 6px; left: 8px; z-index: 2; font-size: 12px; pointer-events: none; }
+.chart-legend .ohlc { color: var(--muted); }
+
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--panel); }
+.card ul { margin: 8px 0 0; padding-left: 18px; }
+.card .ticker { font-size: 1.15em; }
+.badge { color: #fff; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+.queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+.queue button { width: 100%; text-align: left; }
+.queue button.active { background: var(--accent); color: #fff; }
+
+.screener .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+.check { display: inline-flex; gap: 4px; align-items: center; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: var(--panel); }
+
+/* Phone: chart on top, the card under it; the toolbar scrolls sideways instead of wrapping */
+@media (max-width: 760px) {
+  .focus { grid-template-columns: 1fr; }
+  main { padding: 8px 10px 24px; }
+}

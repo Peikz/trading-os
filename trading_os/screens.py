@@ -170,6 +170,28 @@ def describe(f: Mapping[str, Any]) -> str:
     return f"{label(f['field'])} {op} {value}"
 
 
+# --- where the stocks come from (shared by the Streamlit page and the API) ------
+
+
+def with_universe(hits: pd.DataFrame, snapshot: pd.DataFrame) -> pd.DataFrame:
+    """A scan's hits plus the universe fields they lack, so every filter works on them."""
+    snap = snapshot.drop_duplicates("ticker").set_index("ticker")
+    return hits.join(snap[[c for c in snap.columns if c not in hits.columns]], on="ticker")
+
+
+def live_data(cfg, snapshot: pd.DataFrame) -> pd.DataFrame:
+    """One TradingView fetch of the universe (callers keep it to at most one per 5 minutes),
+    with the last close's history fields joined in."""
+    from trading_os import metrics, tv, universe
+
+    raw = tv.fetch_universe(cfg.universe)
+    raw["earnings_flag"] = False
+    live = universe.build_universe(metrics.add_phase1_metrics(raw, cfg.proxies), cfg.universe, "am")
+    snap = snapshot.drop_duplicates("ticker").set_index("ticker")
+    keep = [c for c in snap.columns if c not in live.columns]
+    return live.join(snap[keep], on="ticker")
+
+
 # --- saved screens (data repo, user layer) ---------------------------------
 
 

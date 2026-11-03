@@ -15,7 +15,7 @@ from collections.abc import Callable
 import pandas as pd
 import streamlit as st
 
-from trading_os import clock, ibd, notify, plans, report, ticket
+from trading_os import board_data, clock, plans, report, ticket
 
 GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
@@ -41,62 +41,13 @@ def _collect_cached(version, everything, _runs, _cfg, _scan_frames, _exchanges) 
     return _collect(_runs, _cfg, _scan_frames, _exchanges, everything)
 
 
-def _collect(
-    runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
-) -> pd.DataFrame:
-    """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
-    newest first, one row per ticker and scan. `everything`: every scan's hits, all tiers, one
-    row per ticker (its best grade)."""
-    latest = []
-    for slot in ("pm", "am", "mid", "eod", "ah"):  # ah: EP-AH (Emil, 27 Oct 2026)
-        run = next((r for r in runs if r.slot == slot), None)
-        if run is not None:
-            latest.append(run)
-    # The exchange per ticker from the newest run with a universe file (intraday runs have none)
-    listing: dict = {}
-    info = pd.DataFrame()
-    with_universe = next((r for r in runs if r.universe.exists()), None)
-    if exchanges is not None and with_universe is not None:
-        listing = exchanges(str(with_universe.universe))
-    if with_universe is not None:
-        want = ["ticker", "sector", "industry", "float_shares", "earnings_date_next"]
-        try:
-            info = pd.read_parquet(with_universe.universe, columns=want).drop_duplicates("ticker")
-            info = info.set_index("ticker")
-        except Exception:  # noqa: BLE001 - the stats strip shows dashes
-            info = pd.DataFrame()
-    frames = []
-    for run in sorted(latest, key=runs.index):
-        for scan, hits in scan_frames(str(run.candidates)).items():
-            pushed = scan in cfg.scans and cfg.scans[scan].action == "push"
-            if not everything and not pushed:
-                continue
-            alert_only = "tier" in hits and not everything
-            shown = hits[hits["tier"] == "alert"] if alert_only else hits
-            if shown.empty:
-                continue
-            if listing and "exchange" not in shown:
-                shown = shown.assign(exchange=shown["ticker"].map(listing))
-            for column in info.columns:
-                if column not in shown:
-                    shown = shown.assign(**{column: shown["ticker"].map(info[column])})
-            frames.append(
-                shown.assign(
-                    scan=scan, run_label=run.label, run_slot=run.slot, run_session=run.session
-                )
-            )
-    if not frames:
-        return pd.DataFrame()
-    out = ibd.relabel(pd.concat(frames, ignore_index=True))
-    out = out.drop_duplicates(["ticker", "scan"], keep="first")
-    if "grade" not in out:
-        out["grade"] = "C"
-    out["grade"] = out["grade"].fillna("C")
-    out["_g"] = out["grade"].map(notify.GRADE_RANK).fillna(9)
-    score = out["grade_score"] if "grade_score" in out else pd.Series(index=out.index)
-    out["_s"] = pd.to_numeric(score, errors="coerce").fillna(-1e9)
-    out = out.sort_values(["_g", "_s"], ascending=[True, False])
-    return out.drop_duplicates("ticker", keep="first") if everything else out
+# The queue, card facts, stats and tiles are computed in the package (React dashboard, Nov
+# 2026): the API shows the same board.
+_collect = board_data.collect
+_tags = board_data.tags
+_history = board_data.history
+_money = board_data.money
+_tiles = board_data.tiles
 
 
 def watchlist_rows(runs, data_dir, exchanges=None) -> pd.DataFrame:
@@ -149,23 +100,6 @@ def ticker_rows(runs, tickers: list[str], label: str) -> pd.DataFrame:
         for t in dict.fromkeys(tickers)
     ]
     return pd.DataFrame(rows)
-
-
-def _tags(row) -> list[str]:
-    out = []
-    for key in ("heat_tag", "si_tag", "ibd_tag"):
-        v = row.get(key)
-        if isinstance(v, str) and v:
-            out.append(v)
-    return out
-
-
-def _history(row) -> str:
-    n, mean, win = (row.get(f"grade_stat_{k}") for k in ("trades", "mean_r", "win_pct"))
-    if n is None or pd.isna(n) or mean is None or pd.isna(mean):
-        return ""
-    w = f" · {win:.0f}% win" if win is not None and not pd.isna(win) else ""
-    return f"📚 {int(n)} trades · avg {mean:+.2f}R{w} (2016-26)"
 
 
 def _plan_session(row, cfg) -> dt.date:
@@ -272,14 +206,7 @@ def card(row, n: int, cfg, data_dir, account, usd_rate, open_chart, inline: bool
             f"&nbsp;<span style='opacity:.6'>{row['run_label']}</span>",
             unsafe_allow_html=True,
         )
-        lines = notify.grade_lines(row) if grade in ("A+", "A", "B") else []
-        facts = [*lines[1:2], *notify.plan_lines(row), *_tags(row)]
-        hist = _history(row)
-        if hist:
-            facts.append(hist)
-        why = row.get("grade_why")
-        if isinstance(why, str) and why:
-            facts.append(f"Why: {why}")
+        facts = board_data.card_facts(row)
         if facts:
             st.markdown("\n".join(f"- {f}" for f in facts))
         if inline:
@@ -321,41 +248,12 @@ def _toggle(key: str) -> None:
     st.session_state[key] = not st.session_state.get(key, False)
 
 
-def _money(x) -> str:
-    if x is None or pd.isna(x):
-        return "–"
-    x = float(x)
-    return f"${x / 1e9:.1f}B" if x >= 1e9 else f"${x / 1e6:.0f}M" if x >= 1e6 else f"${x:,.0f}"
-
-
 def stats_strip(row) -> None:
     """The key stats under the chart (Emil, 26 Oct 2026: like TradingView's data panel and what
     Qullamaggie reads out): market cap, ADR, dollar volume, float, % from the 52-week high, RS,
     the industry, earnings."""
 
-    def num(k):
-        v = row.get(k)
-        return None if v is None or (isinstance(v, float) and pd.isna(v)) else v
-
-    chips = [("Mkt cap", _money(num("market_cap")))]
-    adr = num("adr20_pct")
-    chips.append(("ADR", f"{adr:.1f}%" if adr is not None else "–"))
-    chips.append(("$ vol 20d", _money(num("avg_dollar_volume_20d"))))
-    fl = num("float_shares")
-    chips.append(("Float", f"{fl / 1e6:,.0f}M" if fl is not None else "–"))
-    hi = num("pct_from_52w_high")
-    chips.append(("From 52w high", f"{hi:+.0f}%" if hi is not None else "–"))
-    rs = num("rs_pct")
-    chips.append(("RS", f"{rs:.0f}" if rs is not None else "–"))
-    rank, of = num("industry_rank"), num("industry_of")
-    ind = row.get("industry") if isinstance(row.get("industry"), str) else ""
-    chips.append(("Industry", f"{ind} #{int(rank)}/{int(of)}" if rank and of else ind or "–"))
-    soon = num("earnings_in_sessions")
-    nxt = row.get("earnings_date_next")
-    if soon is not None:
-        chips.append(("Earnings", f"in {int(soon)} sessions"))
-    elif nxt is not None and not pd.isna(nxt):
-        chips.append(("Earnings", f"{pd.Timestamp(nxt):%d %b}"))
+    chips = board_data.key_stats(row)
     html = " ".join(
         f"<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;"
         f"border:1px solid #30363d;border-radius:6px;font-size:.85em'>"
@@ -627,10 +525,6 @@ def show(
             st.info("Notes & alerts: the third tab above.")
 
 
-def _signed(v) -> str | None:
-    return None if v is None or pd.isna(v) else f"{v:+.1f}%"
-
-
 def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None) -> None:
     """The market as tiles (Emil, 26 Oct 2026: tiles, not bullet text): the QQQ light, the heat,
     the IBD state, SPY, QQQ and VIX. The full lines stay in 'Market details' below."""
@@ -665,26 +559,6 @@ def market_strip(row: dict | None, ibd_info: dict | None, heat_text: str | None)
             f"<span style='opacity:.6'>{label}</span> <b>{value}</b>{extra}</span>"
         )
     st.html(" ".join(chips).replace("$", "&#36;"))
-
-
-def _tiles(row: dict, ibd_info: dict | None, heat_text: str | None) -> list[tuple]:
-    """(label, value, change) per market tile."""
-    icons = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}
-    light = row.get("qqq_light")
-    tiles = [
-        ("QQQ light", f"{icons.get(light, '⚪')} {light or 'n/a'}", None),
-        ("Market heat", heat_text or "n/a", None),
-        (
-            "IBD market",
-            ibd.words(ibd_info["state"], ibd_info["dist_count"]) if ibd_info else "n/a",
-            ibd.sell_days(ibd_info["state"], ibd_info["dist_count"]) if ibd_info else None,
-        ),
-    ]
-    for name in ("spy", "qqq", "vix"):
-        close = row.get(f"{name}_close")
-        if close is not None and not pd.isna(close):
-            tiles.append((name.upper(), f"{close:,.2f}", _signed(row.get(f"{name}_chg_pct"))))
-    return tiles
 
 
 def position_cards(
