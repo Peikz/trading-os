@@ -170,6 +170,16 @@ def _toggle(key: str) -> None:
     st.session_state[key] = not st.session_state.get(key, False)
 
 
+NOTES_TAB = "Notes & alerts"
+
+
+def _open_notes() -> None:
+    """N opens the Notes & alerts tab (Emil, 4 Nov 2026: it only printed a hint before);
+    pressed again it goes back to the Plan."""
+    on_notes = st.session_state.get("fc_tab") == NOTES_TAB
+    st.session_state["fc_tab"] = "Plan" if on_notes else NOTES_TAB
+
+
 def stats_strip(row) -> None:
     """The key stats under the chart (Emil, 26 Oct 2026: like TradingView's data panel and what
     Qullamaggie reads out): market cap, ADR, dollar volume, float, % from the 52-week high, RS,
@@ -198,7 +208,10 @@ def notes_and_alerts(row, data_dir) -> None:
         if col.button(icon, key=f"flag_{name}_{t}", help=f"Add to '{name}'", width="stretch"):
             my_watchlists.add(data_dir, name, [t])
             st.toast(f"{t} → {name}")
-    st.caption("F flags green. The flags are watchlists (Watchlists page).")
+    st.caption(
+        "The flags are your own watchlists, for sorting stocks as you look: 🟥 Flag red, "
+        "🟨 Flag yellow, 🟩 Flag green (F). Pick one in Show above to flip through it."
+    )
     with st.form(f"note_{t}", clear_on_submit=True):
         text = st.text_area(
             "Note",
@@ -274,9 +287,7 @@ def hotkeys(row, data_dir) -> None:
     if cols[1].button("F · 🟩 flag", key="hk_f", shortcut="F", width="stretch"):
         my_watchlists.add(data_dir, FLAGS["🟩"], [str(row["ticker"])])
         st.toast(f"{row['ticker']} → {FLAGS['🟩']}")
-    cols[2].button(
-        "N · note", key="hk_n", shortcut="N", on_click=_toggle, args=("fc_notes",), width="stretch"
-    )
+    cols[2].button("N · note", key="hk_n", shortcut="N", on_click=_open_notes, width="stretch")
     cols[3].button(
         "T · ticket",
         key="hk_t",
@@ -429,7 +440,10 @@ def show(
         stats_strip(row)
         hotkeys(row, data_dir)
     with right:
-        plan_tab, list_tab, notes_tab = st.tabs(["Plan", f"List ({len(rows)})", "Notes & alerts"])
+        # Keyed so N can open the notes tab; the List label is fixed so the pick survives a flip
+        plan_tab, list_tab, notes_tab = st.tabs(
+            ["Plan", "List", NOTES_TAB], key="fc_tab", default="Plan", on_change="rerun"
+        )
         with plan_tab:
             card(
                 row,
@@ -442,11 +456,10 @@ def show(
                 inline=st.session_state.get("fc_ticket", True),
             )
         with list_tab:
+            st.caption(f"{len(rows)} in the queue")
             candidate_list(rows, page_i)
         with notes_tab:
             notes_and_alerts(row, data_dir)
-        if st.session_state.get("fc_notes"):
-            st.info("Notes & alerts: the third tab above.")
 
 
 def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None) -> None:
