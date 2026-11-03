@@ -69,7 +69,7 @@ def register(app: FastAPI, ctx: Context) -> None:
     def chart(
         ticker: str,
         period: str = Query("2y", pattern="^(2y|10y)$"),
-        timeframe: str = Query("Daily", pattern="^(Daily|Weekly)$"),
+        timeframe: str = Query("Daily", pattern="^(Daily|Weekly|Monthly)$"),
         span: str = Query("1Y", pattern="^(3M|6M|1Y|2Y|All)$"),
         lines: str = "MA10,MA20,MA50",
         hits: bool = True,
