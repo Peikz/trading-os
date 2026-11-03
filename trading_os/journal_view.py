@@ -195,3 +195,49 @@ def real_vs_study(data_dir: Path, trades: pd.DataFrame) -> pd.DataFrame:
     if trades.empty:
         return pd.DataFrame()
     return review.real_vs_study(trades, study_by_strategy(data_dir), minute_best(data_dir))
+
+
+# --- Import broker fills (CSV) and Daily notes (phase 3; moved from app/streamlit_app.py)
+
+CSV_CAPTION = "Column names are mapped in config/scans.yaml → journal.csv_columns."
+DAILY_CAPTION = (
+    "A note about the day. Tag the stocks it is about in the tag field, or write $TICKER in the "
+    "text; each tagged stock's Chart page shows the note under its notes."
+)
+DAILY_KEPT = (
+    "Saved at once in the data repo (data/journal/daily_notes/) and kept for good: an edit or "
+    "delete adds a row. Use Save & push to send them to GitHub."
+)
+DAYS_BACK = (7, 30, 90, 365, 3650)  # 3650: all
+
+
+def import_csv(data_dir: Path, name: str, content: bytes) -> str:
+    """Import a broker's fills export (`journal.main --csv`): the file is written next to the
+    journal, imported, and removed. Returns what the import printed. Raises ValueError for a
+    file it can't read (the message says why)."""
+    import io
+    import re
+    from contextlib import redirect_stdout
+
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).name)[:80] or "fills.csv"
+    tmp = Path(data_dir) / "data" / "journal" / f"_upload_{safe}"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_bytes(content)
+    buffer = io.StringIO()
+    try:
+        with redirect_stdout(buffer):
+            journal.main(["--csv", str(tmp), "--data-dir", str(data_dir)])
+    finally:
+        tmp.unlink(missing_ok=True)
+    return buffer.getvalue().strip() or "Imported."
+
+
+def daily_notes_list(data_dir: Path, tag: str | None, days_back: int, today: dt.date | None = None):
+    """Daily notes, newest first: one stock's (or all) from the last `days_back` days."""
+    from trading_os import daily_notes
+
+    notes = daily_notes.current(data_dir, tag or None)
+    since = (today or dt.date.today()) - dt.timedelta(days=days_back)
+    if len(notes):
+        notes = notes[pd.to_datetime(notes["note_date"]).dt.date >= since]
+    return notes

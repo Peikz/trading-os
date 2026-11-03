@@ -15,7 +15,6 @@ import datetime as dt
 import io
 import os
 import sys
-from contextlib import redirect_stdout
 from pathlib import Path
 
 import board  # app/board.py: Today's candidate board and Saxo ticket
@@ -40,6 +39,7 @@ from trading_os import (
     journal,
     journal_view,
     live_tracking,
+    market_view,
     my_watchlists,
     notify,
     plans,
@@ -52,12 +52,10 @@ from trading_os import (
     scans_view,
     screens,
     search,
-    sectors,
     sizing,
     stock_notes,
     strategy_history,
     timer,
-    tv,
     validation,
 )
 from trading_os import interactive_chart as ichart
@@ -570,22 +568,8 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
 
 @st.cache_data(ttl=600, show_spinner="Fetching indexes and sectors from TradingView…")
 def sector_table(folder: str) -> tuple[pd.DataFrame, str]:
-    """The ETFs of `sectors.py` now (one TradingView request, at most every 10 minutes), else
-    the last EOD's saved rows. Returns (table, where it came from)."""
-    try:
-        if os.environ.get("TRADING_OS_NO_LIVE"):  # the tests: no network
-            raise RuntimeError("live data off")
-        return sectors.fetch(tv.fetch_details), "live from TradingView"
-    except Exception:  # noqa: BLE001 - offline: the last saved day
-        files = sorted((Path(folder) / "data" / "sectors").glob("*/*.parquet"))
-        if not files:
-            return pd.DataFrame(columns=sectors.COLUMNS), "not available"
-        return pd.read_parquet(files[-1]), f"saved {files[-1].stem.split('_')[0]}"
-
-
-@st.cache_data(ttl=600, show_spinner=False)
-def industry_files(folder: str) -> list[str]:
-    return [str(f) for f in sorted((Path(folder) / "data" / "industries").glob("*/*.parquet"))]
+    """The ETFs of `sectors.py` now (`market_view.sector_table`, rotation columns included)."""
+    return market_view.sector_table(Path(folder))
 
 
 def market_overview() -> None:
@@ -598,27 +582,19 @@ def market_overview() -> None:
     if table.empty:
         st.info("No sector data yet: it comes from TradingView, and with each EOD run.")
         return
-    table = sectors.rotation(table)
-    periods = {"Today": "chg_pct", "1 week": "ret_1w", "1 month": "ret_1m",
-               "3 months": "ret_3m", "Year to date": "ret_ytd"}  # fmt: skip
     a, b = st.columns([3, 2])
-    period = a.radio("Return over", list(periods), index=2, horizontal=True, key="sec_period")
-    groups = b.multiselect("Show", ["Index", "Sector", "Theme"], ["Index", "Sector", "Theme"],
+    period = a.radio(
+        "Return over", list(market_view.PERIODS), index=2, horizontal=True, key="sec_period"
+    )
+    groups = b.multiselect("Show", list(market_view.GROUPS), list(market_view.GROUPS),
                            key="sec_groups")  # fmt: skip
-    col = periods[period]
-    view = table[table["group"].isin(groups)].sort_values(col, ascending=False)
-    shown = view[["name", "ticker", "group", col, "vs_spy_1m", "vs_spy_1w", "quadrant", "trend",
-                  "rvol"]].rename(columns={col: f"{period} %", "vs_spy_1m": "1M vs SPY",
-                                           "vs_spy_1w": "1W vs SPY", "rvol": "RVOL"})  # fmt: skip
+    shown = market_view.sector_view(table, period, groups)
+    view = table[table["group"].isin(groups)]
     styled = shown.style.format(precision=1).background_gradient(
         cmap="RdYlGn", subset=[f"{period} %", "1M vs SPY", "1W vs SPY"]
     )
     st.dataframe(styled, hide_index=True, width="stretch")
-    st.caption(
-        f"{source}. Quadrant: **Leading** = ahead of SPY over the month and this week; "
-        "**Weakening** = ahead over the month, behind this week; **Lagging** = behind on both; "
-        "**Improving** = behind over the month, ahead this week (money moving in)."
-    )
+    st.caption(market_view.SECTOR_CAPTION.format(source=source))
     fig = px.scatter(
         view, x="vs_spy_1m", y="vs_spy_1w", text="ticker", color="group",
         hover_name="name", labels={"vs_spy_1m": "1 month vs SPY (%)",
@@ -635,28 +611,18 @@ def market_overview() -> None:
                            font={"color": "#888"})  # fmt: skip
     st.plotly_chart(fig, width="stretch", key="sec_rotation")
 
-    files = industry_files(str(data_dir))
-    if files:
-        st.subheader("Industries: who leads and who is moving")
-        latest = read_parquet(files[-1])
-        back = st.radio("Rank move since", ["1 week", "1 month"], horizontal=True, key="ind_back")
-        offset = 5 if back == "1 week" else 21
-        earlier = read_parquet(files[-1 - offset]) if len(files) > offset else pd.DataFrame()
-        moves = sectors.industry_moves(latest, earlier)
+    if not market_view.industry_files(data_dir):
+        return
+    st.subheader("Industries: who leads and who is moving")
+    back = st.radio("Rank move since", ["1 week", "1 month"], horizontal=True, key="ind_back")
+    found = market_view.industries(data_dir, back)
+    if found:
         a, b = st.columns(2)
-        cols = ["industry_rank", "industry", "sector", "moved", "med_ret_22", "members"]
-        names = {"industry_rank": "rank", "moved": f"moved ({back})",
-                 "med_ret_22": "median 1M %"}  # fmt: skip
         a.markdown("**Top 15 now**")
-        a.dataframe(moves.head(15)[cols].rename(columns=names).round(1), hide_index=True)
+        a.dataframe(found["top"], hide_index=True)
         b.markdown(f"**Climbing most** ({back})")
-        climbing = moves.dropna(subset=["moved"]).sort_values("moved", ascending=False).head(15)
-        b.dataframe(climbing[cols].rename(columns=names).round(1), hide_index=True)
-        st.caption(
-            "Industries ranked by their stocks' median 1- and 3-month returns (the EOD job). "
-            "A big climb is money moving into a group before it reaches the top. Needs "
-            f"{offset + 1} saved EOD runs for the move column."
-        )
+        b.dataframe(found["climbing"], hide_index=True)
+        st.caption(found["caption"])
 
 
 def open_chart(ticker: str) -> None:
@@ -1690,21 +1656,13 @@ elif page == "Journal":
         "use “Save & push” to send it to GitHub."
     )
     with st.expander("Import broker fills (CSV)"):
-        st.caption("Column names are mapped in config/scans.yaml → journal.csv_columns.")
+        st.caption(journal_view.CSV_CAPTION)
         upload = st.file_uploader("Fills export", type=["csv"])
         if upload is not None and st.button("Import"):
-            tmp = data_dir / "data" / "journal" / f"_upload_{upload.name}"
-            tmp.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_bytes(upload.getvalue())
-            buffer = io.StringIO()
             try:
-                with redirect_stdout(buffer):
-                    journal.main(["--csv", str(tmp), "--data-dir", str(data_dir)])
-                st.success(buffer.getvalue() or "Imported.")
+                st.success(journal_view.import_csv(data_dir, upload.name, upload.getvalue()))
             except ValueError as exc:
                 st.error(str(exc))
-            finally:
-                tmp.unlink(missing_ok=True)
 
     account = sizing.load_account(data_dir)
     usd_rate = fx_rate(str(data_dir), account.currency if account else "USD")
@@ -1738,9 +1696,9 @@ elif page == "Journal":
             key="dn_days",
             format_func=lambda d: "all" if d == 3650 else f"{d} days",
         )
-        notes = daily_notes.current(data_dir, None if only == "All notes" else only)
-        since = dt.date.today() - dt.timedelta(days=days_back)
-        notes = notes[pd.to_datetime(notes["note_date"]).dt.date >= since] if len(notes) else notes
+        notes = journal_view.daily_notes_list(
+            data_dir, None if only == "All notes" else only, days_back
+        )
         if not len(notes):
             st.caption("No daily notes here yet.")
         for n in notes.to_dict("records"):
@@ -2139,116 +2097,42 @@ elif page == "Graded signals":
 
 elif page == "Market":
     st.header("Market")
-    history = dashboard.breadth_history(data_dir)
+    history = market_view.history_of(data_dir)
     if history.empty:
         st.info("Breadth rows start with the first scheduled EOD run.")
         st.stop()
-    from trading_os import ibd
-
-    last_row = history.iloc[-1].to_dict()
-    try:
-        ibd_now = ibd.state_at(data_dir, dt.date.today())
-    except Exception:  # noqa: BLE001 - the tile shows n/a
-        ibd_now = None
-    heat_line = heat.short_line(heat.load(data_dir), last_row.get("scan_count"))
-    board.market_tiles(last_row, ibd_now, heat_line[0].replace("🌡 ", "") if heat_line else None)
+    tile_list, _ = market_view.tiles(data_dir, history)
+    cols = st.columns(3)
+    for i, (label, value, delta) in enumerate(tile_list):
+        cols[i % 3].metric(
+            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
+        )
     with st.expander("The IBD market state (tracked, not a rule)", expanded=False):
-        try:
-            spy = ibd.spy_daily(data_dir, dt.date.today())
-            states = ibd.states(spy) if len(spy) > ibd.DIST_WINDOW else pd.DataFrame()
-        except Exception:  # noqa: BLE001
-            states = pd.DataFrame()
-        if states.empty:
+        recent = market_view.ibd_recent(data_dir)
+        if recent.empty:
             st.caption("Needs SPY's daily bars (data/market/spy_daily_seed.parquet).")
         else:
-            recent = states.tail(30).iloc[::-1]
-            recent = recent.assign(
-                market=[
-                    ibd.words(s, n)
-                    for s, n in zip(recent["state"], recent["dist_count"], strict=True)
-                ]
-            )
-            st.dataframe(
-                recent[["session_date", "market", "close", "dist", "dist_count"]]
-                .rename(
-                    columns={
-                        "close": "SPY",
-                        "dist": "sell day",
-                        "dist_count": "sell days (25)",
-                    }
-                )
-                .round(2),
-                hide_index=True,
-                width="stretch",
-            )
-        st.caption(
-            "🟢 Healthy uptrend: 0-3 sell days. 🟡 Uptrend under pressure: 4-5, a correction is "
-            "1-2 sell days away. 🔴 Correction: 6 or more, until a follow-through day. "
-            "O'Neil: a sell (distribution) day is SPY down 0.2 %+ on more volume; 6 in 25 start "
-            "a correction, a follow-through day (day 4+ of a rally, SPY +1.25 % on more volume) "
-            "starts an uptrend. Every signal carries the state; the monthly live check splits "
-            "the live trades by it. Grades don't use it (it wasn't proven blind)."
-        )
-    heat_stats = heat.load(data_dir)
-    counts = history["scan_count"].dropna() if "scan_count" in history else pd.Series()
-    if heat_stats and len(counts):
-        bands = [name for _, name in heat_stats["bands"]]
-        now = heat.band(counts.iloc[-1], heat_stats["bands"])
-        st.subheader(
-            f"{now.capitalize()} market: scan count {int(counts.iloc[-1])} "
-            f"({heat_stats['band_labels'][now]})"
-        )
+            st.dataframe(recent, hide_index=True, width="stretch")
+        st.caption(market_view.IBD_CAPTION)
+    hv = market_view.heat_view(data_dir, history)
+    if hv:
+        labels = {b["band"]: b["label"] for b in hv["bands"]}
+        st.subheader(f"{hv['now'].capitalize()} market: scan count {hv['count']} "
+                     f"({labels[hv['now']]})")  # fmt: skip
         pick = st.radio(
             "Setups at this heat",
-            bands,
-            index=bands.index(now),
+            list(labels),
+            index=list(labels).index(hv["now"]),
             horizontal=True,
-            format_func=lambda b: f"{b} ({heat_stats['band_labels'][b]})",
+            format_func=lambda b: f"{b} ({labels[b]})",
             key="heat_band",
         )
-        shown = heat.table(heat_stats, pick).drop(columns=["short"])
-        shown["verdict"] = shown["verdict"].map(lambda v: f"{heat.VERDICT_ICONS[v]} {v}")
-        st.dataframe(
-            shown.rename(columns=lambda c: c.replace("_", " ").replace("2016-21", "2016–21"))
-            .rename(columns=lambda c: c.replace("2022-26", "2022–26"))
-            .round(2),
-            hide_index=True,
-            width="stretch",
-        )
-        st.caption(
-            "Each setup's study plan on the signal days at this heat (the Sunday scan count, "
-            "the one market variable that held up when tested blind): net R a trade after "
-            "costs, capped at 20R, separately on 2016–2021 and 2022–2026. 'day r' averages "
-            "each signal day first, so a day with many hits counts once. **Held**: made money "
-            f"per trade and per signal day in both periods, with {heat_stats['min_trades']}+ "
-            "trades in each. **Lost**: lost per trade in both. A = an A+ / A grade; B = the B "
-            "grade (an edge per trade, half size); C = no grade. "
-            "In the account, adding the C setups that held in a cool market lowered the "
-            "return every way it was tried (data repo docs/research/how-we-test.md). Facts "
-            f"about past rules, not advice. Built {heat_stats['built']}."
-        )
+        hv = market_view.heat_view(data_dir, history, pick)
+        st.dataframe(hv["table"], hide_index=True, width="stretch")
+        st.caption(hv["caption"])
     market_overview()
     st.subheader("Breadth and the Market Light")
-    st.dataframe(
-        history[
-            [
-                "session_date",
-                *(["qqq_light"] if "qqq_light" in history else []),
-                "light",
-                "qqq_trend",
-                "breadth_state",
-                "scan_count",
-                "up4",
-                "down4",
-                "ratio_5d",
-                "ratio_10d",
-                "up25q",
-                "down25q",
-            ]
-        ].iloc[::-1],
-        hide_index=True,
-        width="stretch",
-    )
+    st.dataframe(market_view.breadth(history), hide_index=True, width="stretch")
     st.line_chart(history.set_index("session_date")[["ratio_5d", "ratio_10d"]], height=220)
 
 elif page == "Stats":

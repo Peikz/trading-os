@@ -17,6 +17,7 @@ RUN uv sync --frozen --no-dev --group api --no-install-project
 COPY trading_os ./trading_os
 COPY config ./config
 COPY api ./api
+COPY docs/GUIDE.md ./docs/GUIDE.md
 RUN uv sync --frozen --no-dev --group api
 
 RUN useradd --create-home --uid 1000 app
