@@ -57,6 +57,7 @@ beforeEach(() => {
     "GET /api/stock-notes/": [],
     "GET /api/alerts": { directions: ["above", "below"], alerts: [], fired: [] },
     "POST /api/alerts": { directions: ["above", "below"], alerts: [], fired: [] },
+    "GET /api/watchlists": { lists: ["Flag green", "Leaders"], flags: [] },
   });
 });
 const urls = () => sent.map((c) => c.url);
@@ -139,11 +140,20 @@ describe("Today, phase 2a", () => {
     expect(screen.getByLabelText(`${B} card`)).toBeInTheDocument();
   });
 
-  it("asks for your watchlists in the My watchlists scope", async () => {
+  it("lists each watchlist by name in Show and asks for that one list", async () => {
     render(<Today />);
     await screen.findByText("1 of 2 · 1 C hidden");
-    fireEvent.change(screen.getByLabelText("Show"), { target: { value: "watchlists" } });
-    await waitFor(() => expect(urls()).toContain("/api/today?scope=watchlists"));
+    expect(await screen.findByText("📋 Leaders")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Show"), { target: { value: "wl:Leaders" } });
+    await waitFor(() => expect(urls()).toContain("/api/today?scope=watchlists&wl=Leaders"));
+  });
+
+  it("steps day, week, month with W", async () => {
+    render(<Today />);
+    await screen.findByText("1 of 2 · 1 C hidden");
+    fireEvent.keyDown(window, { key: "w" });
+    fireEvent.keyDown(window, { key: "w" });
+    await waitFor(() => expect(urls().some((u) => u.includes("tf=1M"))).toBe(true));
   });
 });
 

@@ -768,6 +768,10 @@ def stock_chart(
         data = ichart.weekly(bars)
         hits, fills = to_weeks(hits, data), to_weeks(fills, data)
         sessions = sessions // 5 if sessions else None
+    elif timeframe == "Monthly":  # Emil, 4 Nov 2026
+        data = ichart.monthly(bars)
+        hits, fills = to_weeks(hits, data, "M"), to_weeks(fills, data, "M")
+        sessions = max(sessions // 21, 12) if sessions else None
     fig = ichart.daily_figure(
         data,
         title=f"{ticker} · {timeframe.lower()}",
@@ -901,9 +905,10 @@ def focus_chart(
     row = row or {}
     picked = lwchart.DEFAULT if picked is None else picked
     bench = bars_for(str(data_dir), "QQQ", "2y") if "RS vs QQQ" in picked else None
-    if timeframe == "1W":
-        bars = lwchart.weekly(bars)
-        bench = lwchart.weekly(bench) if bench is not None and len(bench) else bench
+    if timeframe in ("1W", "1M"):
+        to = lwchart.weekly if timeframe == "1W" else lwchart.monthly
+        bars = to(bars)
+        bench = to(bench) if bench is not None and len(bench) else bench
     levels = {"entry": row.get("plan_entry"), "stop": row.get("plan_stop") or row.get("grade_stop")}
     if row.get("pivot") == row.get("pivot") and row.get("pivot"):
         levels["pivot"] = row.get("pivot")
@@ -918,7 +923,7 @@ def focus_chart(
         picked=picked,
         anchor=anchor,
         bench=bench,
-        show_bars=130 if timeframe == "1D" else 80,
+        show_bars={"1D": 130, "1W": 80}.get(timeframe, 24),
     )
 
 
@@ -1355,7 +1360,7 @@ elif page == "Chart":
         key="ch_period",
         format_func=lambda p: "2 years" if p == "2y" else "10 years",
     )
-    timeframe = b.radio("Bars", ["Daily", "Weekly"], horizontal=True, key="ch_tf")
+    timeframe = b.radio("Bars", ["Daily", "Weekly", "Monthly"], horizontal=True, key="ch_tf")
     span = c.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
     sessions = chart_view.SPANS[span]
     overlays = st.multiselect("Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines")

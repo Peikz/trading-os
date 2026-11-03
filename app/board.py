@@ -49,9 +49,13 @@ _money = board_data.money
 _tiles = board_data.tiles
 
 
-def watchlist_rows(runs, data_dir, exchanges=None) -> pd.DataFrame:
-    """Your own watchlists' stocks as board rows (`board_data.watchlist_rows`)."""
-    return board_data.watchlist_rows(runs, data_dir)
+def watchlist_rows(runs, data_dir, exchanges=None, name: str | None = None) -> pd.DataFrame:
+    """Your own watchlists' stocks as board rows (`board_data.watchlist_rows`); one list when
+    `name` is given."""
+    return board_data.watchlist_rows(runs, data_dir, name)
+
+
+LIST_MARK = "📋 "  # a watchlist in Show, by its own name (Emil, 4 Nov 2026)
 
 
 # A screen's results and the Saxo ticket's sizing live in the package too (React dashboard,
@@ -156,7 +160,10 @@ def _jump(i: int) -> None:
 
 
 def _flip_timeframe() -> None:
-    st.session_state["fc_tf"] = "1W" if st.session_state.get("fc_tf", "1D") == "1D" else "1D"
+    # W steps day → week → month → day (monthly bars: Emil, 4 Nov 2026)
+    order = ["1D", "1W", "1M"]
+    now = st.session_state.get("fc_tf") or "1D"
+    st.session_state["fc_tf"] = order[(order.index(now) + 1) % 3 if now in order else 0]
 
 
 def _toggle(key: str) -> None:
@@ -244,7 +251,7 @@ def toolbar() -> tuple[str, list[str]]:
     st.session_state.setdefault("fc_tf", "1D")
     st.session_state.setdefault("fc_ind", list(DEFAULT))
     a, b = st.container(key="board_tools").columns([1, 4])
-    tf = a.segmented_control("Bars", ["1D", "1W"], key="fc_tf", label_visibility="collapsed")
+    tf = a.segmented_control("Bars", ["1D", "1W", "1M"], key="fc_tf", label_visibility="collapsed")
     picked = b.pills(
         "Indicators",
         list(INDICATORS),
@@ -261,7 +268,9 @@ def hotkeys(row, data_dir) -> None:
     from trading_os import my_watchlists
 
     cols = st.container(key="board_hotkeys").columns(4)
-    cols[0].button("W · 1D/1W", key="hk_w", shortcut="W", on_click=_flip_timeframe, width="stretch")
+    cols[0].button(
+        "W · 1D/1W/1M", key="hk_w", shortcut="W", on_click=_flip_timeframe, width="stretch"
+    )
     if cols[1].button("F · 🟩 flag", key="hk_f", shortcut="F", width="stretch"):
         my_watchlists.add(data_dir, FLAGS["🟩"], [str(row["ticker"])])
         st.toast(f"{row['ticker']} → {FLAGS['🟩']}")
@@ -309,7 +318,9 @@ def show(
         key="board_mode",
         label_visibility="collapsed",
     )
-    scopes = ["A+ / A / B", "Pushed, incl. C", "Every scan hit", "My watchlists"]
+    # Each watchlist by name instead of one "My watchlists" (Emil, 4 Nov 2026)
+    lists = board_data.watchlist_names(data_dir)
+    scopes = ["A+ / A / B", "Pushed, incl. C", "Every scan hit", *(LIST_MARK + n for n in lists)]
     # Opened from a push (Emil, 27 Oct 2026): ?push=ah&session=...&t=A,B shows that push's
     # stocks first, with every other hit one click away.
     from_push = [t for t in str(st.query_params.get("t", "")).split(",") if t]
@@ -341,16 +352,16 @@ def show(
         hits = every[every["ticker"].isin(order)] if len(every) else every
         if len(hits):
             hits = hits.assign(_o=hits["ticker"].map(order)).sort_values("_o").drop(columns="_o")
-    elif scope == "My watchlists":
-        hits = watchlist_rows(runs, data_dir, exchanges)
+    elif scope.startswith(LIST_MARK):
+        hits = watchlist_rows(runs, data_dir, exchanges, scope.removeprefix(LIST_MARK))
     else:
         hits = collect(runs, cfg, scan_frames, exchanges, everything=scope == "Every scan hit")
     with_c = scope != "A+ / A / B"
     if hits.empty:
         st.info(
-            "No stocks in your watchlists yet: flag one here (F, or 🟥 🟨 🟩 under Notes & "
-            "alerts) or add lists on the Watchlists page (also from a TradingView export)."
-            if scope == "My watchlists"
+            "This watchlist is empty: flag a stock here (F, or 🟥 🟨 🟩 under Notes & alerts) "
+            "or add to it on the Watchlists page (also from a TradingView export)."
+            if scope.startswith(LIST_MARK)
             else "No signals in the latest runs."
         )
         return

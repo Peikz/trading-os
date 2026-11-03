@@ -38,6 +38,7 @@ export interface BoardRow {
 }
 
 export type Scope = "graded" | "pushed" | "all" | "watchlists";
+export type Timeframe = "1D" | "1W" | "1M";
 
 export interface Today {
   scope: Scope | "screen";
@@ -64,7 +65,7 @@ export interface Line {
 
 export interface Bars {
   ticker: string;
-  tf: "1D" | "1W";
+  tf: Timeframe;
   candles: Candle[];
   lines: Line[];
 }
@@ -575,8 +576,9 @@ const post = <T>(path: string, body: unknown, method = "POST") =>
 const enc = encodeURIComponent;
 
 export const api = {
-  today: (scope: Scope, tickers?: string[], screen?: string | null) => {
+  today: (scope: Scope, tickers?: string[], screen?: string | null, wl?: string | null) => {
     const q = new URLSearchParams({ scope });
+    if (wl) q.set("wl", wl);
     if (tickers?.length) q.set("t", tickers.join(","));
     if (screen) q.set("screen", screen);
     return request<Today>(`/api/today?${q}`);
@@ -708,7 +710,7 @@ export const api = {
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),
-  bars: (ticker: string, tf: "1D" | "1W", indicators: string[], anchor?: string | null) => {
+  bars: (ticker: string, tf: Timeframe, indicators: string[], anchor?: string | null) => {
     const q = new URLSearchParams({ tf, indicators: indicators.join(",") });
     if (anchor) q.set("anchor", anchor);
     return request<Bars>(`/api/bars/${encodeURIComponent(ticker)}?${q}`);

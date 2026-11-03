@@ -37,10 +37,11 @@ LINE_COLORS = {
 LEVEL_STYLES = {"pivot": "dash", "order stop": "dot", "stop": "dot", "plan entry": "dashdot"}
 
 
-def weekly(bars: pd.DataFrame) -> pd.DataFrame:
-    """Daily bars to weeks (Monday-Friday), labelled by the week's last session."""
+def weekly(bars: pd.DataFrame, freq: str = "W-FRI") -> pd.DataFrame:
+    """Daily bars to weeks (Monday-Friday), or months with freq="M", labelled by the period's
+    last session."""
     df = bars.copy()
-    df["week"] = pd.to_datetime(df["session_date"]).dt.to_period("W-FRI")
+    df["week"] = pd.to_datetime(df["session_date"]).dt.to_period(freq)
     out = df.groupby("week").agg(
         session_date=("session_date", "last"),
         open=("open", "first"),
@@ -50,6 +51,11 @@ def weekly(bars: pd.DataFrame) -> pd.DataFrame:
         volume=("volume", "sum"),
     )
     return out.reset_index(drop=True)
+
+
+def monthly(bars: pd.DataFrame) -> pd.DataFrame:
+    """Daily bars to months (Emil, 4 Nov 2026), labelled by the month's last session."""
+    return weekly(bars, "M")
 
 
 def lines(close: pd.Series, names: list[str]) -> dict[str, pd.Series]:

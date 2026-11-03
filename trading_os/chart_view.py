@@ -147,14 +147,17 @@ def levels_for(data_dir: Path, runs, cfg, ticker: str, read=pd.read_parquet) -> 
     return out
 
 
-def to_weeks(frame: pd.DataFrame | None, weeks: pd.DataFrame) -> pd.DataFrame | None:
-    """Move each row's session_date to its week's label (the week's last session)."""
+def to_weeks(
+    frame: pd.DataFrame | None, weeks: pd.DataFrame, freq: str = "W-FRI"
+) -> pd.DataFrame | None:
+    """Move each row's session_date to its week's label (the week's last session); months
+    with freq="M"."""
     if frame is None or frame.empty:
         return frame
-    period = pd.to_datetime(weeks["session_date"]).dt.to_period("W-FRI")
+    period = pd.to_datetime(weeks["session_date"]).dt.to_period(freq)
     label = dict(zip(period, weeks["session_date"], strict=True))
     out = frame.copy()
-    out["session_date"] = pd.to_datetime(out["session_date"]).dt.to_period("W-FRI").map(label)
+    out["session_date"] = pd.to_datetime(out["session_date"]).dt.to_period(freq).map(label)
     return out.dropna(subset=["session_date"])
 
 

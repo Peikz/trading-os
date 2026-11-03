@@ -289,14 +289,30 @@ def _newest_snapshot(runs) -> tuple[Any, pd.DataFrame]:
     return with_universe, uni
 
 
-def watchlist_rows(runs, data_dir) -> pd.DataFrame:
-    """Your own watchlists' stocks as board rows, with the newest EOD snapshot's numbers."""
+def watchlist_names(data_dir) -> list[str]:
+    """Your watchlists that have stocks, in the order they were made."""
+    from trading_os import my_watchlists
+
+    members = my_watchlists.current(my_watchlists.load(data_dir))
+    if members.empty:
+        return []
+    name_col = "list_name" if "list_name" in members else members.columns[0]
+    return list(dict.fromkeys(str(n) for n in members[name_col]))
+
+
+def watchlist_rows(runs, data_dir, name: str | None = None) -> pd.DataFrame:
+    """Your own watchlists' stocks as board rows, with the newest EOD snapshot's numbers; only
+    the list `name` when given."""
     from trading_os import my_watchlists
 
     members = my_watchlists.current(my_watchlists.load(data_dir))
     if members.empty:
         return pd.DataFrame()
     name_col = "list_name" if "list_name" in members else members.columns[0]
+    if name is not None:
+        members = members[members[name_col].astype(str) == name]
+        if members.empty:
+            return pd.DataFrame()
     with_universe, uni = _newest_snapshot(runs)
     rows = []
     for m in members.to_dict("records"):

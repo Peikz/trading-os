@@ -19,6 +19,7 @@ from trading_os.chart_series import (  # noqa: F401
     INDICATORS,
     _points,
     indicator_lines,
+    monthly,
     weekly,
 )
 

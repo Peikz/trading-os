@@ -38,6 +38,21 @@ def weekly(bars: pd.DataFrame) -> pd.DataFrame:
     return w.reset_index(drop=True)
 
 
+def monthly(bars: pd.DataFrame) -> pd.DataFrame:
+    """Daily bars to monthly (Emil, 4 Nov 2026), dated by the month's first session."""
+    b = bars.sort_values("session_date").copy()
+    b["mo"] = pd.to_datetime(b["session_date"]).dt.to_period("M")
+    m = b.groupby("mo").agg(
+        session_date=("session_date", "first"),
+        open=("open", "first"),
+        high=("high", "max"),
+        low=("low", "min"),
+        close=("close", "last"),
+        volume=("volume", "sum"),
+    )
+    return m.reset_index(drop=True)
+
+
 def _points(times: pd.Series, values: pd.Series) -> list[dict]:
     return [
         {"time": t, "value": round(float(v), 4)}

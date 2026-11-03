@@ -184,16 +184,17 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         scope: Literal["graded", "pushed", "all", "watchlists"] = "graded",
         t: str | None = None,
         screen: str | None = None,
+        wl: str | None = None,
     ) -> dict:
         """The board's queue: the newest runs' A+ / A / B first (C with scope pushed / all).
         `t`: a push link's stocks (`?t=A,B`), in the push's order, from every scan's hits.
         `screen` with `t`: a screen's results to flip through (no grade). Scope `watchlists`:
-        your own lists' stocks."""
+        your own lists' stocks; `wl` picks one list by name."""
         found = runs(manual=False)
         wanted = [x for x in (t or "").split(",") if x]
         if (screen and wanted) or scope == "watchlists":
             if scope == "watchlists" and not (screen and wanted):
-                rows_ = board_data.watchlist_rows(found, root())
+                rows_ = board_data.watchlist_rows(found, root(), wl)
             else:
                 rows_ = board_data.ticker_rows(found, wanted, f"screen: {screen}")
                 scope = "screen"
@@ -238,11 +239,11 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     @app.get("/api/bars/{ticker}")
     def bars(
         ticker: str,
-        tf: Literal["1D", "1W"] = "1D",
+        tf: Literal["1D", "1W", "1M"] = "1D",
         indicators: str = Query(",".join(chart_series.DEFAULT)),
         anchor: str | None = None,
     ) -> dict:
-        """Daily (or weekly) bars for one stock with the picked indicator lines."""
+        """Daily, weekly or monthly bars for one stock with the picked indicator lines."""
         ticker = ticker.strip().upper()
         if not ticker or len(ticker) > 12:
             raise HTTPException(400, "Bad ticker.")
@@ -251,9 +252,10 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         if b.empty:
             return {"ticker": ticker, "tf": tf, "candles": [], "lines": []}
         bench = board_data.daily_bars(root(), "QQQ") if "RS vs QQQ" in picked else None
-        if tf == "1W":
-            b = chart_series.weekly(b)
-            bench = chart_series.weekly(bench) if bench is not None and len(bench) else bench
+        if tf in ("1W", "1M"):
+            to = chart_series.weekly if tf == "1W" else chart_series.monthly
+            b = to(b)
+            bench = to(bench) if bench is not None and len(bench) else bench
         b = b.sort_values("session_date").reset_index(drop=True)
         b["time"] = pd.to_datetime(b["session_date"]).dt.strftime("%Y-%m-%d")
         cols = zip(b.time, b.open, b.high, b.low, b.close, b.volume, strict=True)

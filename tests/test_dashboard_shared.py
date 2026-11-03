@@ -95,3 +95,29 @@ def test_save_and_push_sends_everything_the_dashboards_write():
     wrote = {"data/journal", "data/my_watchlists", "data/chart_marks", "data/my_alerts",
              "data/screens", "docs"}  # fmt: skip
     assert wrote <= set(dashboard.SAVED_BY_YOU)  # screens: Emil, 4 Nov 2026
+
+
+def test_monthly_bars_and_watchlists_by_name(tmp_path):
+    import datetime as dt
+
+    import pandas as pd
+
+    from trading_os import board_data, chart_series, interactive_chart, my_watchlists
+
+    days = pd.bdate_range("2026-01-01", "2026-03-31")
+    bars = pd.DataFrame({"session_date": days.date, "open": range(len(days)),
+                         "high": [x + 2 for x in range(len(days))],
+                         "low": [x - 1 for x in range(len(days))],
+                         "close": [x + 1 for x in range(len(days))], "volume": 10})  # fmt: skip
+    m = chart_series.monthly(bars)
+    assert len(m) == 3 and m["session_date"].iloc[0] == dt.date(2026, 1, 1)
+    assert m["open"].iloc[1] == bars[days.month == 2]["open"].iloc[0]
+    assert m["volume"].iloc[0] == 10 * (days.month == 1).sum()
+    labelled = interactive_chart.monthly(bars)
+    assert labelled["session_date"].iloc[0] == dt.date(2026, 1, 30)  # the month's last session
+    my_watchlists.add(tmp_path, "Leaders", ["AAZQ", "BBZQ"])
+    my_watchlists.add(tmp_path, "Flag green", ["CCZQ"])
+    assert set(board_data.watchlist_names(tmp_path)) == {"Leaders", "Flag green"}
+    rows = board_data.watchlist_rows([], tmp_path, "Leaders")
+    assert sorted(rows["ticker"]) == ["AAZQ", "BBZQ"]
+    assert board_data.watchlist_rows([], tmp_path, "Nope").empty

@@ -1,7 +1,7 @@
 // Today: the candidate board (app/board.py). Three views: Focus (one candidate: its chart, key
 // stats, card with the Saxo ticket, the queue, Notes & alerts), Grid (four charts, the arrows
 // page by four) and List (every card). Show: A+ / A / B, pushed incl. C, every scan hit, your
-// watchlists, or a push link's / a screen's stocks. Hotkeys: ← → flip, W 1D/1W, F flags green,
+// watchlists, or a push link's / a screen's stocks. Hotkeys: ← → flip, W 1D/1W/1M, F flags green,
 // N jumps to the note, T shows or hides the ticket.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,6 +11,7 @@ import {
   type Bars,
   type BoardRow,
   type Scope,
+  type Timeframe,
   type Today as TodayData,
 } from "../api";
 import { CandleChart } from "../components/CandleChart";
@@ -23,8 +24,10 @@ const SCOPES: { id: Scope; label: string }[] = [
   { id: "graded", label: "A+ / A / B" },
   { id: "pushed", label: "Pushed, incl. C" },
   { id: "all", label: "Every scan hit" },
-  { id: "watchlists", label: "My watchlists" },
 ];
+// Each watchlist is its own choice in Show, by name (Emil, 4 Nov 2026)
+const LIST = "wl:";
+const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M"];
 type View = "Focus" | "Grid" | "List";
 type Tab = "plan" | "list" | "notes";
 const GREEN = FLAGS[2][1];
@@ -51,12 +54,14 @@ export function Today() {
   const screen = useMemo(() => screenName(window.location.search), []);
   const pinned = screen ? `From the screen: ${screen}` : "From the push";
   const [scope, setScope] = useState<Scope>("graded");
+  const [wl, setWl] = useState<string | null>(null);
+  const [lists, setLists] = useState<string[]>([]);
   const [usePush, setUsePush] = useState(fromPush.length > 0);
   const [data, setData] = useState<TodayData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [view, setView] = useState<View>("Focus");
-  const [tf, setTf] = useState<"1D" | "1W">("1D");
+  const [tf, setTf] = useState<Timeframe>("1D");
   const [picked, setPicked] = useState<string[]>(DEFAULT_INDICATORS);
   const [tab, setTab] = useState<Tab>("plan");
   const [showTicket, setShowTicket] = useState(true);
@@ -67,7 +72,7 @@ export function Today() {
   useEffect(() => {
     setData(null);
     setError(null);
-    const call = usePush ? api.today("all", fromPush, screen) : api.today(scope);
+    const call = usePush ? api.today("all", fromPush, screen) : api.today(scope, [], null, wl);
     call.then(
       (d) => {
         setData(d);
@@ -75,7 +80,14 @@ export function Today() {
       },
       (e: Error) => setError(e.message),
     );
-  }, [scope, usePush, fromPush, screen]);
+  }, [scope, wl, usePush, fromPush, screen]);
+
+  useEffect(() => {
+    api.watchlists().then(
+      (w) => setLists(w.lists),
+      () => setLists([]),
+    );
+  }, []);
 
   useEffect(() => {
     if (!flash) return;
@@ -108,7 +120,7 @@ export function Today() {
       const key = e.key.toLowerCase();
       if (e.key === "ArrowLeft") step(-1);
       else if (e.key === "ArrowRight") step(1);
-      else if (key === "w") setTf((t) => (t === "1D" ? "1W" : "1D"));
+      else if (key === "w") setTf((t) => TIMEFRAMES[(TIMEFRAMES.indexOf(t) + 1) % 3]);
       else if (key === "f" && row) {
         api.flag(row.ticker, GREEN).then(
           (r) => setFlash(r.message),
@@ -154,11 +166,18 @@ export function Today() {
         </div>
         <select
           aria-label="Show"
-          value={usePush ? "push" : scope}
+          value={usePush ? "push" : wl !== null ? LIST + wl : scope}
           onChange={(e) => {
-            if (e.target.value === "push") return setUsePush(true);
+            const v = e.target.value;
+            if (v === "push") return setUsePush(true);
             setUsePush(false);
-            setScope(e.target.value as Scope);
+            if (v.startsWith(LIST)) {
+              setWl(v.slice(LIST.length));
+              setScope("watchlists");
+            } else {
+              setWl(null);
+              setScope(v as Scope);
+            }
           }}
         >
           {fromPush.length > 0 && <option value="push">{pinned}</option>}
@@ -167,12 +186,18 @@ export function Today() {
               {s.label}
             </option>
           ))}
+          {lists.map((name) => (
+            <option key={name} value={LIST + name}>
+              📋 {name}
+            </option>
+          ))}
         </select>
         {usePush && !screen && (
           <button
             title="Every scan's hits, the C strategies too"
             onClick={() => {
               setUsePush(false);
+              setWl(null);
               setScope("all");
             }}
           >
@@ -220,7 +245,7 @@ export function Today() {
             </button>
           </nav>
           <div className="pills" role="group" aria-label="Bars and indicators">
-            {(["1D", "1W"] as const).map((t) => (
+            {TIMEFRAMES.map((t) => (
               <button key={t} className={tf === t ? "on" : ""} onClick={() => setTf(t)}>
                 {t}
               </button>
@@ -260,7 +285,7 @@ export function Today() {
             <FocusChart row={row} tf={tf} picked={picked} />
             <KeyStats row={row} />
             <p className="muted hotkeys">
-              Keys: ← → flip · W 1D/1W · F 🟩 flag · N note · T ticket
+              Keys: ← → flip · W 1D/1W/1M · F 🟩 flag · N note · T ticket
             </p>
           </div>
           <aside className="focus-side">
@@ -334,7 +359,7 @@ function FocusChart({
   height,
 }: {
   row: BoardRow;
-  tf: "1D" | "1W";
+  tf: Timeframe;
   picked: string[];
   height?: number;
 }) {
@@ -366,7 +391,7 @@ function FocusChart({
       levels={row.levels}
       title={`${row.ticker} · ${tf}${where}`}
       height={height}
-      showBars={tf === "1D" ? 130 : 80}
+      showBars={tf === "1D" ? 130 : tf === "1W" ? 80 : 24}
     />
   );
 }

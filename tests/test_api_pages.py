@@ -100,6 +100,11 @@ def test_flags_go_to_watchlists_and_show_in_the_my_watchlists_scope(data, client
     out = client.get("/api/today?scope=watchlists").json()
     assert [r["ticker"] for r in out["rows"]] == [A]
     assert out["rows"][0]["exchange"] == "NASDAQ" and out["rows"][0]["grade"] == "–"
+    # One list by name (Emil, 4 Nov 2026)
+    assert [
+        r["ticker"] for r in client.get("/api/today?scope=watchlists&wl=Flag green").json()["rows"]
+    ] == [A]
+    assert client.get("/api/today?scope=watchlists&wl=Nope").json()["rows"] == []
 
 
 def test_a_screen_flips_through_on_today(client):
