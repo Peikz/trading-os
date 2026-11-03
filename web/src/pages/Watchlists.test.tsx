@@ -57,4 +57,29 @@ describe("Watchlists", () => {
     expect(screen.getByLabelText("Your alerts")).toHaveTextContent("12.50");
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/alerts")).toBe(true));
   });
+
+  it("adds to a new list under the name you typed, even if the lists load late", async () => {
+    let release: () => void = () => {};
+    const late = new Promise<void>((r) => (release = r));
+    const calls = mockApi({
+      "GET /api/watchlists": { lists: ["Mine"], flags: [] },
+      "GET /api/watchlists/": list,
+      "POST /api/watchlists/": { kind: "success", added: [A], already: [], unknown: [], lines: ["ok"] },
+      "GET /api/alerts": { directions: ["above", "below"], alerts: [], fired: [] },
+      "GET /api/scan-watchlists": {},
+    });
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (url === "/api/watchlists") await late; // the lists answer after you picked
+      return real(url, init);
+    });
+    render(<Watchlists />);
+    fireEvent.change(screen.getByLabelText("List"), { target: { value: "＋ New list" } });
+    fireEvent.change(screen.getByLabelText("New list name"), { target: { value: "Other" } });
+    release();
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/watchlists")).toBe(true));
+    fireEvent.change(screen.getByLabelText("Add tickers"), { target: { value: A } });
+    fireEvent.click(screen.getByText("Add to list"));
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/watchlists/Other/add")).toBe(true));
+  });
 });

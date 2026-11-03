@@ -10,7 +10,8 @@ const NEW = "＋ New list";
 
 export function Watchlists() {
   const [lists, setLists] = useState<string[]>([]);
-  const [choice, setChoice] = useState<string>(NEW);
+  // null until the lists load (then the first list, or a new one); never overrides your pick
+  const [choice, setChoice] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [list, setList] = useState<WatchList | null>(null);
   const [typed, setTyped] = useState("");
@@ -19,13 +20,13 @@ export function Watchlists() {
   const [added, setAdded] = useState<WatchAdded | null>(null);
   const [gone, setGone] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const name = choice === NEW ? newName : choice;
+  const name = choice === NEW ? newName : (choice ?? "");
 
   const loadLists = useCallback(
     (pick?: string) =>
       api.watchlists().then((w) => {
         setLists(w.lists);
-        setChoice((c) => pick ?? (c === NEW && w.lists.length ? w.lists[0] : c));
+        setChoice((c) => pick ?? c ?? (w.lists.length ? w.lists[0] : NEW));
       }, (e: Error) => setError(e.message)),
     [],
   );
@@ -34,7 +35,7 @@ export function Watchlists() {
   }, [loadLists]);
   useEffect(() => {
     setGone([]);
-    if (choice === NEW) return setList(null);
+    if (choice === null || choice === NEW) return setList(null);
     api.watchlist(choice).then(setList, (e: Error) => setError(e.message));
   }, [choice]);
 
@@ -47,14 +48,14 @@ export function Watchlists() {
         setTyped("");
         setFile(null);
         await loadLists(name.trim());
-        if (name.trim() === choice) setList(await api.watchlist(choice));
+        if (choice && name.trim() === choice) setList(await api.watchlist(choice));
       }
     } catch (e) {
       setAdded({ kind: "error", added: [], already: [], unknown: [], lines: [(e as Error).message] });
     }
   };
   const remove = () =>
-    api.removeFromWatchlist(choice, gone).then((l) => {
+    api.removeFromWatchlist(choice ?? "", gone).then((l) => {
       setList(l);
       setGone([]);
       if (!l.rows.length) loadLists();
@@ -66,7 +67,7 @@ export function Watchlists() {
       {error && <p className="error">{error}</p>}
       <h3>My watchlists</h3>
       <div className="row">
-        <select aria-label="List" value={choice} onChange={(e) => setChoice(e.target.value)}>
+        <select aria-label="List" value={choice ?? NEW} onChange={(e) => setChoice(e.target.value)}>
           {lists.map((l) => (
             <option key={l}>{l}</option>
           ))}

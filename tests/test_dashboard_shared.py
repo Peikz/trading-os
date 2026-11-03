@@ -78,12 +78,12 @@ def test_closed_stats_and_the_r_curve():
 
 def test_add_checked_reports_added_already_and_unknown(tmp_path):
     known = {A, B}.__contains__
-    first = my_watchlists.add_checked(tmp_path, "Mine", [A, "QQQZQ"], known)
+    first = my_watchlists.add_checked(tmp_path, "Mine", [A, "QZQZQ"], known)
     assert first["kind"] == "warning" and first["added"] == [A]
-    assert first["lines"] == [f"✅ Added to **Mine**: {A}", "❌ Not found, not added: QQQZQ"]
+    assert first["lines"] == [f"✅ Added to **Mine**: {A}", "❌ Not found, not added: QZQZQ"]
     second = my_watchlists.add_checked(tmp_path, "Mine", [A, B], known)
     assert second["kind"] == "success" and second["added"] == [B] and second["already"] == [A]
-    assert my_watchlists.add_checked(tmp_path, "Mine", ["QQQZQ"], known)["kind"] == "error"
+    assert my_watchlists.add_checked(tmp_path, "Mine", ["QZQZQ"], known)["kind"] == "error"
     assert my_watchlists.add_checked(tmp_path, "", [A], known)["lines"][0].startswith("Give")
     members = my_watchlists.current(my_watchlists.load(tmp_path))
     assert sorted(members["ticker"]) == sorted([A, B])
