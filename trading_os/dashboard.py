@@ -12,12 +12,13 @@ from __future__ import annotations
 import datetime as dt
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
-from trading_os import clock, watchlists
+from trading_os import clock, gitlock, watchlists
 from trading_os.store import PARQUET_OPTIONS
 
 # Latest in the day first.
@@ -257,7 +258,11 @@ def download_release(
 
 
 def pull(data_dir: Path) -> tuple[bool, str]:
-    return git(data_dir, "pull", "--rebase", "--autostash")
+    try:
+        with gitlock.held(data_dir):  # the server's data-sync and alerts share the clone
+            return git(data_dir, "pull", "--rebase", "--autostash")
+    except TimeoutError as exc:
+        return False, str(exc)
 
 
 # What the dashboard writes for you: journal, plans, notes and grades, your watchlists, your
@@ -268,17 +273,39 @@ SAVED_BY_YOU = ("data/journal", "data/my_watchlists", "data/chart_marks", "data/
 
 
 def save_and_push(data_dir: Path, message: str = "journal: notes and grades") -> tuple[bool, str]:
-    paths = [p for p in SAVED_BY_YOU if (Path(data_dir) / p).exists()]
-    if paths:
-        ok, out = git(data_dir, "add", "--", *paths)
-        if not ok:
+    return commit_and_push(data_dir, SAVED_BY_YOU, message)
+
+
+def commit_and_push(
+    data_dir: Path,
+    paths: tuple[str, ...],
+    message: str,
+    attempts: int = 1,
+    wait_s: float = 10,
+    sleep=time.sleep,
+) -> tuple[bool, str]:
+    """Commit `paths` (those that exist) and push, under the data repo's git lock. A failed
+    pull or push is tried again up to `attempts` times, `wait_s` x attempt seconds apart (the
+    price-alert job's 3 tries). Used by Save & push and by the server's alerts service."""
+    try:
+        with gitlock.held(data_dir):
+            present = [p for p in paths if (Path(data_dir) / p).exists()]
+            if present:
+                ok, out = git(data_dir, "add", "--", *present)
+                if not ok:
+                    return ok, out
+            if git(data_dir, "diff", "--cached", "--quiet")[0]:
+                return True, "nothing new to save"
+            ok, out = git(data_dir, "commit", "-m", message)
+            if not ok:
+                return ok, out
+            for attempt in range(1, attempts + 1):
+                ok, out = pull(data_dir)
+                if ok:
+                    ok, out = git(data_dir, "push")
+                if ok or attempt == attempts:
+                    return ok, out
+                sleep(wait_s * attempt)
             return ok, out
-    if git(data_dir, "diff", "--cached", "--quiet")[0]:
-        return True, "nothing new to save"
-    ok, out = git(data_dir, "commit", "-m", message)
-    if not ok:
-        return ok, out
-    ok, out = pull(data_dir)
-    if not ok:
-        return ok, out
-    return git(data_dir, "push")
+    except TimeoutError as exc:
+        return False, str(exc)
