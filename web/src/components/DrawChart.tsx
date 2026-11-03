@@ -206,15 +206,18 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
       }
     };
 
-    const xy = (e: MouseEvent): [number, number] => {
+    const xy = (e: { clientX: number; clientY: number }): [number, number] => {
       const r = el.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     };
+    // Mouse and touch share these: a press, a drag (✋ moves a line's end) and a release (a
+    // tap or click when it hardly moved). After a touch the browser may also send mouse
+    // events for it, so mouse events right after a touch are ignored.
     let pressed: [number, number] | null = null;
-    const down = (e: MouseEvent) => {
-      pressed = xy(e);
+    let lastTouch = 0;
+    const press = (p: [number, number], prevent: () => void) => {
+      pressed = p;
       if (props.current.tool !== "move") return;
-      const p = pressed;
       for (const l of props.current.data.trend) {
         const ends: Point[] = [
           { time: l.x0, price: l.y0 },
@@ -222,28 +225,28 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
         ];
         for (const end of [0, 1] as const) {
           const q = pixel(ends[end]);
-          if (q && Math.hypot(q[0] - p[0], q[1] - p[1]) <= NEAR_PX + 3) {
+          if (q && Math.hypot(q[0] - p[0], q[1] - p[1]) <= NEAR_PX + 6) {
             drag.current = { line: l, end, a: ends[0], b: ends[1] };
-            e.preventDefault();
+            prevent();
             return;
           }
         }
       }
     };
-    const move = (e: MouseEvent) => {
+    const drift = (p: [number, number]) => {
       const d = drag.current;
       if (!d) return;
-      const hit = at(...xy(e));
+      const hit = at(...p);
       if (!hit) return;
       if (d.end === 0) d.a = hit.point;
       else d.b = hit.point;
       trend.current.get(d.line.id)?.setData(
         [d.a, d.b]
           .sort((x, y) => (x.time < y.time ? -1 : 1))
-          .map((p) => ({ time: p.time as Time, value: p.price })),
+          .map((q) => ({ time: q.time as Time, value: q.price })),
       );
     };
-    const up = (e: MouseEvent) => {
+    const release = (p: [number, number]) => {
       const d = drag.current;
       drag.current = null;
       if (d) {
@@ -252,17 +255,40 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
       }
       const start = pressed;
       pressed = null;
-      if (!start) return;
-      const [x, y] = xy(e);
-      if (Math.hypot(x - start[0], y - start[1]) < 5) onClick(x, y);
+      if (start && Math.hypot(p[0] - start[0], p[1] - start[1]) < 5) onClick(p[0], p[1]);
+    };
+    const fromTouch = () => Date.now() - lastTouch < 800;
+    const down = (e: MouseEvent) => !fromTouch() && press(xy(e), () => e.preventDefault());
+    const move = (e: MouseEvent) => !fromTouch() && drift(xy(e));
+    const up = (e: MouseEvent) => !fromTouch() && release(xy(e));
+    const tStart = (e: TouchEvent) => {
+      lastTouch = Date.now();
+      if (e.touches.length === 1) press(xy(e.touches[0]), () => e.preventDefault());
+      else pressed = null; // a pinch is a zoom, not a tap
+    };
+    const tMove = (e: TouchEvent) => {
+      lastTouch = Date.now();
+      if (!drag.current) return;
+      e.preventDefault(); // keep the page from scrolling while a line's end moves
+      drift(xy(e.touches[0]));
+    };
+    const tEnd = (e: TouchEvent) => {
+      lastTouch = Date.now();
+      if (e.changedTouches.length) release(xy(e.changedTouches[0]));
     };
     el.addEventListener("mousedown", down, true);
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    el.addEventListener("touchstart", tStart, { capture: true, passive: false });
+    el.addEventListener("touchmove", tMove, { capture: true, passive: false });
+    el.addEventListener("touchend", tEnd, true);
     return () => {
       el.removeEventListener("mousedown", down, true);
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      el.removeEventListener("touchstart", tStart, true);
+      el.removeEventListener("touchmove", tMove, true);
+      el.removeEventListener("touchend", tEnd, true);
     };
   }, [tool, data]);
 

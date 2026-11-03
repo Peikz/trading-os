@@ -458,7 +458,7 @@ function IntradaySection({ ticker }: { ticker: string }) {
             <p className="muted">
               VWAP from the 09:30 open; pre- and post-market faded.
               {source === "live" &&
-                " Alpaca's IEX feed: real-time prices, but its volume is a small part of the market's. Lines: the pivot, stops and plan entry, and the prior close."}
+                " Alpaca's IEX feed: real-time prices, but its volume is a small part of the market's. Lines: the pivot, stops and plan entry, and the prior close. ▼ 10:30 marks the EP entry time."}
             </p>
           )}
         </>

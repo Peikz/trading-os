@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { api, type ApiTable, type Jobs } from "../api";
 import { ApiTableView, Sections } from "../components/Table";
+import { readText } from "../format";
 
 const SECTIONS = ["Jobs and data", "Validation against TradingView"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -122,7 +123,7 @@ function Validation() {
             accept=".csv"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) f.text().then(setCsv);
+              if (f) readText(f).then(setCsv);
             }}
           />
         </label>
