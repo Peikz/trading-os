@@ -147,3 +147,4 @@ summary { cursor: pointer; }
 @media (max-width: 760px) {
   .top .sync { margin-left: 0; }
 }
+select, input:not([type="checkbox"]):not([type="radio"]) { max-width: 100%; }

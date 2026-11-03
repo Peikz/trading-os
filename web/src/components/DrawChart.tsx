@@ -10,7 +10,6 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
-  type MouseEventParams,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
@@ -175,11 +174,13 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
       return x === null || y === null || y === undefined ? null : [x, y];
     };
 
-    const onClick = (param: MouseEventParams<Time>) => {
-      if (!param.point) return;
+    // A press and release within a few pixels is a click. The chart's own click event waits
+    // out its double-click window and drops a second click inside it, which lost the line's
+    // second point when you clicked quickly.
+    const onClick = (x: number, y: number) => {
       const { tool: now, onDraw: draw, onErase: erase, data: d } = props.current;
       if (now === "draw") {
-        const hit = at(param.point.x, param.point.y);
+        const hit = at(x, y);
         if (!hit) return;
         if (!first.current) {
           first.current = hit.point;
@@ -191,7 +192,7 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
           if (a.time !== hit.point.time) draw?.(a, hit.point, hit.past);
         }
       } else if (now === "erase") {
-        const p: [number, number] = [param.point.x, param.point.y];
+        const p: [number, number] = [x, y];
         let best: { line: TrendLine; dist: number } | null = null;
         for (const l of d.trend) {
           const ends = [l.pts[0], l.pts[l.pts.length - 1]].map((x) => ({ time: x.time, price: x.value }));
@@ -204,15 +205,16 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
         if (best) erase?.(best.line);
       }
     };
-    c.subscribeClick(onClick);
 
     const xy = (e: MouseEvent): [number, number] => {
       const r = el.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     };
+    let pressed: [number, number] | null = null;
     const down = (e: MouseEvent) => {
+      pressed = xy(e);
       if (props.current.tool !== "move") return;
-      const p = xy(e);
+      const p = pressed;
       for (const l of props.current.data.trend) {
         const ends: Point[] = [
           { time: l.x0, price: l.y0 },
@@ -241,16 +243,23 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
           .map((p) => ({ time: p.time as Time, value: p.price })),
       );
     };
-    const up = () => {
+    const up = (e: MouseEvent) => {
       const d = drag.current;
       drag.current = null;
-      if (d && d.a.time !== d.b.time) props.current.onMove?.(d.line, d.a, d.b);
+      if (d) {
+        if (d.a.time !== d.b.time) props.current.onMove?.(d.line, d.a, d.b);
+        return;
+      }
+      const start = pressed;
+      pressed = null;
+      if (!start) return;
+      const [x, y] = xy(e);
+      if (Math.hypot(x - start[0], y - start[1]) < 5) onClick(x, y);
     };
     el.addEventListener("mousedown", down, true);
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     return () => {
-      c.unsubscribeClick(onClick);
       el.removeEventListener("mousedown", down, true);
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);

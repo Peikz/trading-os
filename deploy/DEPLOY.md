@@ -11,7 +11,7 @@ What runs (`deploy/docker-compose.yml`):
 |---|---|
 | `tailscale` | Joins your tailnet as `<TS_HOSTNAME>`. The only way in. |
 | `caddy` | Serves the built React app and sends `/api/*` to the API. Shares the Tailscale container's network, so it listens only on the tailnet. No `ports:` are published. |
-| `api` | FastAPI over the data repo clone (`api/main.py`). Read-only, except your saved screens (`data/screens/my_screens.json`). Places no orders, sends no pushes, uses no AI. |
+| `api` | FastAPI over the data repo clone (`api/main.py`). Writes only what the Streamlit dashboard writes (journal, plans, grades, notes, watchlists, alerts, drawings, screens) and pushes it on *Save & push*. Places no orders, sends no pushes, uses no AI. |
 | `web` | Builds `web/` to static files once, copies them into a volume, exits. |
 | `data-sync` | Pulls the private data repo every 10 minutes (`PULL_EVERY`), so new runs appear without a restart. |
 
@@ -92,8 +92,15 @@ cd /opt/trading-os/trading-os && git pull
 cd deploy && docker compose up -d --build
 ```
 
-The data updates itself (`data-sync`). Saved screens stay on the server's clone; pushing them
-to GitHub (the Streamlit sidebar's *Save & push*) is phase 2 of the React dashboard.
+The data updates itself (`data-sync`). What you write in the dashboard (journal, plans, grades,
+notes, watchlists, alerts, chart drawings, screens) lands in the server's clone; **Save & push**
+in the header commits and pushes it to the data repo, through the same `GH_TOKEN` (a
+credential helper set in `docker-compose.yml`; the token is never written to disk).
+**Pull latest** pulls at once instead of waiting for `data-sync`.
+
+The **Scans** page is view-only on the server: `config/scans.yaml` is part of the API image,
+not a writable checkout of the code repo, and `GH_TOKEN` only reaches the data repo. Edit
+scans on the PC (Streamlit), commit, then update the server as above.
 
 ## Troubleshooting
 

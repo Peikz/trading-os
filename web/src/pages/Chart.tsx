@@ -161,7 +161,6 @@ export function Chart() {
             </div>
           )}
           {error && <p className="error">{error}</p>}
-          {flash && <p className="flash" role="status">{flash}</p>}
           {data && data.ticker === ticker && (
             <>
               {daily && (
@@ -178,6 +177,8 @@ export function Chart() {
               ) : (
                 <p className="muted">No daily bars for {ticker} in the data repo.</p>
               )}
+              {/* Under the chart, so a message never moves the chart you are drawing on */}
+              {flash && <p className="flash" role="status">{flash}</p>}
               <p className="muted">{data.note}</p>
               <a href={data.tradingview} target="_blank" rel="noreferrer">
                 Open in TradingView
