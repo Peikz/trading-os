@@ -11,5 +11,15 @@ gatherUsageStats = false
 toolbarMode = "minimal"   # no Deploy button (Emil, 26 Oct 2026: the dashboard as a trading tool)
 
 [theme]
+# "Calm terminal" (Emil, 4 Nov 2026 redesign): one accent colour for selection and the main
+# action; green and red only for price direction (set in the pages); Inter with tabular figures.
 base = "dark"             # a trading screen (Emil, 26 Oct 2026)
-primaryColor = "#2da44e"
+primaryColor = "#4C8DFF"
+backgroundColor = "#0B0D10"
+secondaryBackgroundColor = "#14171D"
+textColor = "#E8EAED"
+borderColor = "#23272F"
+linkColor = "#8DB6FF"
+baseRadius = "0.75rem"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFontWeights = [700, 600, 600, 600, 600, 600]

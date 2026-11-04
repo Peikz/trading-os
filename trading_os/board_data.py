@@ -190,6 +190,44 @@ def _signed(v) -> str | None:
     return None if v is None or pd.isna(v) else f"{v:+.1f}%"
 
 
+MARKET_COLOUR = {"Strong": "green", "Mixed": "orange", "Weak": "red"}
+
+
+def market_word(
+    row: Mapping[str, Any] | None, ibd_info: Mapping | None, heat_text: str | None
+) -> tuple[str, list[str]]:
+    """The market in one word for the top bar's pill (Emil, 4 Nov 2026 redesign), and the
+    reasons in plain words. Strong: QQQ light green and a healthy IBD uptrend; weak: QQQ light
+    red and an IBD correction; else mixed. A summary of the tracked states, not a rule."""
+    light = (row or {}).get("qqq_light")
+    state = (ibd_info or {}).get("state")
+    dist = (ibd_info or {}).get("dist_count") or 0
+    reasons = []
+    if light:
+        trend = {"GREEN": "up", "YELLOW": "mixed", "RED": "down"}.get(light, "unknown")
+        extra = ": few breakout winners" if light == "RED" else ""
+        reasons.append(f"Nasdaq trend {trend} · QQQ light {light.lower()}{extra}")
+    if heat_text:
+        reasons.append(f"Heat: {heat_text}")
+    healthy = state == "uptrend" and dist < ibd.PRESSURE_DIST
+    if state:
+        what = (
+            "correction"
+            if state == "correction"
+            else "healthy uptrend"
+            if healthy
+            else "uptrend under pressure"
+        )
+        reasons.append(f"IBD: {what} · {ibd.sell_days(state, dist)} (tracked, not a rule)")
+    if light == "GREEN" and healthy:
+        word = "Strong"
+    elif light == "RED" and state == "correction":
+        word = "Weak"
+    else:
+        word = "Mixed"
+    return word, reasons
+
+
 def tiles(row: Mapping[str, Any], ibd_info: Mapping | None, heat_text: str | None) -> list[tuple]:
     """(label, value, change) per market tile: QQQ light, heat, IBD state, SPY, QQQ, VIX."""
     icons = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}

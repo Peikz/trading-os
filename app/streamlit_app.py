@@ -62,12 +62,8 @@ from trading_os import interactive_chart as ichart
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
 from trading_os.config import ConfigError, load_config
 
-st.set_page_config(page_title="Trading OS", page_icon="📈", layout="wide")
-# Less empty space at the top, so the first card shows without scrolling (phone and PC).
-st.markdown(
-    "<style>.block-container{padding-top:2.2rem;padding-bottom:2rem}"
-    "h1{margin-bottom:.2rem}</style>",
-    unsafe_allow_html=True,
+st.set_page_config(
+    page_title="Trading OS", page_icon="📈", layout="wide", initial_sidebar_state="collapsed"
 )
 
 
@@ -86,16 +82,26 @@ DEFAULT_DATA = Path(
     _args.data_dir
     or os.environ.get("TRADING_OS_DATA", Path(__file__).resolve().parents[2] / "trading-os-data")
 )
-# Ordered by the trading day (Emil, 26 Oct 2026): before the open, live, after the close, then
-# research and settings out of the way. Each page shows its group's icon.
-PAGE_GROUPS = {
-    "☀️ Before the open": ["Today", "Market", "Watchlists", "Screener"],
-    "⚡ Live": ["Positions", "Chart", "Scans"],
-    "🌙 After the close": ["Journal", "Live results"],
-    "🔬 Research & settings": ["Research", "System health", "Guide"],
+# Five places in a top bar, each with its pages as tabs (Emil, 4 Nov 2026 redesign: the 12
+# pages of the sidebar, none removed, grouped by the question they answer).
+PLACES = {
+    "Today": ["Today"],  # what do I do today?
+    "Stocks": ["Screener", "Watchlists", "Chart"],  # find and study a stock
+    "Market": ["Market"],  # what is the market doing?
+    "Journal": ["Positions", "Journal", "Live results"],  # how am I doing?
+    "Lab": ["Research", "Scans", "System health", "Guide"],  # how does it work?
 }
-PAGES = [p for pages in PAGE_GROUPS.values() for p in pages]
-PAGE_ICON = {p: g.split()[0] for g, pages in PAGE_GROUPS.items() for p in pages}
+PLACE_OF = {page: place for place, pages in PLACES.items() for page in pages}
+PAGES = [page for pages in PLACES.values() for page in pages]
+
+
+def go(page: str) -> None:
+    """Open a page (a button's callback, e.g. a stock on the Chart page or a screen on Today)."""
+    place = PLACE_OF[page]
+    st.session_state["place"] = place
+    st.session_state[f"tab_{place}"] = page
+
+
 # Research and Live results gather the history pages. One section runs at a time: tabs would
 # run every section's code (and its downloads) on each click.
 RESEARCH = {
@@ -141,35 +147,128 @@ LIVE = {
 HEALTH = {"Jobs and data": "System health", "Validation against TradingView": "Validation"}
 
 
-# ---------------------------------------------------------------- sidebar
+# ---------------------------------------------------------------- top bar
 
-with st.sidebar:
-    st.title("Trading OS")
-    query = st.text_input(
-        "🔎 Search", key="search", placeholder="A ticker, or words in your notes and the guide"
+# The top bar (Emil, 4 Nov 2026 redesign): the five places, the market in one word, search and
+# a gear for the settings. Each place's pages are tabs under it. No sidebar.
+NAV_CSS = """<style>
+.block-container{padding-top:1.2rem;padding-bottom:2rem;max-width:1640px}
+h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
+[data-testid="stAppViewContainer"]{font-feature-settings:'tnum' 1}
+.st-key-topbar{border-bottom:1px solid #1C2028;padding-bottom:.7rem;margin-bottom:.2rem}
+.st-key-topbar [data-testid="stHorizontalBlock"]{align-items:center;gap:.75rem}
+.st-key-topbar [data-testid="stMarkdownContainer"] p{margin:0}
+@media (max-width:640px){
+.st-key-topbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap}
+.st-key-topbar [data-testid="stColumn"]{min-width:calc(50% - .5rem)!important;
+  flex:1 1 calc(50% - .5rem)!important}
+}
+</style>"""
+st.markdown(NAV_CSS, unsafe_allow_html=True)
+
+
+def _keep(key: str, fallback: str) -> None:
+    """A segmented control can be clicked off; keep the last pick instead of nothing."""
+    if st.session_state.get(key) is None:
+        st.session_state[key] = st.session_state.get(f"_last_{key}", fallback)
+    st.session_state[f"_last_{key}"] = st.session_state[key]
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def auto_pull(folder: str) -> tuple[bool, str]:
+    """Pull the newest runs at most every 10 minutes (Emil, 4 Nov 2026: no Pull button to
+    remember). Save & push stays a button in the settings: it publishes your edits."""
+    return dashboard.pull(Path(folder))
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def market_now(folder: str, newest_run: str) -> tuple[dict | None, dict | None, str | None]:
+    """The market tiles' inputs, read once per new run (the pill shows on every page)."""
+    runs_now = dashboard.list_runs(Path(folder), include_manual=False)
+    return board_data.market_inputs(Path(folder), runs_now)
+
+
+st.session_state.setdefault("place", "Today")
+st.session_state.setdefault("data_folder", str(DEFAULT_DATA))
+st.session_state.setdefault("manual_runs", True)
+st.session_state.setdefault("auto_pull", True)
+data_dir = Path(st.session_state["data_folder"])
+include_manual = bool(st.session_state["manual_runs"])
+if st.session_state["auto_pull"] and (data_dir / ".git").exists():
+    pulled_ok, pulled_out = auto_pull(str(data_dir))
+else:
+    pulled_ok, pulled_out = True, ""
+
+with st.container(key="topbar"):
+    brand, nav, pill_col, find, gear = st.columns(
+        [1.2, 3.4, 1.9, 2.4, 0.55], vertical_alignment="center"
     )
-    page = st.radio(
-        "Page",
-        PAGES,
+    brand.markdown("**Trading OS**")
+    nav.segmented_control(
+        "Place",
+        list(PLACES),
+        key="place",
         label_visibility="collapsed",
-        key="page",
-        format_func=lambda p: f"{PAGE_ICON[p]} {p}",
+        on_change=_keep,
+        args=("place", "Today"),
     )
-    st.caption("☀️ before the open · ⚡ live · 🌙 after the close · 🔬 research")
-    data_dir = Path(st.text_input("Data repo folder", str(DEFAULT_DATA)))
-    include_manual = st.toggle("Show manual test runs", value=True)
-    left, right = st.columns(2)
-    if left.button("Pull latest", width="stretch"):
-        ok, out = dashboard.pull(data_dir)
-        (st.success if ok else st.error)(out or "up to date")
-        st.cache_data.clear()
-    if right.button("Save & push", width="stretch"):
-        ok, out = dashboard.save_and_push(data_dir)
-        (st.success if ok else st.error)(out or "saved")
+    query = find.text_input(
+        "Search",
+        key="search",
+        placeholder="Search a stock, notes or the guide",
+        label_visibility="collapsed",
+    )
+    with gear.popover("⚙", help="Settings: data folder, test runs, pull and save"):
+        st.text_input("Data repo folder", key="data_folder")
+        st.toggle("Show manual test runs", key="manual_runs")
+        st.toggle("Pull new runs by itself (every 10 minutes)", key="auto_pull")
+        if not pulled_ok:
+            st.warning(f"The last automatic pull failed: {pulled_out}")
+        left, right = st.columns(2)
+        if left.button("Pull now", width="stretch"):
+            ok, out = dashboard.pull(data_dir)
+            (st.success if ok else st.error)(out or "up to date")
+            st.cache_data.clear()
+        if right.button("Save & push", width="stretch", help="Send your notes, grades, journal "
+                        "and watchlists to the private data repo"):  # fmt: skip
+            ok, out = dashboard.save_and_push(data_dir)
+            (st.success if ok else st.error)(out or "saved")
 
 if not (data_dir / "data").exists():
-    st.error(f"No data folder at {data_dir}. Clone trading-os-data there or fix the path.")
+    st.error(f"No data folder at {data_dir}. Clone trading-os-data there or fix it under ⚙.")
     st.stop()
+
+# The market in one word, its reasons and numbers one click away (Emil, 4 Nov 2026)
+_newest = dashboard.list_runs(data_dir, include_manual=False)
+m_row, m_ibd, m_heat = market_now(str(data_dir), _newest[0].label if _newest else "")
+m_word, m_reasons = board_data.market_word(m_row, m_ibd, m_heat)
+with pill_col.popover(f":{board_data.MARKET_COLOUR[m_word]}[●] {m_word} market"):
+    for reason in m_reasons or ["No market data yet."]:
+        st.markdown(f"- {reason}")
+    if m_row:
+        numbers = [f"{label} **{value}** {delta or ''}" for label, value, delta in
+                   board_data.tiles(m_row, m_ibd, m_heat)[3:]]  # fmt: skip
+        st.markdown(" · ".join(numbers).replace("$", "\\$"))
+        with st.expander("Every market line"):
+            for line in board_data.market_details(m_row):
+                st.markdown(f"- {line}")
+    st.button("Open the Market page", on_click=go, args=("Market",), width="stretch")
+
+place = st.session_state.get("place") or "Today"
+tabs = PLACES[place]
+if len(tabs) > 1:
+    st.session_state.setdefault(f"tab_{place}", tabs[0])
+    st.segmented_control(
+        "Page",
+        tabs,
+        key=f"tab_{place}",
+        label_visibility="collapsed",
+        on_change=_keep,
+        args=(f"tab_{place}", tabs[0]),
+    )
+    page = st.session_state.get(f"tab_{place}") or tabs[0]
+else:
+    page = tabs[0]
 
 
 # ---------------------------------------------------------------- cached loaders
@@ -627,7 +726,7 @@ def market_overview() -> None:
 
 def open_chart(ticker: str) -> None:
     """The search's button: the Chart page with this ticker."""
-    st.session_state["page"] = "Chart"
+    go("Chart")
     st.session_state["ch_ticker"] = ticker
     st.session_state["search"] = ""
 
@@ -934,8 +1033,7 @@ if page == "Today":
         st.stop()
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
-    tile_row, tile_ibd, tile_heat = board_data.market_inputs(data_dir, runs)
-    board.market_strip(tile_row, tile_ibd, tile_heat)
+    # The market is the pill in the top bar now (Emil, 4 Nov 2026 redesign)
     board_account = sizing.load_account(data_dir)
     board_fragment(
         runs,
@@ -943,18 +1041,6 @@ if page == "Today":
         fx_rate(str(data_dir), board_account.currency if board_account else "USD"),
     )
     st.divider()
-    with st.expander("Market details"):
-        if (
-            latest_pm is not None
-            and latest_pm.breadth_pm is not None
-            and (latest_eod is None or latest_pm.session > latest_eod.session)
-        ):
-            pm_row = read_parquet(str(latest_pm.breadth_pm)).iloc[0].to_dict()
-            last = breadth.latest_eod_row(data_dir, latest_pm.session)
-            for line in breadth.premarket_lines(pm_row, last):
-                st.markdown(f"- {line}")
-        else:
-            market_lines(latest_eod)
     latest_am = next((r for r in runs if r.slot == "am"), None)
     latest_mid = next((r for r in runs if r.slot == "mid"), None)
     latest = [r for r in (latest_pm, latest_am, latest_mid, latest_eod) if r is not None]
@@ -1202,7 +1288,7 @@ elif page == "Screener":
         st.query_params.clear()
         st.query_params["screen"] = name
         st.query_params["t"] = ",".join(tickers)
-        st.session_state["page"] = "Today"
+        go("Today")
         st.session_state["board_i"] = 0
         st.session_state.pop("board_scope", None)
 
@@ -2323,7 +2409,7 @@ elif page == "Validation":
                 fh.write("\n" + text)
             st.success("Appended. Use “Save & push” to send it to GitHub.")
 
-st.sidebar.caption(
+st.caption(
     f"{len(runs)} runs · {dt.date.today().isoformat()} · session "
     f"{clock.session_date(CFG.schedule, 'eod', dt.datetime.now(dt.UTC))}"
 )

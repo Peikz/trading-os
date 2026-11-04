@@ -35,12 +35,24 @@ def app(built, monkeypatch):
     return at
 
 
+def _pages(app):
+    """Every page through the top bar (Emil, 4 Nov 2026 redesign): each place, then each of its
+    tabs; yields the page's name with the app showing it."""
+    for place in list(app.button_group(key="place").options):
+        app.button_group(key="place").set_value(place).run()
+        tabs = [b for b in app.button_group if b.key == f"tab_{place}"]
+        if not tabs:
+            yield place
+            continue
+        for page in list(tabs[0].options):
+            app.button_group(key=f"tab_{place}").set_value(page).run()
+            yield page
+
+
 def test_every_page_and_section_renders(app):
-    # The sidebar shows "☀️ Today"; its value is "Today"
-    pages = [o.split(" ", 1)[-1] for o in app.sidebar.radio[0].options]
-    assert {"Today", "Chart", "Journal", "Research"} <= set(pages)
-    for page in pages:
-        app.sidebar.radio[0].set_value(page).run()
+    seen = []
+    for page in _pages(app):
+        seen.append(page)
         assert not app.exception, (page, [e.value for e in app.exception])
         assert app.header, page
         key = SECTION_KEYS.get(page)
@@ -51,6 +63,7 @@ def test_every_page_and_section_renders(app):
         for section in sections:
             app.radio(key=key).set_value(section).run()
             assert not app.exception, (page, section, [e.value for e in app.exception])
+    assert {"Today", "Chart", "Journal", "Research", "Guide"} <= set(seen)
 
 
 def test_today_shows_the_fixtures_graded_hits(app, built):

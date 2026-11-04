@@ -16,6 +16,23 @@ os.environ["TRADING_OS_NO_LIVE"] = "1"  # the Market page's live sector data
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py"
+PLACE_OF = {  # the top bar (Emil, 4 Nov 2026 redesign): place -> its pages as tabs
+    "Today": "Today", "Screener": "Stocks", "Watchlists": "Stocks", "Chart": "Stocks",
+    "Market": "Market", "Positions": "Journal", "Journal": "Journal",
+    "Live results": "Journal", "Research": "Lab", "Scans": "Lab", "System health": "Lab",
+    "Guide": "Lab",
+}  # fmt: skip
+
+
+def goto(at, page):
+    """Open a page through the top bar: its place, then its tab when the place has several."""
+    place = PLACE_OF[page]
+    at.button_group(key="place").set_value(place).run()
+    if sum(1 for p in PLACE_OF.values() if p == place) > 1:
+        at.button_group(key=f"tab_{place}").set_value(page).run()
+    return at
+
+
 PAGES = [
     "Today",
     "Screener",
@@ -74,7 +91,7 @@ def data_repo(tmp_path):
 def test_every_section_renders(data_repo, monkeypatch, page, key, section):
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value(page).run()
+    goto(at, page)
     at.radio(key=key).set_value(section).run()
     assert not at.exception, [e.value for e in at.exception]
     assert at.header[0].value == page
@@ -85,7 +102,7 @@ def test_every_page_renders(data_repo, monkeypatch, page):
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not at.exception, at.exception
-    at.sidebar.radio[0].set_value(page).run()
+    goto(at, page)
     assert not at.exception, [e.value for e in at.exception]
     assert at.header[0].value  # each page has a header
 
@@ -107,7 +124,7 @@ def test_journal_tabs_render_with_trades_positions_and_plans(data_repo, monkeypa
     plans.create(data_repo, later, "CCC", "long", 5.0, 4.8, 100, "breakout_watch")
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Journal").run()
+    goto(at, "Journal")
     assert not at.exception, [e.value for e in at.exception]
     texts = " ".join(str(m.value) for m in at.metric)
     assert "1" in texts  # one closed trade, one open position
@@ -118,7 +135,7 @@ def test_the_screener_filters_scan_hits_and_keeps_the_grade_form(data_repo, monk
     # The old Screens page lives in the Screener since 29 Oct 2026: Stocks from → Scan hits
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Screener").run()
+    goto(at, "Screener")
     assert not at.exception, [e.value for e in at.exception]
     at.button_group(key="sc_from").set_value("Scan hits").run()
     assert not at.exception, [e.value for e in at.exception]
@@ -135,7 +152,7 @@ def test_my_watchlists_render(data_repo, monkeypatch):
     my_watchlists.add(data_repo, "Leaders", ["AAA", "BBB"])
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Watchlists").run()
+    goto(at, "Watchlists")
     assert not at.exception, [e.value for e in at.exception]
     assert any("AAA" in str(df.value) for df in at.dataframe)
 
@@ -173,7 +190,7 @@ def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkey
     assert not any("Study A" in str(m.value) for m in at.markdown)  # tables off: not built
     at.toggle(key="today_all_scans").set_value(True).run()
     assert any("Study A" in str(m.value) for m in at.markdown)  # Today's grade block
-    at.sidebar.radio[0].set_value("Research").run()
+    goto(at, "Research")
     at.radio(key="research_section").set_value("Grades").run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("1234" in str(df.value) for df in at.dataframe)  # the history behind A
@@ -230,7 +247,7 @@ def test_the_market_page_shows_the_setups_at_todays_heat(data_repo, monkeypatch)
     (data_repo / "data" / "grading" / "heat_stats.json").write_text(json.dumps(stats))
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Market").run()
+    goto(at, "Market")
     assert not at.exception, [e.value for e in at.exception]
     assert any("Warm market: scan count 60" in s.value for s in at.subheader)
     assert any("held" in str(df.value) for df in at.dataframe)
@@ -244,7 +261,7 @@ def test_chart_notes_show_old_notes_and_save_new_ones(data_repo, monkeypatch):
     stock_notes.add(data_repo, "AAA", "base looked loose", dt.date(2025, 6, 2))
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Chart").run()
+    goto(at, "Chart")
     at.text_input(key="ch_ticker").input("AAA").run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("base looked loose" in t.value for t in at.text)
@@ -262,10 +279,10 @@ def test_a_tagged_daily_note_shows_in_the_journal_and_on_the_chart(data_repo, mo
     daily_notes.add(data_repo, "Gap held into the close on $AAA", dt.date(2026, 10, 19))
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Journal").run()
+    goto(at, "Journal")
     assert not at.exception, [e.value for e in at.exception]
     assert any("Gap held" in t.value for t in at.text)
-    at.sidebar.radio[0].set_value("Chart").run()
+    goto(at, "Chart")
     at.text_input(key="ch_ticker").set_value("AAA").run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("From your daily notes" in m.value for m in at.markdown)
@@ -276,7 +293,7 @@ def test_live_minute_bars_ask_for_the_keys_when_missing(data_repo, monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY_ID", raising=False)
     monkeypatch.delenv("ALPACA_API_SECRET_KEY", raising=False)
     at = AppTest.from_file(str(APP), default_timeout=60).run()
-    at.sidebar.radio[0].set_value("Chart").run()
+    goto(at, "Chart")
     at.text_input(key="ch_ticker").set_value("AAA").run()
     at.toggle(key="ch_intraday_on").set_value(True).run()
     assert not at.exception, [e.value for e in at.exception]
