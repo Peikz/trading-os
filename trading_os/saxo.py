@@ -4,8 +4,9 @@ or cancels an order: the client only sends GET requests.
 
 Status: written from Saxo's public OpenAPI reference; not yet run against Emil's account, which
 needs his developer app (docs/SAXO.md). `scripts/saxo_sync.py --check` is the first real test.
-Token: SAXO_TOKEN in the environment (an access token from the app's sign-in); SAXO_ENV=sim
-uses Saxo's simulation gateway.
+Token: SAXO_TOKEN in the environment (e.g. the portal's 24-hour simulation token), else the
+session from `scripts/saxo_login.py` (`saxo_auth`, refreshed as needed); SAXO_ENV=sim uses
+Saxo's simulation gateway.
 """
 
 from __future__ import annotations
@@ -139,5 +140,13 @@ def latest_stops(data_dir: Path, max_age_days: int = 3) -> pd.DataFrame:
 
 
 def client_from_env(env: dict[str, Any]) -> SaxoClient:
+    """A client from SAXO_TOKEN, else from the saved sign-in (`saxo_auth.SignInNeeded` when
+    there is none or it ended)."""
+    from trading_os import saxo_auth
+
     base = SIM if str(env.get("SAXO_ENV", "")).lower() == "sim" else LIVE
-    return SaxoClient(str(env.get("SAXO_TOKEN", "")), base)
+    token = str(env.get("SAXO_TOKEN") or "")
+    if not token:
+        app = saxo_auth.App.from_env(env)
+        token = saxo_auth.access_token(app, saxo_auth.token_file(env))
+    return SaxoClient(token, base)
