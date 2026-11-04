@@ -135,9 +135,11 @@ def minutes_late(created: dt.datetime, crons: list[tuple[int, int]]) -> float | 
     return None if best is None else (created - best).total_seconds() / 60
 
 
-def run_list(limit: int = 100) -> pd.DataFrame:
-    """Recent workflow runs via `gh` (one API call): workflowName, event, status, conclusion,
-    createdAt (UTC). Empty without the gh CLI or a connection."""
+def run_list(limit: int = 400) -> pd.DataFrame:
+    """Recent workflow runs via `gh` (one API call per 100): workflowName, event, status,
+    conclusion, createdAt (UTC). Empty without the gh CLI or a connection. 400 reach back past
+    last Saturday's Weekly run (Emil, 4 Nov 2026: 100 runs were only ~4 days, so Weekly showed
+    as missed although it ran on time)."""
     try:
         raw = subprocess.run(
             [
@@ -152,7 +154,7 @@ def run_list(limit: int = 100) -> pd.DataFrame:
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
             check=True,
         ).stdout
     except (OSError, subprocess.SubprocessError):
