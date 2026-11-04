@@ -48,10 +48,13 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
-          gh release view bars-2y -R "$REPO" >/dev/null 2>&1 || gh release create bars-2y -R "$REPO" --title "Daily bars, 2 years (compact)" --notes "The dashboard's 2-year daily bars in one file, refreshed each morning." >/dev/null
+          # GitHub's API answers an odd call with HTTP 500 (Emil, 4 Nov 2026: one delete failed
+          # the run): each call gets three tries; upload --clobber and delete are safe to repeat.
+          try() { for attempt in 1 2 3; do "$@" && return 0; sleep $((attempt * 10)); done; return 1; }
+          gh release view bars-2y -R "$REPO" >/dev/null 2>&1 || try gh release create bars-2y -R "$REPO" --title "Daily bars, 2 years (compact)" --notes "The dashboard's 2-year daily bars in one file, refreshed each morning." >/dev/null
           DAY=$(ls out | head -1 | cut -d_ -f3)
-          gh release upload bars-2y out/*.parquet -R "$REPO" --clobber
+          try gh release upload bars-2y out/*.parquet -R "$REPO" --clobber
           for old in $(gh release view bars-2y -R "$REPO" --json assets -q '.assets[].name'); do
-            case "$old" in bars_2y_${DAY}_*) ;; *) gh release delete-asset bars-2y "$old" -R "$REPO" -y ;; esac
+            case "$old" in bars_2y_${DAY}_*) ;; *) try gh release delete-asset bars-2y "$old" -R "$REPO" -y || echo "kept an old file (GitHub error); the next run removes it" ;; esac
           done
           echo "published $(ls out | wc -l) files for $DAY"
