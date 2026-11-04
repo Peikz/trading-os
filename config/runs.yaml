@@ -15,6 +15,9 @@
 
 runs:
   - {key: backfill, workflow: backfill.yml, name: Backfill, at: "05:30", days: tue-sat, enabled: true}
+  # A second start (Emil, 4 Nov 2026: the 05:30 start got an HTTP error from GitHub); saved
+  # sessions are skipped, so a double run does nothing, and it ends before the 06:15 Bars pack.
+  - {key: backfill, workflow: backfill.yml, name: Backfill, at: "05:50", days: tue-sat, retry: true, enabled: true}
   - {key: bars-pack, workflow: bars-pack.yml, name: Bars pack, at: "06:15", days: tue-sat, enabled: true}
   # One pre-market push at 07:17, EP-PM only (Emil, 27 Oct 2026: the 11:30 Copenhagen one dropped)
   - {key: pm, workflow: premarket.yml, name: Pre-market, at: "07:17", days: weekdays, enabled: true}
