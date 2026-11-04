@@ -13,7 +13,7 @@ export function LiveResults() {
   const [section, setSection] = useState<Section>("Grades live vs study");
   return (
     <div>
-      <h2>Live results</h2>
+      <h3>The live signals since launch</h3>
       <Sections label="Section" options={SECTIONS} value={section} onPick={setSection} />
       <p className="muted">
         The live signals since launch, with what happened 5, 10, 20 and 60 sessions after.

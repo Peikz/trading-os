@@ -433,8 +433,17 @@ address in Safari (Share → Add to Home Screen for one tap). The PC has to be o
 
 To have it without the PC: [SERVER.md](SERVER.md) moves the dashboard to a small cloud server (about €5 a month), private to your devices the same way, updating and restarting itself.
 
-The new React dashboard (Today and Screener so far; Nov 2026) has its own server kit in
-[deploy/DEPLOY.md](../deploy/DEPLOY.md): Docker Compose with Caddy and Tailscale as the only way in.
+The React dashboard (Nov 2026) has its own server kit in [deploy/DEPLOY.md](../deploy/DEPLOY.md):
+Docker Compose with Caddy and Tailscale as the only way in. It has the same pages, grouped into
+five places with tabs: **Today** (to act on, your positions, your watchlist, and the plan card:
+when to buy in New York and Copenhagen time, entry, stop, shares, risk, Copy order for Saxo, I
+placed it in Saxo, and why the grade), **Stocks** (your lists, price alerts, EP-Watch and
+BO-Watch, screens, each scan's hits; a stock's full chart with drawing, AVWAPs and minute bars),
+**Market** (overview, heat & setups, sectors, breadth, IBD), **Journal** (positions, trades,
+plans, notes, live vs study) and **Lab** (research, scans, health, this guide). The pill at the
+top sums up QQQ light, heat and IBD in one word (click it for the three reasons); the dot at the
+right is System health in one glance. Keys on Today: arrow keys flip, W watches, N writes a
+note; Ctrl+K searches.
 
 After the code or `config/scans.yaml` changes, restart the dashboard (Ctrl-C in its terminal, then `scripts\start_dashboard.ps1` again). A running dashboard reloads its own page but keeps the older `trading_os` code it started with, so new config keys can stop it with an error such as `unknown slot`.
 

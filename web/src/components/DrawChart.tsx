@@ -4,7 +4,6 @@
 // click past the last bar makes it extend each day), ✋ move (drag a line's end) and 🧽 erase
 // (click a line). The page saves each change at once through the API.
 import {
-  ColorType,
   CrosshairMode,
   LineStyle,
   createChart,
@@ -15,6 +14,7 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 import type { ChartData, TrendLine } from "../api";
+import { LAYOUT, lineLook, T } from "./chartTheme";
 
 export type Tool = "none" | "draw" | "move" | "erase";
 export interface Point {
@@ -71,19 +71,18 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
     const c = createChart(box.current, {
       height,
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "#0e1117" }, textColor: "#d1d4dc" },
-      grid: { vertLines: { color: "#1f242c" }, horzLines: { color: "#1f242c" } },
+      ...LAYOUT,
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "#30363d" },
-      timeScale: { borderColor: "#30363d", rightOffset: 8 },
+      
+      timeScale: { borderColor: T.border, rightOffset: 8 },
     });
     chart.current = c;
     const price = c.addCandlestickSeries({
-      upColor: "#26a69a",
-      downColor: "#ef5350",
+      upColor: T.up,
+      downColor: T.down,
       borderVisible: false,
-      wickUpColor: "#26a69a",
-      wickDownColor: "#ef5350",
+      wickUpColor: T.up,
+      wickDownColor: T.down,
     });
     candles.current = price;
     price.setData(
@@ -95,11 +94,11 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
       data.candles.map((k) => ({
         time: k.time as Time,
         value: k.volume,
-        color: k.close >= k.open ? "#26a69a55" : "#ef535055",
+        color: k.close >= k.open ? T.upFade : T.downFade,
       })),
     );
     for (const l of data.lines) {
-      const s = c.addLineSeries({ color: l.colour, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const s = c.addLineSeries({ ...lineLook(l.name, l.colour), lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       s.setData(l.pts.map((p) => ({ time: p.time as Time, value: p.value })));
     }
     for (const l of data.avwaps) {

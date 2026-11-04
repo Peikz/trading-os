@@ -138,3 +138,28 @@ def session_date(schedule: Schedule, slot: str, now: dt.datetime) -> dt.date:
     else:
         raise ValueError(f"no session rule for slot {slot!r}")
     raise LookupError(f"no {slot} session near {day}")
+
+
+def next_slot(
+    schedule: Schedule,
+    now: dt.datetime,
+    slots: tuple[str, ...] = ("pm", "am", "mid", "eod", "ah"),
+) -> tuple[str, dt.datetime] | None:
+    """(slot, its window's start in New York time) of the next scheduled scan after `now`, on a
+    trading day (the React dashboard's quiet day, Nov 2026). None when nothing is found within
+    two weeks."""
+    local = ny_time(schedule, now)
+    zone = ZoneInfo(schedule.timezone)
+    for offset in range(15):
+        day = local.date() + dt.timedelta(days=offset)
+        if not is_session(schedule, day):
+            continue
+        starts = sorted(
+            (dt.datetime.combine(day, schedule.windows_et[s][0], zone), s)
+            for s in slots
+            if s in schedule.windows_et
+        )
+        for start, slot in starts:
+            if start > local:
+                return slot, start
+    return None

@@ -241,3 +241,9 @@ def test_scan_hits_carry_their_signal_ids_for_the_grading_form(client):
     out = client.post("/api/screener/run", json=body).json()
     assert out["tickers"] == [B, A, C]
     assert out["signal_ids"] == {A: "sig-0", B: "sig-1", C: "sig-2"}
+
+
+def test_the_ticket_has_the_whole_order_on_one_line(account, client):
+    row = board_row(client, B)
+    t = client.post("/api/ticket", json={"row": row}).json()["ticket"]
+    assert t["summary"] == "Buy 1000 · Market · Day · stop loss 9.00 GTC"

@@ -69,7 +69,6 @@ export function Research() {
   const [section, setSection] = useState<Section>("Strategy rules");
   return (
     <div>
-      <h2>Research</h2>
       <Sections label="Section" options={SECTIONS} value={section} onPick={setSection} />
       <p className="muted">{WHAT[section]}</p>
       {section === "Strategy rules" && <Rules />}

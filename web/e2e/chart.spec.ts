@@ -1,4 +1,5 @@
-// Chart: draw a trend line with two clicks, erase it, weekly and monthly bars, AVWAP, notes.
+// A stock's full chart in Stocks: draw a trend line with two clicks, erase it, weekly and monthly
+// bars, an anchored VWAP, a stock note; the picks (today's hits, watchlists, positions) in search.
 import type { APIRequestContext, Page } from "@playwright/test";
 import { expect, open, test, TICKERS } from "./fixtures";
 
@@ -20,7 +21,7 @@ async function chartBox(page: Page) {
 
 test("a trend line drawn with two clicks is saved, then erased by a click on it", async ({ page, request }) => {
   const before = (await lines(request)).length;
-  await open(page, `chart?t=${T}`);
+  await open(page, `stocks?t=${T}`);
   await expect(page.getByRole("heading", { name: `Notes on ${T}` })).toBeVisible();
   const b = await chartBox(page);
   // Two points inside the candles' price range, so the saved line does not rescale the chart
@@ -28,7 +29,7 @@ test("a trend line drawn with two clicks is saved, then erased by a click on it"
   const z = { x: b.x + b.width * 0.7, y: b.y + b.height * 0.5 };
   await page.getByRole("button", { name: "Draw a trend line (two clicks)" }).click();
   await page.mouse.click(a.x, a.y);
-  await expect(page.locator(".hint")).toContainText("click the second");
+  await expect(page.getByText(/click the second/)).toBeVisible();
   const saved = page.waitForResponse((r) => r.url().endsWith(`/api/chart/${T}/lines`) && r.request().method() === "POST");
   const redrawn = page.waitForResponse((r) => r.url().includes(`/api/chart/${T}?`) && r.request().method() === "GET");
   await page.mouse.click(z.x, z.y);
@@ -46,7 +47,7 @@ test("a trend line drawn with two clicks is saved, then erased by a click on it"
 });
 
 test("daily, weekly and monthly bars", async ({ page }) => {
-  await open(page, `chart?t=${T}`);
+  await open(page, `stocks?t=${T}`);
   const bars = page.getByRole("group", { name: "Bars" });
   const counts: Record<string, number> = {};
   for (const tf of ["Weekly", "Monthly", "Daily"]) {
@@ -68,16 +69,20 @@ test("daily, weekly and monthly bars", async ({ page }) => {
   await expect(page.getByRole("group", { name: "Tools" })).toBeVisible();
 });
 
-test("an anchored VWAP, a stock note and the picks list", async ({ page }) => {
-  await open(page, "chart");
-  await expect(page.getByText("Pick or type a ticker.")).toBeVisible();
-  const picks = page.getByLabel("Today's hits, watchlists, open positions");
-  await expect(picks.locator("option")).not.toHaveCount(1);
-  await picks.selectOption({ index: 1 });
+test("the picks in search, an anchored VWAP and a stock note", async ({ page, request }) => {
+  const picks = (await (await request.get("/api/chart/picks")).json()) as { ticker: string; where: string }[];
+  expect(picks.length).toBeGreaterThan(0);
+  await open(page, "stocks");
+  await page.getByRole("button", { name: "Search stocks, pages and tabs" }).click();
+  const results = page.getByRole("dialog", { name: "Search" }).getByRole("listbox");
+  await expect(results.getByRole("option").first()).toContainText(picks[0].ticker);
+  await results.getByRole("option").first().click();
+  await expect(page.getByLabel(`${picks[0].ticker} full chart`)).toBeVisible();
+
+  await open(page, `stocks?t=${T}`);
   const anchors = page.getByRole("group", { name: "Anchored VWAP from" });
   await anchors.getByRole("button").first().click();
   await expect(anchors.getByRole("button").first()).toHaveClass("on");
-  await page.getByLabel("Any ticker").fill(T);
   await page.getByLabel("New note").fill("e2e: chart note");
   await page.getByRole("button", { name: "Save note" }).click();
   await expect(page.locator(".note p.pre", { hasText: "e2e: chart note" })).toBeVisible();

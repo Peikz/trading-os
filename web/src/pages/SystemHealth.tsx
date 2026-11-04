@@ -4,6 +4,7 @@
 // screener export, appended to docs/validation.md in the data repo.
 import { useEffect, useState } from "react";
 import { api, type ApiTable, type Jobs } from "../api";
+import { IconText } from "../components/IconText";
 import { ApiTableView, Sections } from "../components/Table";
 import { readText } from "../format";
 
@@ -14,7 +15,6 @@ export function SystemHealth() {
   const [section, setSection] = useState<Section>("Jobs and data");
   return (
     <div>
-      <h2>System health</h2>
       <Sections label="Section" options={SECTIONS} value={section} onPick={setSection} />
       {section === "Jobs and data" ? <JobsAndData /> : <Validation />}
     </div>
@@ -37,22 +37,22 @@ function JobsAndData() {
       <h3>Runs per session</h3>
       <ApiTableView label="Runs per session" table={data.grid} />
       <p className="muted">
-        ✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · ⏳ not due yet.
+        <IconText text="✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · ⏳ not due yet." />{" "}
         pm 07:15-07:55, am 10:10-11:30, mid 11:55-13:30, eod 16:15-23:59 ET.
       </p>
       <h3>Data freshness</h3>
       <ApiTableView label="Data freshness" table={data.freshness} />
       <h3>Failures (newest first)</h3>
-      <ApiTableView label="Failures" table={data.failures} empty="✅ No failure logs." />
+      <ApiTableView label="Failures" table={data.failures} empty="No failure logs." />
       <h3>Data cache</h3>
       <p className="muted">
         The study data lives on GitHub; the dashboard keeps only what was opened ({data.cache.used_gb} of{" "}
         {data.cache.limit_gb} GB; least used files go first).
       </p>
-      <button onClick={() => api.clearCache().then((r) => setMessage(r.message), (e: Error) => setMessage(`❌ ${e.message}`))}>
+      <button onClick={() => api.clearCache().then((r) => setMessage(r.message), (e: Error) => setMessage(`Error: ${e.message}`))}>
         Empty the cache
       </button>
-      {message && <p className={message.startsWith("❌") ? "error" : "ok"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
       <h3>Timer and GitHub runs</h3>
       <button
         disabled={loadingGh}
@@ -97,12 +97,12 @@ function Validation() {
     api.validationRuns().then((c) => {
       setChoices(c);
       setRun(c.runs[0]?.id ?? "");
-    }, (e: Error) => setMessage(`❌ ${e.message}`));
+    }, (e: Error) => setMessage(`Error: ${e.message}`));
   }, []);
   useEffect(() => {
     setResult(null);
     if (!csv || !run) return;
-    api.validate({ run, scan, csv_text: csv }).then(setResult, (e: Error) => setMessage(`❌ ${e.message}`));
+    api.validate({ run, scan, csv_text: csv }).then(setResult, (e: Error) => setMessage(`Error: ${e.message}`));
   }, [csv, run, scan]);
   if (!choices) return message ? <p className="error">{message}</p> : <p className="muted">Loading…</p>;
   if (!choices.runs.length) return <p className="muted">No runs yet.</p>;
@@ -133,14 +133,14 @@ function Validation() {
           <ApiTableView label="Validation" table={result} empty="Nothing found on either side." />
           <button
             onClick={() =>
-              api.appendValidation({ run, scan, csv_text: csv }).then((r) => setMessage(r.message), (e: Error) => setMessage(`❌ ${e.message}`))
+              api.appendValidation({ run, scan, csv_text: csv }).then((r) => setMessage(r.message), (e: Error) => setMessage(`Error: ${e.message}`))
             }
           >
             Append to docs/validation.md
           </button>
         </>
       )}
-      {message && <p className={message.startsWith("❌") ? "error" : "ok"}>{message}</p>}
+      {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
     </section>
   );
 }

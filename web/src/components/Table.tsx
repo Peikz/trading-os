@@ -3,6 +3,10 @@
 import type { ReactNode } from "react";
 import type { ApiTable, Row, Value } from "../api";
 import { cell } from "../format";
+import { plain } from "../plain";
+import { hasMarks, IconText } from "./IconText";
+
+const marked = (text: string) => (hasMarks(text) ? <IconText text={text} /> : text);
 
 export function Table({
   columns,
@@ -21,16 +25,21 @@ export function Table({
       <table aria-label={label}>
         <thead>
           <tr>
-            {columns.map((c) => (
-              <th key={c}>{c}</th>
-            ))}
+            {columns.map((c) => {
+              const p = plain(c);
+              return (
+                <th key={c} title={p.title}>
+                  {p.text}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i}>
               {columns.map((c) => (
-                <td key={c}>{render?.(c, r) ?? cell(c, r[c] as Value)}</td>
+                <td key={c}>{render?.(c, r) ?? marked(cell(c, r[c] as Value))}</td>
               ))}
             </tr>
           ))}
@@ -82,7 +91,7 @@ export function Sections<T extends string>({
   onPick: (v: T) => void;
 }) {
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
+    <div className="tabs small" role="tablist" aria-label={label}>
       {options.map((o) => (
         <button key={o} role="tab" aria-selected={value === o} className={value === o ? "on" : ""} onClick={() => onPick(o)}>
           {o}

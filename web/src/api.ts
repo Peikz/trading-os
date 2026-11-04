@@ -9,10 +9,36 @@ export interface Tile {
   delta: string | null;
 }
 
+export type MoodLevel = "green" | "amber" | "red";
+
+/** One word for the market (QQQ light + heat + IBD) with each reason (board_data.market_mood) */
+export interface Mood {
+  level: MoodLevel | null;
+  word: string;
+  reasons: { level: MoodLevel; text: string }[];
+  quotes: Tile[];
+}
+
 export interface Market {
   tiles: Tile[];
   details: string[];
   session?: string | null;
+  mood?: Mood;
+}
+
+/** The plan card's first line (board_data.decision) */
+export interface Decision {
+  text: string;
+  local: string | null;
+  session: string | null;
+  day: string | null;
+}
+
+/** The "Why" card (board_data.why) */
+export interface Why {
+  summary: string | null;
+  points: { ok: boolean; text: string }[];
+  lines: string[];
 }
 
 export interface Stat {
@@ -34,17 +60,27 @@ export interface BoardRow {
   facts: string[];
   stats: Stat[];
   levels: Record<string, number>;
+  decision?: Decision | null;
+  why?: Why;
   [key: string]: unknown;
 }
 
 export type Scope = "graded" | "pushed" | "all" | "watchlists";
 export type Timeframe = "1D" | "1W" | "1M";
 
+export interface NextScan {
+  slot: string;
+  name: string;
+  when: string;
+  at: string;
+}
+
 export interface Today {
   scope: Scope | "screen";
   rows: BoardRow[];
   hidden_c: number;
   total: number;
+  next_scan?: NextScan | null;
 }
 
 export interface Candle {
@@ -110,7 +146,8 @@ export interface ScreenerMeta {
 }
 
 export interface ScreenRequest extends ScreenSpec {
-  source: "all" | "hits";
+  source: "all" | "hits" | "list";
+  watchlist?: string | null;
   data: "close" | "live";
   run?: string | null;
   scan?: string | null;
@@ -154,6 +191,7 @@ export interface TicketView {
     when: string;
     lines: TicketLine[];
     caption: string;
+    summary?: string;
   } | null;
 }
 
@@ -468,6 +506,14 @@ export interface Jobs {
   cache: { used_gb: number; limit_gb: number };
 }
 
+export interface Status {
+  level: "ok" | "warn" | "error";
+  text: string;
+  details: string[];
+}
+
+export type Spark = { time: string; open: number; high: number; low: number; close: number }[];
+
 export interface ScansPage {
   caption: string;
   rows: Row[];
@@ -554,7 +600,28 @@ export const INDICATORS = [
 ] as const;
 export const DEFAULT_INDICATORS = ["MA 10", "MA 20", "MA 50"];
 
+// Writes to the data repo, for the automatic Save & push (design review 4 Nov 2026). These POSTs
+// only read or compute, or write outside the data repo, so they don't count.
+const NOT_WRITES = [
+  /^\/api\/ticket$/,
+  /^\/api\/screener\/run/,
+  /^\/api\/research\//,
+  /^\/api\/system\/validation$/,
+  /^\/api\/system\/cache/,
+  /^\/api\/sync\//,
+  /^\/api\/scans\//,
+];
+type WriteListener = (path: string) => void;
+const writeListeners = new Set<WriteListener>();
+
+/** Called after each successful write to the data repo; returns the unsubscribe. */
+export function onWrite(listener: WriteListener): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const res = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -568,7 +635,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(String(detail));
   }
-  return (await res.json()) as T;
+  const out = (await res.json()) as T;
+  if (method !== "GET" && !NOT_WRITES.some((r) => r.test(path))) {
+    writeListeners.forEach((l) => l(path));
+  }
+  return out;
 }
 
 const post = <T>(path: string, body: unknown, method = "POST") =>
@@ -710,6 +781,9 @@ export const api = {
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),
+  status: () => request<Status>("/api/system/status"),
+  sparks: (tickers: string[], n = 60) =>
+    request<Record<string, Spark>>(`/api/sparks?t=${tickers.map(enc).join(",")}&n=${n}`),
   bars: (ticker: string, tf: Timeframe, indicators: string[], anchor?: string | null) => {
     const q = new URLSearchParams({ tf, indicators: indicators.join(",") });
     if (anchor) q.set("anchor", anchor);

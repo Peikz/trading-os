@@ -333,6 +333,20 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
             },
         }
 
+    @app.get("/api/system/status")
+    def status() -> dict:
+        """The top bar's status dot: ok / warn / error, a line of text and the details."""
+        try:
+            return scalar(health.status(root(), cfg().schedule, dt.datetime.now(dt.UTC)))
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001 - the dot says so instead of failing
+            return {
+                "level": "warn",
+                "text": f"Status unknown ({type(exc).__name__})",
+                "details": [],
+            }
+
     @app.post("/api/system/cache/clear")
     def cache_clear() -> dict:
         remote_data.clear()
