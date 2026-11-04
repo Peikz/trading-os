@@ -48,6 +48,7 @@ from trading_os import (
     report,
     research_view,
     review,
+    runs_view,
     scan_editor,
     scans_view,
     screens,
@@ -89,7 +90,7 @@ PLACES = {
     "Stocks": ["Screener", "Watchlists", "Chart"],  # find and study a stock
     "Market": ["Market"],  # what is the market doing?
     "Journal": ["Positions", "Journal", "Live results"],  # how am I doing?
-    "Lab": ["Research", "Scans", "System health", "Guide"],  # how does it work?
+    "Lab": ["Research", "Runs", "System health", "Guide"],  # how does it work?
 }
 PLACE_OF = {page: place for place, pages in PLACES.items() for page in pages}
 PAGES = [page for pages in PLACES.values() for page in pages]
@@ -1348,8 +1349,82 @@ elif page == "Screener":
             "signal", row["signal_id"], f"Grade {ticker} · {hit_scan}", f"sig-{row['signal_id']}"
         )
 
-elif page == "Scans":
-    st.header("Scans")
+elif page == "Runs":
+    # Runs and scans in one place (Emil, 4 Nov 2026: "see all the push and scan runs and edit
+    # them", "an overview of it"): the day's runs on top, a run's times and on/off, then the scans.
+    st.header("Runs")
+    st.caption(runs_view.CAPTION)
+    try:
+        run_jobs = timer.load()  # the file as it is now, edits included
+    except timer.RunsError as exc:
+        st.error(f"config/runs.yaml doesn't load: {exc}")
+        st.stop()
+    gh_runs = st.session_state.get("gh_runs")
+    started = (
+        timer.check(gh_runs, CFG.schedule.windows_et, dt.datetime.now(dt.UTC))
+        if gh_runs is not None and not gh_runs.empty
+        else None
+    )
+    st.dataframe(
+        pd.DataFrame(runs_view.overview(CFG, run_jobs, started=started)).drop(columns="key"),
+        hide_index=True,
+        width="stretch",
+        column_config={"on": st.column_config.CheckboxColumn("on")},
+    )
+    if st.button("Load how each run last started (GitHub)", key="rn_load"):
+        st.session_state["gh_runs"] = health.run_list()
+        st.rerun()
+
+    st.subheader("Edit a run")
+    run_keys = runs_view.keys(run_jobs)
+    run_names = {r["key"]: r["run"] for r in runs_view.overview(CFG, run_jobs)}
+    run_pick = st.selectbox("Run", run_keys, format_func=run_names.get, key="rn_pick")
+    run_fields = runs_view.form(CFG, run_pick, run_jobs)
+    with st.form(f"rn-edit-{run_pick}"):
+        a, b, c = st.columns(3)
+        run_new = {"enabled": a.toggle("On", value=run_fields["enabled"])}
+        run_new["first"] = b.text_input(
+            f"Starts ({run_fields['clock']}, HH:MM)", value=run_fields["first"]
+        ).strip()
+        if run_fields["second"] is not None:
+            run_new["second"] = c.text_input(
+                "Second start, in case the first failed", value=run_fields["second"]
+            ).strip()
+        if run_fields["window"]:
+            st.caption(
+                "Both starts must fall inside its New York window, "
+                f"{run_fields['window'][0]}-{run_fields['window'][1]}, or the run does nothing."
+            )
+        st.caption(
+            "Off: the timer stops starting it and GitHub's backup start exits at once. "
+            "Started by hand on GitHub, it still runs."
+        )
+        run_saved = st.form_submit_button("Check and save")
+    if run_saved:
+        try:
+            shown = runs_view.save(run_pick, run_new, CFG.schedule.windows_et)
+            if not shown:
+                st.info("Nothing changed.")
+            else:
+                st.session_state["rn_diff"] = (run_pick, shown)
+                timer.JOBS = timer.load()  # the rest of the dashboard sees the new times
+                st.rerun()
+        except timer.RunsError as exc:
+            st.error(f"Not saved: {exc}")
+    if st.session_state.get("rn_diff"):
+        key, shown = st.session_state["rn_diff"]
+        st.success(
+            f"Saved {run_names.get(key, key)} to config/runs.yaml on this PC. The timer and "
+            "GitHub's jobs use it after Commit & push."
+        )
+        st.code(shown, language="diff")
+    if st.button("Commit & push to GitHub", key="rn_push"):
+        ok, out = runs_view.commit_and_push(run_pick)
+        (st.success if ok else st.error)(out)
+        if ok:
+            st.session_state.pop("rn_diff", None)
+
+    st.subheader("Scans")
     st.caption(scans_view.CAPTION)
 
     def scan_label(name: str) -> str:

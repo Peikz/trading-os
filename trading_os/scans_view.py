@@ -20,8 +20,8 @@ HIDDEN = {"push_tier", "push_slot", "push_ungraded", "label", "note"}
 CAPTION = (
     "Every scan: when it runs, when its hits are pushed, how it is graded and its settings. "
     "Edit one below: the change is checked like the jobs check it, saved to config/scans.yaml "
-    "where the dashboard runs, and used by GitHub's jobs after Commit & push. Run times come "
-    "from the timer (trading_os/timer.py) and change in code, not here."
+    "where the dashboard runs, and used by GitHub's jobs after Commit & push. A run's times "
+    "change under Edit a run above."
 )
 PUSH_SLOTS = ("at its run", "next pre-market", "both")
 

@@ -1,5 +1,5 @@
 # Timer sync (Emil, 21 Oct 2026): keeps the cron-job.org jobs that start the timed workflows
-# in step with trading_os/timer.py. Runs by itself when timer.py changes on main, or by hand
+# in step with config/runs.yaml. Runs by itself when it or timer.py changes on main, or by hand
 # (e.g. after a new GitHub token went into the secret TIMER_GITHUB_TOKEN).
 # Secrets: CRONJOB_API_KEY (cron-job.org API key), TIMER_GITHUB_TOKEN (fine-grained token,
 # Actions read/write on this repo; it goes into the jobs' request header).
@@ -10,7 +10,7 @@ name: Timer sync
 on:
   push:
     branches: [main]
-    paths: ["trading_os/timer.py"]
+    paths: ["trading_os/timer.py", "config/runs.yaml"]
   workflow_dispatch:
 
 concurrency:

@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from trading_os import clock, history
+from trading_os import clock, history, timer
 from trading_os.config import INTRADAY_SLOTS, load_config
 from trading_os.logsafe import run_guarded, status
 from trading_os.store import PARQUET_OPTIONS, AlreadyWritten
@@ -165,7 +165,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.data_dir is None:
         parser.error("--data-dir or DATA_DIR is required")
-
+    if not args.force and timer.skip("outcomes", "Outcomes"):
+        return 0
     return run_guarded(lambda: _run(args), Path(args.data_dir) / "logs", "Outcomes")
 
 

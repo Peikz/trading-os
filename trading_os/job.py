@@ -103,8 +103,12 @@ def run_kind() -> str:
 
 
 def run(slot: str, label: str, args: argparse.Namespace) -> int:
+    from trading_os import timer
+
     cfg = load_config()
     now = dt.datetime.now(dt.UTC)
+    if not args.force and timer.skip(slot, label):
+        return 0
 
     early = getattr(args, "early", False)
     if early:

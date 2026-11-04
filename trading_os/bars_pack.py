@@ -49,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
+    from trading_os import timer
+
+    if timer.skip("bars-pack", "Bars pack"):
+        return 0
     bars = pack(args.data_dir)
     if bars.empty:
         status("Bars pack: no bars")

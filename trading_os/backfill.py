@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 
-from trading_os import clock, history
+from trading_os import clock, history, timer
 from trading_os.config import Config, load_config
 from trading_os.logsafe import run_guarded, status
 from trading_os.massive import MassiveClient, RateLimiter
@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_guarded(_check, None, "Massive check")
     if args.data_dir is None:
         parser.error("--data-dir or DATA_DIR is required")
+    if timer.skip("backfill", "Backfill"):
+        return 0
     return run_guarded(lambda: _run(args), Path(args.data_dir) / "logs", "Backfill")
 
 

@@ -61,7 +61,7 @@ def slot_start(slot: str, session: dt.date) -> dt.datetime | None:
     from trading_os import timer
 
     at = SLOT_STARTS.get(slot) or next(
-        (j.at for j in timer.JOBS if j.key == slot and not j.retry), None
+        (j.at for j in timer.active() if j.key == slot and not j.retry), None
     )
     if at is None:
         return None

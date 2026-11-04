@@ -9,7 +9,8 @@ The keys (never shown or printed):
   write. It goes into the cron-job.org jobs' request header.
 Taken from the environment when set (CRONJOB_API_KEY, TIMER_GITHUB_TOKEN), else asked for.
 The `timer-sync.yml` workflow (Emil, 21 Oct 2026) runs this with both keys from the repo's
-secrets whenever `trading_os/timer.py` changes on main, so nobody has to re-run it by hand.
+secrets whenever `config/runs.yaml` or `trading_os/timer.py` changes on main, so nobody has
+to re-run it by hand.
 With a new GitHub token: update the secret TIMER_GITHUB_TOKEN and start that workflow.
 """
 
@@ -62,7 +63,7 @@ def sync(key: str, token: str) -> None:
         print(f"updated  {job.title}")
     for job_id in delete:
         _call("DELETE", f"/jobs/{job_id}", key)
-        print(f"deleted  job {job_id} (no longer in timer.JOBS)")
+        print(f"deleted  job {job_id} (no longer in config/runs.yaml, or off)")
     for k, job in enumerate(create):
         if k:
             time.sleep(CREATE_PAUSE)

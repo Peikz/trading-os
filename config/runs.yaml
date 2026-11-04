@@ -1,0 +1,37 @@
+# The timed runs (Emil, 4 Nov 2026: see and edit them on Lab → Runs). The cron-job.org timer
+# starts each workflow at its time (trading_os/timer.py; GitHub's own crons stay as a late
+# backup). After Commit & push, the Timer sync workflow updates cron-job.org by itself.
+#
+# One run per line, so the dashboard changes a value in place and keeps these comments.
+#   key       the run; for the scans it is the slot (pm, am, mid, eod, ah)
+#   workflow  the file in .github/workflows; name: that workflow's name in GitHub's run list
+#   at        "HH:MM" on the run's clock: New York, or Copenhagen with tz: Europe/Copenhagen.
+#             A scan run must start inside its New York window (scans.yaml, schedule).
+#   days      weekdays (Mon-Fri), tue-sat (the mornings after a session) or sat
+#   retry     the second start, in case the first run failed
+#   enabled   false stops the run: the timer drops it and GitHub's backup cron exits at once.
+#             The same key's lines go on and off together. By hand it still runs.
+#   inputs    passed to the workflow (the intraday slot, the alert watcher's end time)
+
+runs:
+  - {key: backfill, workflow: backfill.yml, name: Backfill, at: "05:30", days: tue-sat, enabled: true}
+  - {key: bars-pack, workflow: bars-pack.yml, name: Bars pack, at: "06:15", days: tue-sat, enabled: true}
+  # One pre-market push at 07:17, EP-PM only (Emil, 27 Oct 2026: the 11:30 Copenhagen one dropped)
+  - {key: pm, workflow: premarket.yml, name: Pre-market, at: "07:17", days: weekdays, enabled: true}
+  - {key: pm, workflow: premarket.yml, name: Pre-market, at: "07:35", days: weekdays, retry: true, enabled: true}
+  - {key: am, workflow: intraday.yml, name: Intraday, at: "10:17", days: weekdays, inputs: {slot: am}, enabled: true}
+  - {key: am, workflow: intraday.yml, name: Intraday, at: "10:40", days: weekdays, inputs: {slot: am}, retry: true, enabled: true}
+  - {key: mid, workflow: intraday.yml, name: Intraday, at: "12:03", days: weekdays, inputs: {slot: mid}, enabled: true}
+  - {key: mid, workflow: intraday.yml, name: Intraday, at: "12:30", days: weekdays, inputs: {slot: mid}, retry: true, enabled: true}
+  # The 15:45 EP close check is off since 21 Oct 2026 (EP moved to 10:30 and after hours); its
+  # slot stays for manual runs (`--slot close`).
+  - {key: eod, workflow: eod.yml, name: EOD, at: "16:17", days: weekdays, enabled: true}
+  - {key: eod, workflow: eod.yml, name: EOD, at: "17:00", days: weekdays, retry: true, enabled: true}
+  - {key: ah, workflow: intraday.yml, name: Intraday, at: "16:50", days: weekdays, inputs: {slot: ah}, enabled: true}
+  - {key: ah, workflow: intraday.yml, name: Intraday, at: "16:56", days: weekdays, inputs: {slot: ah}, retry: true, enabled: true}
+  - {key: outcomes, workflow: outcomes.yml, name: Outcomes, at: "18:00", days: weekdays, enabled: true}
+  # Price alerts (Emil, 22 Oct 2026): the session in two runs (a job may run 6 hours at most)
+  - {key: alerts, workflow: alerts.yml, name: Price alerts, at: "09:25", days: weekdays, inputs: {until: "12:44"}, enabled: true}
+  - {key: alerts, workflow: alerts.yml, name: Price alerts, at: "12:45", days: weekdays, inputs: {until: "16:00"}, enabled: true}
+  # Saturday morning in Copenhagen on Friday's close (Emil, 27 Oct 2026; was Sunday 12:00 NY)
+  - {key: weekly, workflow: weekly.yml, name: Weekly, at: "09:00", days: sat, tz: Europe/Copenhagen, enabled: true}
