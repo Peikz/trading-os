@@ -77,7 +77,7 @@ def test_scans_without_a_scorecard_are_c_with_the_reason():
 def test_the_proposed_config_grades_every_rule_set():
     rules = load_config().grading
     for name, rule in rules["strategies"].items():
-        g = grader.grade(name, {}, rules)
+        g = grader.grade(rule["live_scans"][0], {}, rules | {"quality_enabled": False})
         assert g.grade in grader.GRADES and g.strategy == name
         assert len(rule["bands"]) >= 1
 
@@ -153,3 +153,20 @@ def test_the_quality_counts_grade_every_live_setup():
     assert grader.quality_for("luk_flush", rules) == "luk_avwap_flush"
     only_ep = rules | {"quality_enabled": ["ep"]}
     assert grader.quality_for("ep9m_pace", only_ep) is None  # a list switches some on
+
+
+def test_the_eod_ep9m_scan_is_c_though_its_name_matches_the_rule():
+    # Only its live scans take a rule: the EOD ep9m hits have no buy plan (Emil, 4 Nov 2026)
+    rules = load_config().grading
+    six = {
+        "sessions_since_earnings": 3,
+        "d_neglect_months": 1,
+        "mkt_scan_count": 30,
+        "revenue_growth_accel": 2.0,
+        "eps_yoy_pct": 5.0,
+        "d_from_52w_high": -5.0,
+    }
+    assert grader.grade("ep9m_pace", six, rules).grade == "A+"
+    g = grader.grade("ep9m", six, rules)
+    assert g.grade == "C" and g.strategy is None and g.note == rules["ungraded"]
+    assert grader.quality_for("ep9m", rules) is None and grader.strategy_for("ep9m", rules) is None

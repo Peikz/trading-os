@@ -134,15 +134,16 @@ def condition_met(spec: Mapping[str, Any], value) -> bool:
 
 
 def quality_for(scan: str, grading: Mapping[str, Any]) -> str | None:
-    """The quality-count strategy that grades a live scan, when its count is on
-    (`quality_enabled`: true for all, or a list of strategies)."""
+    """The quality-count strategy that grades a live scan (its `live_scans`), when its count is
+    on (`quality_enabled`: true for all, or a list of strategies). Never by the scan's name: the
+    EOD `ep9m` scan has no buy plan and is C (Emil, 4 Nov 2026)."""
     enabled = grading.get("quality_enabled")
     if not enabled:
         return None
     for name, rule in grading.get("quality", {}).items():
         if enabled is not True and name not in enabled:
             continue
-        if scan == name or scan in rule.get("live_scans", ()):
+        if scan in rule.get("live_scans", ()):
             return name
     return None
 
@@ -187,12 +188,8 @@ def quality_grade(scan: str, features: Mapping[str, Any], grading: Mapping[str, 
 
 
 def strategy_for(scan: str, grading: Mapping[str, Any]) -> str | None:
-    """The study strategy whose scorecard grades a live scan (config `live_scans`), or the
-    scan itself when it has one."""
-    rules = grading["strategies"]
-    if scan in rules:
-        return scan
-    for name, rule in rules.items():
+    """The study strategy whose scorecard grades a live scan (config `live_scans`)."""
+    for name, rule in grading["strategies"].items():
         if scan in rule.get("live_scans", ()):
             return name
     return None
