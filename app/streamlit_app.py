@@ -159,9 +159,18 @@ h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
 .st-key-topbar [data-testid="stHorizontalBlock"]{align-items:center;gap:.75rem}
 .st-key-topbar [data-testid="stMarkdownContainer"] p{margin:0}
 @media (max-width:640px){
-.st-key-topbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap}
-.st-key-topbar [data-testid="stColumn"]{min-width:calc(50% - .5rem)!important;
-  flex:1 1 calc(50% - .5rem)!important}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]{flex-wrap:wrap;flex-direction:row}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{min-width:0!important}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1){display:none}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2){
+  flex:1 1 100%!important;order:1}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3){
+  flex:1 1 0!important;order:2}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5){
+  flex:0 0 64px!important;width:64px!important;order:3}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4){
+  flex:1 1 100%!important;order:4}
+.st-key-topbar div[role="group"]{flex-wrap:nowrap;overflow-x:auto}
 }
 </style>"""
 st.markdown(NAV_CSS, unsafe_allow_html=True)
