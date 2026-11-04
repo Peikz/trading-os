@@ -523,6 +523,24 @@ export interface ScansPage {
   note: string | null;
 }
 
+export interface RunsPage {
+  caption: string;
+  rows: Row[];
+  names: { key: string; label: string }[];
+  started: boolean;
+  writable: boolean;
+  checkout: boolean;
+  note: string | null;
+}
+
+export interface RunForm {
+  enabled: boolean;
+  first: string;
+  second: string | null;
+  clock: string;
+  window: [string, string] | null;
+}
+
 export interface ScanForm {
   name: string;
   label: string;
@@ -610,6 +628,7 @@ const NOT_WRITES = [
   /^\/api\/system\/cache/,
   /^\/api\/sync\//,
   /^\/api\/scans\//,
+  /^\/api\/timed-runs\//,
 ];
 type WriteListener = (path: string) => void;
 const writeListeners = new Set<WriteListener>();
@@ -758,6 +777,11 @@ export const api = {
     post<ApiTable>("/api/system/validation", body),
   appendValidation: (body: { run: string; scan: string; csv_text: string }) =>
     post<{ message: string }>("/api/system/validation/append", body),
+  timedRuns: (started = false) => request<RunsPage>(`/api/timed-runs${started ? "?started=true" : ""}`),
+  runForm: (key: string) => request<RunForm>(`/api/timed-runs/${enc(key)}/form`),
+  saveRun: (key: string, values: Record<string, unknown>) =>
+    post<{ saved: boolean; message: string; diff: string }>(`/api/timed-runs/${enc(key)}`, { values }),
+  commitRun: (key: string) => post<{ ok: boolean; message: string }>(`/api/timed-runs/${enc(key)}/commit`, {}),
   scans: () => request<ScansPage>("/api/scans"),
   scanForm: (name: string) => request<ScanForm>(`/api/scans/${enc(name)}/form`),
   saveScan: (name: string, values: Record<string, unknown>) =>

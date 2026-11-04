@@ -31,7 +31,7 @@ export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
   ],
   lab: [
     ["research", "Research"],
-    ["scans", "Scans"],
+    ["runs", "Runs"],
     ["health", "Health"],
     ["guide", "Guide"],
   ],
@@ -51,7 +51,7 @@ const LEGACY: Record<string, [Place, string]> = {
   positions: ["journal", "positions"],
   live: ["journal", "live"],
   research: ["lab", "research"],
-  scans: ["lab", "scans"],
+  scans: ["lab", "runs"],
   health: ["lab", "health"],
   guide: ["lab", "guide"],
 };
@@ -69,7 +69,8 @@ export function parseHash(hash: string): Route {
   }
   const place = (PLACES.some((p) => p.id === head) ? head : "today") as Place;
   const tabs = TABS[place];
-  const tab = tabs.some(([id]) => id === sub) ? sub : (tabs[0]?.[0] ?? "");
+  const wanted = place === "lab" && sub === "scans" ? "runs" : sub; // Scans became Runs (4 Nov 2026)
+  const tab = tabs.some(([id]) => id === wanted) ? wanted : (tabs[0]?.[0] ?? "");
   return { place, tab, params };
 }
 

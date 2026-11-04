@@ -30,6 +30,7 @@ from trading_os import (
     live_tracking,
     remote_data,
     research_view,
+    runs_view,
     scan_editor,
     scans_view,
     timer,
@@ -406,6 +407,82 @@ def register(app: FastAPI, ctx: Context, find_run, run_id, config_path: Path) ->
         with open(target, "a", encoding="utf-8") as fh:
             fh.write("\n" + text)
         return {"message": "Appended. Save & push sends it to GitHub."}
+
+    # --- Runs (config/runs.yaml next to the scans config; Lab → Runs, Emil 4 Nov 2026)
+
+    runs_path = config_path.parent / "runs.yaml"
+
+    def run_jobs():
+        try:
+            return timer.load(runs_path)
+        except (timer.RunsError, OSError) as exc:
+            raise HTTPException(409, f"config/runs.yaml doesn't load: {exc}") from exc
+
+    @app.get("/api/timed-runs")
+    def timed_runs(started: bool = False) -> dict:
+        """Every timed run; `started`: also how each last started (the gh CLI on the server)."""
+        jobs = run_jobs()
+        status = None
+        if started:
+            gh = health.run_list()
+            if not gh.empty:
+                status = timer.check(gh, cfg().schedule.windows_et, dt.datetime.now(dt.UTC))
+        rows = runs_view.overview(cfg(), jobs, started=status)
+        writable, checkout = scans_view.editable(runs_path)
+        return {
+            "caption": runs_view.CAPTION,
+            "rows": rows,
+            "names": [{"key": r["key"], "label": r["run"]} for r in rows],
+            "started": status is not None,
+            "writable": writable,
+            "checkout": checkout,
+            "note": None
+            if writable and checkout
+            else runs_view.NOT_WRITABLE
+            if not writable
+            else runs_view.NOT_A_CHECKOUT,
+        }
+
+    def run_of(key: str, jobs) -> str:
+        if key not in {j.key for j in jobs}:
+            raise HTTPException(404, "No such run.")
+        return key
+
+    @app.get("/api/timed-runs/{key}/form")
+    def timed_run_form(key: str) -> dict:
+        jobs = run_jobs()
+        return runs_view.form(cfg(), run_of(key, jobs), jobs)
+
+    @app.post("/api/timed-runs/{key}")
+    def timed_run_save(key: str, edit: ScanEdit) -> dict:
+        """Check and save a run's times and on/off; the diff, empty when nothing changed."""
+        run_of(key, run_jobs())
+        changes = {k: v for k, v in edit.values.items() if k in ("enabled", "first", "second")}
+        changes = {k: v.strip() if isinstance(v, str) else v for k, v in changes.items()}
+        if not scans_view.editable(runs_path)[0]:
+            raise HTTPException(409, runs_view.NOT_WRITABLE)
+        try:
+            shown = runs_view.save(key, changes, cfg().schedule.windows_et, runs_path)
+        except timer.RunsError as exc:
+            raise HTTPException(400, f"Not saved: {exc}") from exc
+        if not shown:
+            return {"saved": False, "message": "Nothing changed.", "diff": ""}
+        if runs_path.resolve() == timer.RUNS_PATH.resolve():
+            timer.JOBS = timer.load()  # the rest of the dashboard sees the new times
+        return {
+            "saved": True,
+            "message": "Saved to config/runs.yaml on this PC. The timer and GitHub's jobs use "
+            "it after Commit & push.",
+            "diff": shown,
+        }
+
+    @app.post("/api/timed-runs/{key}/commit")
+    def timed_run_commit(key: str) -> dict:
+        run_of(key, run_jobs())
+        if not scans_view.editable(runs_path)[1]:
+            return {"ok": False, "message": runs_view.NOT_A_CHECKOUT}
+        ok, out = runs_view.commit_and_push(key, runs_path)
+        return {"ok": ok, "message": out}
 
     # --- Scans
 

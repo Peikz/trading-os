@@ -1,5 +1,5 @@
 // The shell and the read-mostly places: every place and tab opens without an error; the market
-// in one word; Ctrl+K search; Market's five tabs; Lab's Health, Scans (view-only, as on the
+// in one word; Ctrl+K search; Market's five tabs; Lab's Health, Runs (view-only, as on the
 // server image) and Guide; the manual Pull latest / Save & push in Settings.
 import { expect, open, sym, test, TICKERS } from "./fixtures";
 
@@ -8,7 +8,7 @@ const PLACES: [string, string[]][] = [
   ["Stocks", []],
   ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"]],
   ["Journal", ["Positions", "Trades", "Plans", "Notes", "Live vs study"]],
-  ["Lab", ["Research", "Scans", "Health", "Guide"]],
+  ["Lab", ["Research", "Runs", "Health", "Guide"]],
 ];
 
 test("every place and tab opens from the top bar", async ({ page }) => {
@@ -111,12 +111,17 @@ test("Health: the run grid, freshness, GitHub runs, validation against a CSV", a
   await expect(page.locator("main p.ok")).toBeVisible();
 });
 
-test("Scans is view-only on the server image", async ({ page, request }) => {
+test("Runs and scans are view-only on the server image", async ({ page, request }) => {
   const scans = (await (await request.get("/api/scans")).json()) as { writable: boolean; checkout: boolean; note: string };
+  const runs = (await (await request.get("/api/timed-runs")).json()) as { writable: boolean; note: string };
   expect(scans.writable).toBe(false);
-  await open(page, "lab/scans");
+  expect(runs.writable).toBe(false);
+  await open(page, "lab/scans"); // the old address opens Runs
+  await expect(page.getByRole("table", { name: "Runs" }).locator("tbody tr").first()).toBeVisible();
   await expect(page.getByRole("table", { name: "Scans" }).locator("tbody tr").first()).toBeVisible();
-  await expect(page.locator("main p.warn")).toHaveText(scans.note);
+  await expect(page.locator("main p.warn")).toHaveText([runs.note, scans.note]);
+  const runEditor = page.getByLabel("Edit a run");
+  await expect(runEditor.getByRole("button", { name: "Check and save" })).toBeDisabled();
   const editor = page.getByLabel("Edit a scan");
   await page.getByLabel("Scan", { exact: true }).selectOption({ index: 1 });
   await expect(editor).toBeVisible();

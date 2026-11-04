@@ -18,7 +18,8 @@ describe("routes", () => {
     expect(parseHash("#/positions")).toMatchObject({ place: "journal", tab: "positions" });
     expect(parseHash("#/live")).toMatchObject({ place: "journal", tab: "live" });
     expect(parseHash("#/health")).toMatchObject({ place: "lab", tab: "health" });
-    expect(parseHash("#/scans")).toMatchObject({ place: "lab", tab: "scans" });
+    expect(parseHash("#/scans")).toMatchObject({ place: "lab", tab: "runs" });
+    expect(parseHash("#/lab/scans")).toMatchObject({ place: "lab", tab: "runs" });
     expect(parseHash("#/guide")).toMatchObject({ place: "lab", tab: "guide" });
     expect(parseHash("#/research")).toMatchObject({ place: "lab", tab: "research" });
     expect(parseHash("#/market")).toMatchObject({ place: "market", tab: "overview" });

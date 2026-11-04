@@ -16,7 +16,7 @@ from api.main import create_app  # noqa: E402
 from tests.test_api import SESSION, A, B, C  # noqa: E402
 from tests.test_api import data as base_data  # noqa: E402, F401
 from tests.test_api_pages import data  # noqa: E402, F401
-from trading_os import chart_marks, health, remote_data, stock_notes  # noqa: E402
+from trading_os import chart_marks, health, remote_data, stock_notes, timer  # noqa: E402
 from trading_os.config import DEFAULT_PATH  # noqa: E402
 
 DAYS = pd.bdate_range("2026-06-01", periods=80)
@@ -28,6 +28,7 @@ def config(tmp_path):
     path = tmp_path / "cfg" / "config" / "scans.yaml"
     path.parent.mkdir(parents=True)
     shutil.copy(DEFAULT_PATH, path)
+    shutil.copy(timer.RUNS_PATH, path.parent / "runs.yaml")
     return path
 
 
@@ -268,6 +269,28 @@ def test_validation_against_a_tradingview_export(data, client):  # noqa: F811
     assert client.post("/api/system/validation", json={**body, "scan": "x"}).status_code == 400
     client.post("/api/system/validation/append", json=body)
     assert (data / "docs" / "validation.md").read_text().strip()
+
+
+def test_runs_overview_form_and_a_checked_save(client, config, monkeypatch):
+    runs = config.parent / "runs.yaml"
+    real = timer.RUNS_PATH.read_text(encoding="utf-8")
+    out = client.get("/api/timed-runs").json()
+    assert {"pm", "eod", "weekly"} <= {n["key"] for n in out["names"]}
+    assert out["started"] is False and out["note"].startswith("Saved here, but Commit & push")
+    form = client.get("/api/timed-runs/pm/form").json()
+    assert form["first"] == "07:17" and form["window"]
+    same = client.post("/api/timed-runs/pm", json={"values": {"first": form["first"]}}).json()
+    assert same == {"saved": False, "message": "Nothing changed.", "diff": ""}
+    saved = client.post("/api/timed-runs/pm", json={"values": {"first": "07:20"}}).json()
+    line = '+  - {key: pm, workflow: premarket.yml, name: Pre-market, at: "07:20"'
+    assert saved["saved"] and line in saved["diff"]
+    assert 'at: "07:20"' in runs.read_text() and timer.RUNS_PATH.read_text(encoding="utf-8") == real
+    bad = client.post("/api/timed-runs/pm", json={"values": {"first": "09:30"}})
+    assert bad.status_code == 400 and "outside its window" in bad.json()["detail"]
+    assert client.get("/api/timed-runs/nope/form").status_code == 404
+    assert client.post("/api/timed-runs/pm/commit").json()["ok"] is False
+    monkeypatch.setattr(health, "run_list", lambda *a, **k: pd.DataFrame())
+    assert client.get("/api/timed-runs?started=true").json()["started"] is False
 
 
 def test_scans_table_form_and_a_checked_save(client, config):

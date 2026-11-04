@@ -13,6 +13,7 @@ sectors are off, and Alpaca keys are removed from the environment.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
 import stat
@@ -59,14 +60,15 @@ def offline(cache: Path, patch=setattr) -> None:
 
 
 def view_only_config(folder: Path) -> Path:
-    """A read-only copy of config/scans.yaml, as baked into the server image."""
-    from trading_os import scans_view
+    """Read-only copies of config/scans.yaml and runs.yaml, as baked into the server image."""
+    from trading_os import scans_view, timer
     from trading_os.config import DEFAULT_PATH
 
     path = folder / "config" / "scans.yaml"
     path.parent.mkdir(parents=True)
-    shutil.copy(DEFAULT_PATH, path)
-    path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    for source, target in ((DEFAULT_PATH, path), (timer.RUNS_PATH, path.with_name("runs.yaml"))):
+        shutil.copy(source, target)
+        target.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
     if os.geteuid() == 0:  # root may write any file; the image runs as an unprivileged user
         editable = scans_view.editable
 
@@ -110,7 +112,9 @@ def main() -> None:
     if out.is_relative_to(REPO):
         parser.error("--out must be outside the code repo (Save & push runs git there)")
     if (out / "image").exists():
-        (out / "image" / "config" / "scans.yaml").chmod(0o644)
+        for name in ("scans.yaml", "runs.yaml"):
+            with contextlib.suppress(FileNotFoundError):
+                (out / "image" / "config" / name).chmod(0o644)
         shutil.rmtree(out / "image")
     app = make_app(out)
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")

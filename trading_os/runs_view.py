@@ -40,6 +40,14 @@ CAPTION = (
     "settings further down. Each change is checked like the jobs check it and saved on this "
     "PC; GitHub's jobs and the timer use it after Commit & push."
 )
+NOT_WRITABLE = (
+    "View only here: config/runs.yaml can't be written where the dashboard runs (on the "
+    "server it is part of the image). Edit runs on the PC dashboard, or see deploy/DEPLOY.md."
+)
+NOT_A_CHECKOUT = (
+    "Saved here, but Commit & push needs config/runs.yaml in a git checkout of the code repo "
+    "with push rights."
+)
 
 
 def _moment(job: timer.TimerJob, today: dt.date) -> dt.datetime:

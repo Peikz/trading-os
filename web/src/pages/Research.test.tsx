@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { mockApi } from "../test/mockApi";
 import { LiveResults } from "./LiveResults";
 import { Research } from "./Research";
+import { Runs } from "./Runs";
 import { Scans } from "./Scans";
 import { SystemHealth } from "./SystemHealth";
 
@@ -166,5 +167,39 @@ describe("Scans", () => {
     render(<Scans />);
     expect(await screen.findByText("View only here.")).toBeInTheDocument();
     expect(await screen.findByText("Check and save")).toBeDisabled();
+  });
+});
+
+describe("Runs", () => {
+  const runs = {
+    caption: "Every timed run.",
+    rows: [{ run: "Pre-market (pm)", on: true, "starts (NY · CPH)": "07:17 NY · 13:17 CPH", key: "pm" }],
+    names: [{ key: "pm", label: "Pre-market (pm)" }],
+    started: false,
+    writable: true,
+    checkout: true,
+    note: null,
+  };
+  const scans = { caption: "Every scan.", rows: [], names: [], writable: true, checkout: true, note: null };
+  const form = { enabled: true, first: "07:17", second: "07:35", clock: "New York", window: ["07:15", "07:55"] };
+
+  it("shows the runs, saves a new time with the diff, and loads the last starts", async () => {
+    const calls = mockApi({
+      "GET /api/timed-runs": runs,
+      "GET /api/timed-runs/pm/form": form,
+      "POST /api/timed-runs/pm": { saved: true, message: "Saved to config/runs.yaml.", diff: '+  at: "07:20"' },
+      "GET /api/timed-runs?started=true": { ...runs, started: true, rows: [{ ...runs.rows[0], "last start": "on time" }] },
+      "GET /api/scans": scans,
+    });
+    render(<Runs />);
+    expect(await screen.findByLabelText("Runs")).toHaveTextContent("07:17 NY · 13:17 CPH");
+    expect(await screen.findByText(/07:15-07:55/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Starts"), { target: { value: "07:20" } });
+    fireEvent.click(within(screen.getByLabelText("Edit a run")).getByText("Check and save"));
+    expect(await screen.findByText("Saved to config/runs.yaml.")).toBeInTheDocument();
+    const body = calls.find((c) => c.method === "POST")!.body as { values: Record<string, unknown> };
+    expect(body.values).toEqual({ enabled: true, first: "07:20", second: "07:35" });
+    fireEvent.click(screen.getByText("Load how each run last started (GitHub)"));
+    expect(await screen.findByText("on time")).toBeInTheDocument();
   });
 });

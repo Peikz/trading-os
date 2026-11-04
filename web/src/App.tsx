@@ -8,7 +8,7 @@ import { Journal } from "./pages/Journal";
 import { Guide } from "./pages/Guide";
 import { Market } from "./pages/Market";
 import { Research } from "./pages/Research";
-import { Scans } from "./pages/Scans";
+import { Runs } from "./pages/Runs";
 import { SystemHealth } from "./pages/SystemHealth";
 import { Stocks } from "./places/Stocks";
 import { Today } from "./places/Today";
@@ -45,7 +45,7 @@ function PlaceView({ route }: { route: Route }) {
       {place === "market" && <Market tab={tab} />}
       {place === "journal" && <Journal tab={tab} />}
       {place === "lab" && tab === "research" && <Research />}
-      {place === "lab" && tab === "scans" && <Scans />}
+      {place === "lab" && tab === "runs" && <Runs />}
       {place === "lab" && tab === "health" && <SystemHealth />}
       {place === "lab" && tab === "guide" && <Guide />}
     </div>
