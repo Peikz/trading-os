@@ -107,6 +107,20 @@ def test_every_page_renders(data_repo, monkeypatch, page):
     assert at.header[0].value  # each page has a header
 
 
+def test_todays_view_and_list_switch(data_repo, monkeypatch):
+    """Grid, List and Show change Today (Emil, 4 Nov 2026: they did nothing). They sit outside
+    the board fragment, so each change reruns the whole page."""
+    monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.selectbox(key="board_scope").set_value("Every scan hit").run()
+    at.button_group(key="board_mode").set_value("Grid").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("1-1 of 1" in str(m.value) for m in at.markdown)
+    at.button_group(key="board_mode").set_value("List").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("1 signals" in str(c.value) for c in at.caption)
+
+
 def test_journal_tabs_render_with_trades_positions_and_plans(data_repo, monkeypatch):
     import datetime as dt
 

@@ -1036,10 +1036,11 @@ def focus_chart(
 
 
 if page == "Today":
-    st.header("Today")
     if not runs:
+        st.header("Today")
         st.info("No runs yet. The first scheduled run writes here.")
         st.stop()
+    board.controls(data_dir)
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
     # The market is the pill in the top bar now (Emil, 4 Nov 2026 redesign)

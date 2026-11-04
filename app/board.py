@@ -213,6 +213,7 @@ def _everything() -> None:
     st.query_params.clear()
     st.session_state["board_scope"] = "Every scan hit"
     st.session_state["board_i"] = 0
+    st.session_state[FULL_RERUN] = True
 
 
 def _jump(i: int) -> None:
@@ -427,6 +428,7 @@ def _pick(i: int) -> None:
 def _scope(name: str) -> None:
     st.session_state["board_scope"] = name
     st.session_state["board_i"] = 0
+    st.session_state[FULL_RERUN] = True
 
 
 SECTIONS = [("act", "TO ACT ON"), ("own", "YOUR POSITIONS"), ("watch", "WATCHING")]
@@ -538,41 +540,63 @@ def today_rows(runs, cfg, data_dir, scan_frames, exchanges) -> tuple[pd.DataFram
     return rows, len(found) - len(graded)
 
 
-def show(
-    runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart, exchanges=None
-) -> None:
-    """Today (Emil, 4 Nov 2026 redesign): the queue on the left (to act on, your positions,
-    watching), the chart in the middle, the plan on the right with the decision first. Grid and
-    List show several at once; Show picks another list (C setups, every hit, a watchlist)."""
-    lists = board_data.watchlist_names(data_dir)
-    scopes = [TODAY, "Pushed, incl. C", "Every scan hit", *(LIST_MARK + n for n in lists)]
-    # Opened from a push (Emil, 27 Oct 2026): ?push=ah&session=...&t=A,B shows that push's
-    # stocks first, with every other hit one click away.
+# The view and the list sit outside the board fragment (Emil, 4 Nov 2026: Grid, List and Show
+# did nothing). A full rerun re-registers the fragment, so a stale one (the browser sends an id
+# the server no longer has, e.g. after the laptop's network slept) heals the moment either changes.
+FULL_RERUN = "board_full_rerun"  # set by a callback in the fragment that changes the list
+
+
+def _from_push() -> tuple[list[str], str, str]:
+    """A push link (?push=ah&session=...&t=A,B; Emil, 27 Oct 2026) or a Screener link
+    (?screen=Name&t=A,B; 29 Oct 2026): its stocks, the screen's name, and the list's label."""
     from_push = [t for t in str(st.query_params.get("t", "")).split(",") if t]
-    # Opened from the Screener (Emil, 29 Oct 2026): ?screen=Name&t=A,B flips through its stocks
     screen_name = str(st.query_params.get("screen", "") or "")
     pinned = f"From the screen: {screen_name}" if screen_name else "From the push"
+    return from_push, screen_name, pinned
+
+
+def controls(data_dir) -> None:
+    """Today's title row: the heading, the view (Focus, Grid, List) and the list (Show). Called
+    outside the fragment, so changing either reruns the whole page."""
+    lists = board_data.watchlist_names(data_dir)
+    scopes = [TODAY, "Pushed, incl. C", "Every scan hit", *(LIST_MARK + n for n in lists)]
+    from_push, _, pinned = _from_push()
     if from_push:
         scopes = [pinned, *scopes]
         if st.session_state.get("board_scope") not in scopes:
             st.session_state["board_scope"] = pinned
     if st.session_state.get("board_scope") not in scopes:
         st.session_state["board_scope"] = TODAY
-    head, view, more = st.columns([3, 2, 2], vertical_alignment="center")
-    mode = view.segmented_control(
+    title, view, more = st.columns([3, 2, 2], vertical_alignment="center")
+    title.header("Today")
+    view.segmented_control(
         "View",
         ["Focus", "Grid", "List"],
         default="Focus",
         key="board_mode",
         label_visibility="collapsed",
     )
-    scope = more.selectbox(
+    more.selectbox(
         "Show",
         scopes,
         key="board_scope",
         label_visibility="collapsed",
         help="Today's list: to act on, your positions, watching. C: no edge after costs.",
     )
+
+
+def show(
+    runs, cfg, data_dir, account, usd_rate, scan_frames, open_chart, chart, exchanges=None
+) -> None:
+    """Today (Emil, 4 Nov 2026 redesign): the queue on the left (to act on, your positions,
+    watching), the chart in the middle, the plan on the right with the decision first. Grid and
+    List show several at once; Show picks another list (C setups, every hit, a watchlist). The
+    view and the list come from `controls`, drawn above this fragment."""
+    if st.session_state.pop(FULL_RERUN, False):
+        st.rerun(scope="app")  # the list changed: redraw Show too
+    from_push, screen_name, _ = _from_push()
+    mode = st.session_state.get("board_mode") or "Focus"
+    scope = st.session_state.get("board_scope", TODAY)
     c_count = 0
     if scope.startswith("From the screen"):
         hits = ticker_rows(runs, from_push, f"screen: {screen_name}")
@@ -599,7 +623,7 @@ def show(
         n_act, n_own = int((sections == "act").sum()), int((sections == "own").sum())
         n_watch = int((sections == "watch").sum())
         act_words = _plural(n_act, "setup") + " to act on" if n_act else "Nothing to buy"
-        head.markdown(
+        st.markdown(
             f"<span style='color:#98A2B3;font-size:1.05rem'>{act_words} · "
             f"{_plural(n_own, 'position')} · {n_watch} on watch</span>",
             unsafe_allow_html=True,
