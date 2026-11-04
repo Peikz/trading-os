@@ -168,6 +168,8 @@ def scan_table(scan: str, hits: pd.DataFrame, max_rows: int) -> list[str]:
         columns.append(("Short", "si_tag", "text"))
     if "ibd_tag" in hits and hits["ibd_tag"].notna().any():  # tracked, not a rule (`ibd`)
         columns.append(("IBD", "ibd_tag", "text"))
+    if "vol_build" in hits and hits["vol_build"].notna().any():  # a fact (`volume_build`)
+        columns.append(("Vol build", "vol_build", ".1f"))
     columns += COLUMNS.get(scan, [])
     lines = [
         "| " + " | ".join(h for h, _, _ in columns) + " |",

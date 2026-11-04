@@ -92,6 +92,7 @@ AUDIT_COLUMNS = [
     "hist_range_nd",
     "hist_avg_volume_short",
     "hist_avg_volume_long",
+    "vol_build",  # 5-day volume before the session / the 50 before (Emil, 4 Nov 2026)
     "tightness_adr",
     "cats",
     "cats_growth",

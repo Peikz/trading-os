@@ -29,6 +29,9 @@ FIELDS: dict[str, tuple[str, str, str]] = {
     "avg_volume_20d": ("Avg volume 20d", "num", "Price & volume"),
     "avg_dollar_volume_20d": ("Avg $ volume 20d", "money", "Price & volume"),
     "rvol50": ("Relative volume (50d)", "num", "Price & volume"),
+    "vol_build": ("Volume build before (5d / 50d)", "num", "Price & volume"),
+    "vol_build_now": ("Volume build at the close (5d / 50d)", "num", "Price & volume"),
+    "vol_quiet_now": ("Price quiet 5 days (within 1 ADR)", "bool", "Price & volume"),
     "market_cap": ("Market cap", "money", "Size"),
     "float_shares": ("Float shares", "num", "Size"),
     "adr20_pct": ("ADR % (20d)", "pct", "Volatility"),
@@ -74,7 +77,7 @@ OPS = {
     "bool": ["is yes", "is no"],
     "text": ["is one of", "is not one of"],
 }
-SHOWN = ["ticker", "close", "chg_pct", "rvol50", "adr20_pct", "avg_dollar_volume_20d",
+SHOWN = ["ticker", "close", "chg_pct", "rvol50", "vol_build", "adr20_pct", "avg_dollar_volume_20d",
          "market_cap", "rs_pct", "pct_from_52w_high", "industry"]  # fmt: skip
 # The fields a live TradingView fetch brings (the rest come from the last EOD snapshot)
 LIVE = {"close", "chg_pct", "gap_pct", "volume", "dollar_volume", "market_cap", "float_shares",
@@ -247,6 +250,18 @@ EXAMPLES: dict[str, dict] = {
             {"field": "rs_pct", "op": ">=", "value": 80},
         ],
         "sort": "rs_pct",
+        "descending": True,
+    },
+    # Volume building while the price is quiet (data repo docs/research/2026-11-04-volume-build.md):
+    # an EP-like day in the next two weeks 3-5 times as likely, but no buy signal on its own
+    "Volume building, price quiet": {
+        "filters": [
+            {"field": "close", "op": ">=", "value": 5},
+            {"field": "avg_dollar_volume_20d", "op": ">=", "value": 5_000_000},
+            {"field": "vol_build_now", "op": ">=", "value": 2},
+            {"field": "vol_quiet_now", "op": "is yes", "value": None},
+        ],
+        "sort": "vol_build_now",
         "descending": True,
     },
     "Gappers on volume": {

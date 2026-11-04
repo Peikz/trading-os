@@ -161,6 +161,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     uni = universe.build_universe(df, cfg.universe, slot)
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
+    uni = _with_volume_build(uni, args.data_dir, cfg, session, slot, df)
     if slot == "eod" and (cfg.scans["luk_flush"].enabled or cfg.scans["luk_pullback"].enabled):
         uni = _with_luk(uni, args.data_dir, cfg, session)
     if slot == "eod" and (cfg.scans["vcp"].enabled or cfg.scans["minervini_tt"].enabled):
@@ -302,6 +303,22 @@ def _with_market_facts(uni: pd.DataFrame, cfg, session) -> tuple[pd.DataFrame, p
     except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
         status(f"Industries: FAILED ({type(exc).__name__}), facts without ranks")
         return uni, pd.DataFrame(columns=industries.COLUMNS)
+
+
+def _with_volume_build(uni: pd.DataFrame, data_dir: Path, cfg, session, slot, df) -> pd.DataFrame:
+    """`vol_build` on every stock: 5-day volume before the session over the 50 before, and at
+    EOD the same up to this close for the watchlist (`volume_build`). Facts, not rules: a
+    problem leaves the columns out."""
+    from trading_os import volume_build
+
+    try:
+        today = enrich.todays_bars(df, session) if slot in ("eod", "weekly") else None
+        out = volume_build.attach(uni, data_dir, cfg, session, today)
+        status(f"Volume build: {int((out['vol_build'] >= 2).sum())} stocks at 2x or more")
+        return out
+    except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
+        status(f"Volume build: FAILED ({type(exc).__name__}), left out")
+        return uni
 
 
 def _with_luk(uni: pd.DataFrame, data_dir: Path, cfg, session) -> pd.DataFrame:

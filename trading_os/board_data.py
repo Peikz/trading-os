@@ -15,7 +15,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import breadth, heat, ibd, notify
+from trading_os import breadth, heat, ibd, notify, volume_build
 
 BAR_COLUMNS = ["session_date", "open", "high", "low", "close", "volume"]
 
@@ -105,12 +105,15 @@ def collect(
 
 
 def tags(row: Mapping[str, Any]) -> list[str]:
-    """The card's tags: heat, heavily shorted, IBD."""
+    """The card's tags: heat, heavily shorted, IBD, a volume build before the day."""
     out = []
     for key in ("heat_tag", "si_tag", "ibd_tag"):
         v = row.get(key)
         if isinstance(v, str) and v:
             out.append(v)
+    build = volume_build.card_tag(row)
+    if build:
+        out.append(build)
     return out
 
 
@@ -163,6 +166,9 @@ def key_stats(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     chips.append(("From 52w high", f"{hi:+.0f}%" if hi is not None else "–"))
     rs = num("rs_pct")
     chips.append(("RS", f"{rs:.0f}" if rs is not None else "–"))
+    vb = num("vol_build")  # 5-day volume before the day / the 50 before (`volume_build`)
+    if vb is not None:
+        chips.append(("Vol build", f"{vb:.1f}x"))
     rank, of = num("industry_rank"), num("industry_of")
     ind = row.get("industry") if isinstance(row.get("industry"), str) else ""
     chips.append(("Industry", f"{ind} #{int(rank)}/{int(of)}" if rank and of else ind or "–"))
