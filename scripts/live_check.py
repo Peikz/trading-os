@@ -43,14 +43,12 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     if live.empty:
         line = "No live A+ / A / B signals yet."
         return [*head, line], [line], {"signals": 0}
-    sessions = [
-        s
-        for s in clock.sessions_back(cfg.schedule, today, LOOKBACK)
-        if s >= min(live["session_date"])
-    ]
+    back = clock.sessions_back(cfg.schedule, today, LOOKBACK)
+    first = next((i for i, s in enumerate(back) if s >= min(live["session_date"])), len(back))
+    sessions = back[max(0, first - lt.MA_SESSIONS) :]  # the 20-day MA from the first signal
     bars = history.load_bars(data_dir, sessions)
     bars = bars[bars["ticker"].isin(set(live["ticker"]))]
-    res = lt.plan_results(live, bars)
+    res = lt.plan_results(live, bars, lt.exit_rules(cfg.grading))
     table = lt.compare(res)
     trades = dashboard.latest_journal(data_dir)
     if not trades.empty and "r_multiple" in trades:
@@ -66,8 +64,9 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     lines = [
         *head,
         "How the live A+ / A / B signals did by their study plan (bought at the plan's price, "
-        "out at the stop or at the close after the plan's sessions, net of the study's cost), "
-        "against "
+        "out at the stop or at the close after the plan's sessions, net of the study's cost; "
+        "MA-surf: a buy-stop at the pivot the next session, no trade when it doesn't fill, out "
+        "at the stop or the first close under the 20-day MA), against "
         "the history each grade carried. 'Below the study' needs at least "
         f"{lt.MIN_TRADES} closed trades and both the mean R and the win rate clearly under the "
         "study's. Facts, not advice.",
@@ -82,6 +81,7 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
                 "grade",
                 "closed",
                 "open",
+                "not_filled",
                 "live_mean_r",
                 "live_win_pct",
                 "study_mean_r",

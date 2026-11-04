@@ -33,6 +33,7 @@ from trading_os import (
     stats,
     strategy_history,
 )
+from trading_os.config import load_config
 
 EP_FLAGS = ["c1_gap", "c2_volume", "c3_growth", "c4_neglect", "c5_stop"]
 
@@ -690,7 +691,9 @@ def regime_view(folder: Path, source: str, strategy: str | None, exit_name: str 
 LIVE_CAPTION = (
     "Each live A+ / A / B signal played out by its study plan: bought at the plan's price, out "
     "at the stop (checked from the next session) or at the close after the plan's sessions, "
-    "net of the study's cost. 'Below the study' needs {n}+ closed trades and both the mean R "
+    "net of the study's cost. MA-surf is a buy-stop at the pivot the next session (no trade "
+    "when it doesn't fill), out at the stop or the first close under the 20-day MA. 'Below "
+    "the study' needs {n}+ closed trades and both the mean R "
     "and the win rate clearly under the study's; until then it says 'too few trades yet'."
 )
 
@@ -707,7 +710,8 @@ def live_grades(data_dir: Path, bars_of) -> dict[str, Any] | None:
         return {"compare": None, "gaps": None, "signals": None, "monthly": newest}
     tickers = sorted(set(graded["ticker"]))
     bars = pd.concat([bars_of(t).assign(ticker=t) for t in tickers], ignore_index=True)
-    results = live_tracking.plan_results(graded, bars)
+    exit_rules = live_tracking.exit_rules(load_config().grading)
+    results = live_tracking.plan_results(graded, bars, exit_rules)
     trades = dashboard.latest_journal(data_dir)
     if "r_multiple" in trades:
         trades = trades.dropna(subset=["r_multiple"])

@@ -8,6 +8,11 @@ and are Emil's own trades doing what the plan would have? Facts, not advice.
   after the fill, the trade review's convention); a session that opens below the stop exits
   at its open. Net R subtracts the trade's cost in R (`grade_cost_r`, else the study's median
   for that entry time).
+- A setup on its own plan plays out the study's way (Emil, 4 Nov 2026). MA-surf
+  (`pivot_1000`) is a buy-stop at the pivot the session after the signal: a session whose
+  high stays under the pivot leaves it "not filled", no trade, as in the study; one that
+  opens over it is bought at the open (daily bars have no 10:00 price). `trail_ma20` exits
+  at the stop or at the first close under the 20-day MA, `TRAIL_SESSIONS` at the longest.
 - Compare: per strategy, entry time and grade, the closed live trades against the history
   each signal carried (`grade_stat_mean_r`, `grade_stat_win_pct`). "Below the study" needs
   enough trades and both the mean R and the win rate clearly under the study's.
@@ -33,8 +38,21 @@ STUDY_COST_R = {
     "next_1030": 0.06,
     "close": 0.10,
 }
-NEXT_DAY_ENTRIES = ("next_1030", "next_open")
+ORDER_ENTRIES = ("pivot_1000",)  # a buy-stop at the pivot the session after the signal
+NEXT_DAY_ENTRIES = ("next_1030", "next_open", *ORDER_ENTRIES)
+TRAIL_SESSIONS = 126  # the grading study's longest exit (config intraday_study.exit_sessions)
+MA_SESSIONS = 20  # the trail's average; bars must reach this far before the first signal
 MIN_TRADES = 20
+
+
+def exit_rules(grading: Mapping) -> dict[str, str]:
+    """Each graded strategy's exit (config `grading:` quality and scorecards): `trail_ma20`
+    for MA-surf, the holding period for the rest."""
+    out: dict[str, str] = {}
+    for part in ("strategies", "quality"):
+        for name, rule in (grading.get(part) or {}).items():
+            out[name] = rule.get("exit", "hold")
+    return out
 
 
 def _num(x) -> float:
@@ -57,9 +75,10 @@ def entry_session(signal_day, entry_rule: str, sessions: list) -> object | None:
     return signal_day
 
 
-def play_out(entry: float, stop: float, hold: int, path: pd.DataFrame) -> dict:
-    """`path`: the sessions after the entry session (open, low, close), oldest first. Returns
-    status (closed / open), the exit price and how many sessions it took."""
+def play_out(entry: float, stop: float, hold: int, path: pd.DataFrame, trail: bool = False) -> dict:
+    """`path`: the sessions after the entry session (open, low, close; `ma20` to trail),
+    oldest first. Returns status (closed / open), the exit price and how many sessions it
+    took. `trail`: also out at the first close under the 20-day MA."""
     if not (entry > 0) or not (stop < entry):
         return {"status": "invalid", "exit": math.nan, "sessions": 0}
     for k, (_, bar) in enumerate(path.iterrows(), start=1):
@@ -69,15 +88,20 @@ def play_out(entry: float, stop: float, hold: int, path: pd.DataFrame) -> dict:
             return {"status": "closed", "exit": float(bar["open"]), "sessions": k}
         if bar["low"] <= stop:
             return {"status": "closed", "exit": float(stop), "sessions": k}
+        if trail and bar["close"] < bar["ma20"]:  # a NaN average never exits
+            return {"status": "closed", "exit": float(bar["close"]), "sessions": k}
         if k == hold:
             return {"status": "closed", "exit": float(bar["close"]), "sessions": k}
     last = float(path["close"].iloc[-1]) if len(path) else math.nan
     return {"status": "open", "exit": last, "sessions": min(len(path), hold)}
 
 
-def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
+def plan_results(
+    signals: pd.DataFrame, bars: pd.DataFrame, exits: Mapping[str, str] | None = None
+) -> pd.DataFrame:
     """One row per live A+ / A / B signal: its plan's result so far. `bars`: ticker, session_date,
-    open, low, close (daily)."""
+    open, high, low, close (daily), from `MA_SESSIONS` before the first signal for the trail.
+    `exits`: each strategy's exit (`exit_rules`); without one a plan holds its sessions."""
     cols = [
         "signal_id",
         "session_date",
@@ -105,26 +129,35 @@ def plan_results(signals: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
     bars = bars.copy()
     bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
     sessions = sorted(bars["session_date"].unique())
-    by_ticker = {
-        t: g.sort_values("session_date").set_index("session_date")
-        for t, g in bars.groupby("ticker")
-    }
+    by_ticker = {}
+    for t, g in bars.groupby("ticker"):
+        g = g.sort_values("session_date").set_index("session_date")
+        by_ticker[t] = g.assign(ma20=g["close"].rolling(MA_SESSIONS).mean())
+    exits = exits or {}
     rows = []
     for rec in live.to_dict("records"):
         rule = str(rec.get("grade_entry_rule") or "")
+        rule = "" if rule == "nan" else rule
         entry = _num(rec.get("grade_entry"))
         if math.isnan(entry):
             entry = _num(rec.get("plan_entry"))
         stop = _num(rec.get("grade_stop"))
+        trail = exits.get(rec.get("grade_strategy")) == "trail_ma20"
         hold_raw = _num(rec.get("grade_hold_sessions"))
-        hold = 21 if math.isnan(hold_raw) else int(hold_raw)
+        hold = TRAIL_SESSIONS if trail else 21 if math.isnan(hold_raw) else int(hold_raw)
         day = pd.Timestamp(rec["session_date"]).date()
         start = entry_session(day, rule, sessions)
         g = by_ticker.get(rec["ticker"])
-        if start is None or g is None:
+        order = rule in ORDER_ENTRIES
+        high = _num(g.loc[start].get("high")) if order and g is not None and start in g.index else 0
+        if start is None or g is None or math.isnan(high) or (order and start not in g.index):
             out = {"status": "waiting", "exit": math.nan, "sessions": 0}
+        elif order and high < entry:
+            out = {"status": "not filled", "exit": math.nan, "sessions": 0}
         else:
-            out = play_out(entry, stop, hold, g[g.index > start])
+            if order:  # opened over the pivot: bought at the open
+                entry = max(entry, _num(g.loc[start, "open"]))
+            out = play_out(entry, stop, hold, g[g.index > start], trail)
         risk = entry - stop
         r = (out["exit"] - entry) / risk if risk > 0 and not math.isnan(out["exit"]) else math.nan
         cost = _num(rec.get("grade_cost_r"))
@@ -205,6 +238,7 @@ def compare(results: pd.DataFrame, min_trades: int = MIN_TRADES) -> pd.DataFrame
         "grade",
         "closed",
         "open",
+        "not_filled",
         "live_mean_r",
         "live_win_pct",
         "study_mean_r",
@@ -225,6 +259,7 @@ def compare(results: pd.DataFrame, min_trades: int = MIN_TRADES) -> pd.DataFrame
             | {
                 "closed": len(done),
                 "open": int((part["status"] == "open").sum()),
+                "not_filled": int((part["status"] == "not filled").sum()),
                 "live_mean_r": r.mean() if len(r) else math.nan,
                 "live_win_pct": (r > 0).mean() * 100 if len(r) else math.nan,
                 "study_mean_r": study_mean,

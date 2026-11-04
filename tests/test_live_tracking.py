@@ -12,13 +12,14 @@ A = "".join(["C", "H", "Q"])
 DAYS = list(pd.bdate_range("2026-10-01", periods=40).date)
 
 
-def bars(closes, lows=None, opens=None, ticker=A):
+def bars(closes, lows=None, opens=None, ticker=A, highs=None):
     n = len(closes)
     return pd.DataFrame(
         {
             "ticker": ticker,
             "session_date": DAYS[:n],
             "open": opens if opens is not None else closes,
+            "high": highs if highs is not None else [c + 0.1 for c in closes],
             "low": lows if lows is not None else [c - 0.1 for c in closes],
             "close": closes,
         }
@@ -66,6 +67,50 @@ def test_plan_results_net_of_the_study_cost_and_next_day_entries():
     assert nxt["exit"] == 14.0  # bought the session after the signal
     c = lt.plan_results(signal(grade="C"), bars(closes))
     assert c.empty  # only A+ and A are tracked
+
+
+SURF = {"qm_surf": "trail_ma20", "ep": "hold"}
+
+
+def surf(**kw):
+    return signal(
+        scan="ma_surf",
+        grade="A",
+        grade_strategy="qm_surf",
+        grade_entry_rule="pivot_1000",
+        grade_hold_sessions=np.nan,
+        **kw,
+    ).assign(session_date=DAYS[lt.MA_SESSIONS])
+
+
+def test_ma_surf_needs_the_pivot_next_session_and_trails_the_20_day_ma():
+    flat = [10.0] * lt.MA_SESSIONS  # the 20-day MA sits at 10 before the signal
+    # signal day, then a session whose high stays under the pivot: no trade
+    miss = bars([*flat, 9.8, 9.9, 9.7], highs=[*[10.1] * 20, 9.9, 9.95, 9.8])
+    row = lt.plan_results(surf(grade_entry=10.5, grade_stop=9.5), miss, SURF).iloc[0]
+    assert row["status"] == "not filled" and np.isnan(row["r_net"])
+    # filled the next session, up for two sessions, then a close under the 20-day MA
+    up = bars([*flat, 10.4, 10.6, 11.0, 11.5, 9.9], opens=[*flat, 10.4, 10.3, 11.0, 11.5, 10.5])
+    row = lt.plan_results(surf(grade_entry=10.5, grade_stop=9.5), up, SURF).iloc[0]
+    assert (row["status"], row["exit"], row["sessions"]) == ("closed", 9.9, 3)
+    assert row["entry"] == 10.5
+    # opened over the pivot: bought at the open
+    gap = bars([*flat, 10.4, 11.0, 11.2], opens=[*flat, 10.4, 11.0, 11.2])
+    row = lt.plan_results(surf(grade_entry=10.5, grade_stop=9.5), gap, SURF).iloc[0]
+    assert row["entry"] == 11.0 and row["status"] == "open"
+    # without the exit rules the old fixed hold applies
+    held = lt.plan_results(surf(grade_entry=10.5, grade_stop=9.5), up).iloc[0]
+    assert held["status"] == "open"
+    table = lt.compare(lt.plan_results(surf(grade_entry=10.5, grade_stop=9.5), miss, SURF))
+    assert table.iloc[0]["not_filled"] == 1 and table.iloc[0]["closed"] == 0
+
+
+def test_exit_rules_read_the_grading_config():
+    from trading_os.config import load_config
+
+    rules = lt.exit_rules(load_config().grading)
+    assert rules["qm_surf"] == "trail_ma20"
+    assert rules["ep"] != "trail_ma20"
 
 
 def test_verdict_needs_trades_and_both_measures():
