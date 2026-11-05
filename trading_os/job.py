@@ -224,6 +224,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
         header = [*header, *ibd.line(ibd_info)]
     if slot == "am":
         results = _flagged_last_evening(results, args.data_dir, cfg, session)
+    press_line = _press_line(args.data_dir, cfg, session)
+    push_head, header = [*push_head, *press_line], [*header, *press_line]
     selected = notify.select_for_push(results, cfg, slot)
     carried = _from_last_close(args.data_dir, cfg, session, uni, slot) if slot == "ah" else {}
     if carried:
@@ -268,6 +270,8 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     candidates = store.build_candidates(results, ctx, pushed)
     snapshot = None if slot in INTRADAY_SLOTS else uni
     store.write_run(args.data_dir, ctx, snapshot, candidates, extras)
+    if slot == "eod":
+        _update_press(args.data_dir, cfg, session)
     for name, hits in results.items():
         alert = int((hits["tier"] == "alert").sum()) if len(hits) else 0
         status(f"{notify.SCAN_LABELS.get(name, name)}: {len(hits)} hits ({alert} alert), saved")
@@ -303,6 +307,33 @@ def _with_market_facts(uni: pd.DataFrame, cfg, session) -> tuple[pd.DataFrame, p
     except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
         status(f"Industries: FAILED ({type(exc).__name__}), facts without ranks")
         return uni, pd.DataFrame(columns=industries.COLUMNS)
+
+
+def _press_line(data_dir: Path, cfg, session) -> list[str]:
+    """The push / report line while pressing is on (`press`). Auxiliary: a problem shows none."""
+    from trading_os import press
+
+    if not cfg.grading["enabled"] or not cfg.grading["press"]["enabled"]:
+        return []
+    try:
+        return press.line(press.load(data_dir, session))
+    except Exception as exc:  # noqa: BLE001 - a line in the push; the run goes on
+        status(f"Pressing: line FAILED ({type(exc).__name__})")
+        return []
+
+
+def _update_press(data_dir: Path, cfg, session) -> None:
+    """After the close is saved: replay the live A+/A signals and save the pressing state for
+    the next runs. Counts only in the log (the state itself is a result)."""
+    from trading_os import press
+
+    if not cfg.grading["enabled"] or not cfg.grading["press"]["enabled"]:
+        return
+    try:
+        st = press.update(data_dir, cfg, session)
+        status(f"Pressing: state saved ({st['closed']} closed signals)")
+    except Exception as exc:  # noqa: BLE001 - sizing stays as it was
+        status(f"Pressing: update FAILED ({type(exc).__name__}), last state kept")
 
 
 def _with_volume_build(uni: pd.DataFrame, data_dir: Path, cfg, session, slot, df) -> pd.DataFrame:

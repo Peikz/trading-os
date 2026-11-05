@@ -263,7 +263,9 @@ GRADING_KEYS = {
     "quality",
     "costs",
     "strategies",
+    "press",
 }
+GRADING_PRESS_KEYS = {"enabled", "window", "mean_r_above", "mult", "grades"}
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
 # A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
@@ -584,6 +586,7 @@ def _check_grading(raw: Any) -> None:
     feature points that match their bucket edges (one more point than edges)."""
     _check_keys("grading", raw, GRADING_KEYS)
     _check_keys("grading.costs", raw["costs"], GRADING_COST_KEYS)
+    _check_keys("grading.press", raw["press"], GRADING_PRESS_KEYS)
     for name, spec in raw["conditions"].items():
         if "feature" not in spec or not set(spec) - {"feature"} <= CONDITION_TESTS:
             raise ConfigError(f"grading.conditions.{name}: a feature and {sorted(CONDITION_TESTS)}")
