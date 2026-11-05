@@ -15,7 +15,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import breadth, heat, ibd, notify, volume_build
+from trading_os import breadth, funds13f, heat, ibd, notify, volume_build
 
 BAR_COLUMNS = ["session_date", "open", "high", "low", "close", "volume"]
 
@@ -105,7 +105,7 @@ def collect(
 
 
 def tags(row: Mapping[str, Any]) -> list[str]:
-    """The card's tags: heat, heavily shorted, IBD, a volume build before the day."""
+    """The card's tags: heat, heavily shorted, IBD, a volume build before the day, funds."""
     out = []
     for key in ("heat_tag", "si_tag", "ibd_tag"):
         v = row.get(key)
@@ -114,6 +114,9 @@ def tags(row: Mapping[str, Any]) -> list[str]:
     build = volume_build.card_tag(row)
     if build:
         out.append(build)
+    funds = funds13f.card_tag(row)
+    if funds:
+        out.append(funds)
     return out
 
 
@@ -169,6 +172,9 @@ def key_stats(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     vb = num("vol_build")  # 5-day volume before the day / the 50 before (`volume_build`)
     if vb is not None:
         chips.append(("Vol build", f"{vb:.1f}x"))
+    own = num("fund_own")  # 13F shares / shares outstanding, last quarter (`funds13f`)
+    if own is not None:
+        chips.append(("Funds own", f"{own:.0%}"))
     rank, of = num("industry_rank"), num("industry_of")
     ind = row.get("industry") if isinstance(row.get("industry"), str) else ""
     chips.append(("Industry", f"{ind} #{int(rank)}/{int(of)}" if rank and of else ind or "–"))

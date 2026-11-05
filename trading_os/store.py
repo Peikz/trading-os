@@ -93,6 +93,8 @@ AUDIT_COLUMNS = [
     "hist_avg_volume_short",
     "hist_avg_volume_long",
     "vol_build",  # 5-day volume before the session / the 50 before (Emil, 4 Nov 2026)
+    "fund_own",  # 13F shares / shares outstanding, last quarter (`funds13f`, Emil 5 Nov 2026)
+    "fund_breadth",  # 13F net new holders / holders the quarter before
     "press_mult",  # pressing's risk multiple on the hit (`press`, Emil 5 Nov 2026)
     "tightness_adr",
     "cats",

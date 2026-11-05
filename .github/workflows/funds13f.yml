@@ -1,0 +1,66 @@
+# Fund holdings on the card (Emil, 5 Nov 2026): the newest quarter of SEC's Form 13F data sets,
+# CUSIPs mapped to tickers through OpenFIGI, into the data repo's data/funds/. Quarterly, a few
+# days after the 45-day filing deadlines (14 Feb, 15 May, 14 Aug, 14 Nov), plus manual runs.
+# This repo is public: the job prints counts and status only.
+
+name: Funds 13F
+
+on:
+  schedule:
+    - cron: "17 3 18 2,5,8,11 *"
+  workflow_dispatch:
+
+concurrency:
+  group: funds13f            # its own group: a 1-3 hour run must not hold up the data-repo jobs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  funds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/funds
+            docs
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: 13F
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: uv run --frozen --no-dev python -m trading_os.funds13f --data-dir data-repo
+
+      - name: Commit data
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add -A data/funds
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "funds13f: data (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1

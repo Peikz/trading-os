@@ -30,6 +30,8 @@ const WORDS: Record<string, [string, string?]> = {
   chg_pct: ["Change %"],
   rvol50: ["Relative volume", "RVOL against the 50-day average"],
   vol_build: ["Volume build", "The 5 days' volume before the day against the 50 days before"],
+  fund_own: ["Funds own", "Share of the stock the funds held at the last quarter end (SEC 13F)"],
+  fund_breadth: ["Funds piling in", "New fund holders minus those who left, against the holders the quarter before (SEC 13F)"],
   adr20_pct: ["Daily range %", "ADR %: average daily range over 20 days"],
   avg_dollar_volume_20d: ["$ volume", "Average dollar volume over 20 days"],
   market_cap: ["Market cap"],

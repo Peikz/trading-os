@@ -162,6 +162,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     status(f"Universe: {len(uni)} logged tier, {(uni['tier'] == 'alert').sum()} alert tier")
     uni, ranked_industries = _with_market_facts(uni, cfg, session)
     uni = _with_volume_build(uni, args.data_dir, cfg, session, slot, df)
+    uni = _with_funds(uni, args.data_dir, session)
     if slot == "eod" and (cfg.scans["luk_flush"].enabled or cfg.scans["luk_pullback"].enabled):
         uni = _with_luk(uni, args.data_dir, cfg, session)
     if slot == "eod" and (cfg.scans["vcp"].enabled or cfg.scans["minervini_tt"].enabled):
@@ -349,6 +350,21 @@ def _with_volume_build(uni: pd.DataFrame, data_dir: Path, cfg, session, slot, df
         return out
     except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
         status(f"Volume build: FAILED ({type(exc).__name__}), left out")
+        return uni
+
+
+def _with_funds(uni: pd.DataFrame, data_dir: Path, session) -> pd.DataFrame:
+    """13F fund holdings from the last complete quarter (`funds13f`). Facts, not rules: a
+    problem or no table leaves the columns out."""
+    from trading_os import funds13f
+
+    try:
+        out = funds13f.attach(uni, data_dir, session)
+        if "fund_holders" in out:
+            status(f"Funds (13F): {int(out['fund_holders'].notna().sum())} stocks with holdings")
+        return out
+    except Exception as exc:  # noqa: BLE001 - facts only; scans and alerts don't need them
+        status(f"Funds (13F): FAILED ({type(exc).__name__}), left out")
         return uni
 
 
