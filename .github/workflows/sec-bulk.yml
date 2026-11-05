@@ -15,6 +15,12 @@ on:
         type: choice
         options: [build, check]
         default: build
+      since:
+        description: "older build: facts and events from this date (e.g. 2009-01-01); empty = config"
+        default: ""
+      release:
+        description: "release to write (sec-10y; an older build goes to its own, e.g. sec-2009)"
+        default: sec-10y
 
 concurrency:
   group: sec
@@ -54,13 +60,13 @@ jobs:
           REPO="${{ github.repository_owner }}/trading-os-data"
           mkdir -p bars work
           gh release download bars-alpaca -R "$REPO" -D bars -p "20*.parquet"
-          gh release download sec-10y -R "$REPO" -D work -p acceptance_checks.parquet 2>/dev/null || true
+          gh release download "${{ inputs.release }}" -R "$REPO" -D work -p acceptance_checks.parquet 2>/dev/null || true
           echo "bar files: $(ls bars | wc -l), cached checks: $(ls work | wc -l)"
 
       - name: SEC bulk
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: uv run --frozen --no-dev python -m trading_os.sec_bulk_cli --mode ${{ inputs.mode }} --data-dir data-repo --bars bars --work work --out out
+        run: uv run --frozen --no-dev python -m trading_os.sec_bulk_cli --mode ${{ inputs.mode }} --data-dir data-repo --bars bars --work work --out out ${{ inputs.since != '' && format('--facts-since {0} --events-since {0}', inputs.since) || '' }}
 
       - name: Keep the header checks (also after a failure, so a rerun continues)
         if: ${{ always() && inputs.mode == 'build' && hashFiles('out/acceptance_checks.parquet') != '' }}
@@ -68,8 +74,8 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
-          gh release view sec-10y -R "$REPO" >/dev/null 2>&1 || gh release create sec-10y -R "$REPO" --title "SEC fundamentals, 10 years" --notes "Point-in-time earnings events, quarterly EPS/revenue/net income, shares, companies and ticker-CIK map from SEC EDGAR's bulk files (trading_os/sec_bulk.py)." >/dev/null
-          gh release upload sec-10y out/acceptance_checks.parquet -R "$REPO" --clobber
+          gh release view "${{ inputs.release }}" -R "$REPO" >/dev/null 2>&1 || gh release create "${{ inputs.release }}" -R "$REPO" --title "SEC fundamentals (${{ inputs.release }})" --notes "Point-in-time earnings events, quarterly EPS/revenue/net income, shares, companies and ticker-CIK map from SEC EDGAR's bulk files (trading_os/sec_bulk.py)." >/dev/null
+          gh release upload "${{ inputs.release }}" out/acceptance_checks.parquet -R "$REPO" --clobber
 
       - name: Upload
         if: ${{ inputs.mode == 'build' }}
@@ -77,5 +83,5 @@ jobs:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           REPO="${{ github.repository_owner }}/trading-os-data"
-          gh release upload sec-10y out/*.parquet out/summary.json -R "$REPO" --clobber
+          gh release upload "${{ inputs.release }}" out/*.parquet out/summary.json -R "$REPO" --clobber
           echo "uploaded: $(ls out | wc -l) files"

@@ -1321,9 +1321,15 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bars", type=Path, help="folder with the 10-year YYYY.parquet bars")
     parser.add_argument("--work", type=Path, default=Path("work"))
     parser.add_argument("--out", type=Path, default=Path("out"))
+    parser.add_argument("--facts-since", help="override sec_bulk.facts_since (an older build)")
+    parser.add_argument("--events-since", help="override sec_bulk.events_since (an older build)")
     args = parser.parse_args(argv)
     config = load_config()
-    conf = config.sec_bulk
+    conf = dict(config.sec_bulk)
+    if args.facts_since:
+        conf["facts_since"] = args.facts_since
+    if args.events_since:
+        conf["events_since"] = args.events_since
     agent = os.environ.get("SEC_USER_AGENT") or config.sec["user_agent"]
     if "@" not in agent:
         status("SEC bulk: set SEC_USER_AGENT (a name and contact email; SEC requires one)")
