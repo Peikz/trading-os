@@ -144,3 +144,62 @@ def test_indexbars_keeps_regular_hours_of_each_year(tmp_path):
     assert client.calls[0][:2] == (("SPY", "QQQ", "IWM"), "5Min")
     table = pd.read_parquet(tmp_path / "indexbars.parquet")
     assert len(table) == 4  # 09:30 and 15:55 kept, 09:25 and 16:00 dropped, in both years
+
+
+def _zip13f(period: str, filed: str, rows: list[tuple[str, str, str, int]]) -> bytes:
+    """rows: (accession, filer cik, cusip, shares)."""
+    accs = sorted({(a, c) for a, c, _, _ in rows})
+    sub = "ACCESSION_NUMBER\tFILING_DATE\tSUBMISSIONTYPE\tCIK\tPERIODOFREPORT\n" + "".join(
+        f"{a}\t{filed}\t13F-HR\t{c}\t{period}\n" for a, c in accs
+    )
+    info = (
+        "ACCESSION_NUMBER\tNAMEOFISSUER\tTITLEOFCLASS\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\n"
+    )
+    info += "".join(f"{a}\tSOME CORP\tCOM\t{u}\t{n}\tSH\t\n" for a, _, u, n in rows)
+    info += f"{rows[0][0]}\tSOME CORP\tCOM\t{rows[0][2]}\t999\tSH\tCall\n"  # an option: dropped
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("SUBMISSION.tsv", sub)
+        z.writestr("INFOTABLE.tsv", info)
+    return buf.getvalue()
+
+
+def test_13f_counts_holders_and_their_changes(tmp_path):
+    since = dt.date(2023, 9, 30)
+    q1 = _zip13f(
+        "30-SEP-2023", "10-NOV-2023", [("a1", "1", "X00000001", 100), ("a2", "2", "X00000001", 50)]
+    )
+    q2 = _zip13f(
+        "31-DEC-2023",
+        "14-FEB-2024",
+        [("b1", "1", "X00000001", 150), ("b2", "2", "Y00000002", 10), ("b3", "3", "X00000001", 5)],
+    )
+    late = _zip13f(
+        "31-DEC-2023", "01-APR-2024", [("c1", "4", "X00000001", 1000)]
+    )  # after the deadline
+    names = []
+    for k, blob in enumerate([q1, q2, late]):
+        pos, seen = rx.holder_rows(blob, since)
+        for period, part in pos.groupby("period"):
+            part.to_parquet(tmp_path / f"{period:%Y-%m-%d}_{k:03d}.parquet", index=False)
+        names.append(seen)
+    t = rx.holdings_table(tmp_path, pd.concat(names)).set_index(["period", "cusip"])
+    x = t.loc[(dt.date(2023, 12, 31), "X00000001")]
+    # filer 1 added, filer 2 left (2 filed both quarters), filer 3 is new but filed only once
+    assert x.n_holders == 2 and x.shares == 155
+    assert (x.n_up, x.n_exit, x.n_new, x.n_down) == (1, 1, 0, 0)
+    assert x.available == dt.date(2024, 2, 17) and x["name"] == "SOME CORP"
+    assert t.loc[(dt.date(2023, 12, 31), "Y00000002")].n_new == 1
+    assert t.loc[(dt.date(2023, 9, 30), "X00000001")].n_holders == 2
+
+
+def test_13f_links_from_the_index_page():
+    html = (
+        '<a href="/files/x/2013q2_form13f.zip">a</a> '
+        '<a href="https://www.sec.gov/y/01jan2024-29feb2024_form13f.zip">b</a> '
+        '<a href="/files/x/2013q2_form13f.zip">'
+    )
+    assert rx.holdings_links(html) == [
+        "https://www.sec.gov/files/x/2013q2_form13f.zip",
+        "https://www.sec.gov/y/01jan2024-29feb2024_form13f.zip",
+    ]

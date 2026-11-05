@@ -22,6 +22,10 @@
   2026). Index ETFs only: no request list.
 - `news`: Alpaca's news headlines (Benzinga) for a list of (ticker, window end) requests, the
   study's EP / EP9M trades, each for the 4 days up to its entry. Headlines only, no article text.
+- `holdings13f`: SEC's Form 13F data sets (Emil, 5 Nov 2026: "what do the funds buy"). Per
+  CUSIP and quarter, from the managers who filed on time: holders, shares held, and how many
+  holders were new, left, added or cut since the quarter before. Known the day after the
+  45-day filing deadline.
 
 Research only, never part of a scan. This repo is public: the job prints counts and status only.
 """
@@ -32,6 +36,7 @@ import argparse
 import datetime as dt
 import io
 import os
+import re
 import zipfile
 from pathlib import Path
 
@@ -371,11 +376,150 @@ def indexbars(client, out: Path, first_year: int, today: dt.date) -> int:
     return 0 if len(table) else 1
 
 
+HOLDINGS_INDEX = "https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets"
+HOLDINGS_COLUMNS = [
+    "cusip", "period", "available", "name", "title", "n_holders", "shares", "n_new", "n_exit",
+    "n_up", "n_down",
+]  # fmt: skip
+HOLDINGS_COUNTS = ["n_holders", "n_new", "n_exit", "n_up", "n_down"]
+DEADLINE_DAYS = 47  # 45 days after the quarter, plus a weekend
+
+
+def holdings_links(html: str) -> list[str]:
+    """Every 13F data set zip linked from SEC's index page, as full URLs, in page order."""
+    links = re.findall(r'href="([^"]*form13f\.zip)"', html)
+    full = ("https://www.sec.gov" + h if h.startswith("/") else h for h in links)
+    return list(dict.fromkeys(full))
+
+
+def _any_day(text: pd.Series) -> pd.Series:
+    day = pd.to_datetime(text, format="%d-%b-%Y", errors="coerce")
+    return day.fillna(pd.to_datetime(text, errors="coerce", format="mixed"))
+
+
+def holder_rows(blob: bytes, since: dt.date) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """One 13F zip -> positions (cik, period, accession, cusip, shares) and the issuer names
+    seen (cusip, name, title, count). Original 13F-HR filings filed within `DEADLINE_DAYS` of
+    their quarter, long share positions only (no options, no principal amounts), quarters from
+    `since`."""
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        sub = _read(
+            z, "SUBMISSION.TSV", [ACC, "FILING_DATE", "SUBMISSIONTYPE", "CIK", "PERIODOFREPORT"]
+        )
+        info = _read(
+            z,
+            "INFOTABLE.TSV",
+            [ACC, "NAMEOFISSUER", "TITLEOFCLASS", "CUSIP", "SSHPRNAMT", "SSHPRNAMTTYPE", "PUTCALL"],
+        )
+    sub = sub[sub["SUBMISSIONTYPE"].str.strip() == "13F-HR"].copy()
+    sub["filed"] = _any_day(sub["FILING_DATE"])
+    sub["period"] = _any_day(sub["PERIODOFREPORT"])
+    on_time = sub["filed"] <= sub["period"] + pd.Timedelta(days=DEADLINE_DAYS)
+    sub = sub[on_time & (sub["period"] >= pd.Timestamp(since))]
+    info = info[(info["SSHPRNAMTTYPE"].str.strip() == "SH") & info["PUTCALL"].isna()]
+    rows = info.merge(sub[[ACC, "CIK", "period"]], on=ACC)
+    rows["cusip"] = rows["CUSIP"].str.strip().str.upper().str[:9]
+    rows["shares"] = pd.to_numeric(rows["SSHPRNAMT"], errors="coerce")
+    rows["cik"] = pd.to_numeric(rows["CIK"], errors="coerce")
+    rows = rows.dropna(subset=["cusip", "shares", "cik"])
+    names = (
+        rows.groupby(["cusip", "NAMEOFISSUER", "TITLEOFCLASS"]).size().rename("count").reset_index()
+        .rename(columns={"NAMEOFISSUER": "name", "TITLEOFCLASS": "title"})
+    )  # fmt: skip
+    pos = rows.groupby(["cik", "period", ACC, "cusip"], as_index=False)["shares"].sum()
+    return pos, names
+
+
+def _quarter(parts: list[Path]) -> pd.DataFrame:
+    """A quarter's positions, one filing per filer (its first original)."""
+    rows = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
+    keep = rows.groupby("cik")[ACC].transform("min")
+    return rows[rows[ACC] == keep][["cusip", "cik", "shares"]]
+
+
+def _changes(now: pd.DataFrame, prev: pd.DataFrame) -> pd.DataFrame:
+    """Per cusip: holders new, gone, adding and cutting, among filers in both quarters."""
+    both = set(now["cik"]) & set(prev["cik"])
+    a = now[now["cik"].isin(both)].set_index(["cusip", "cik"])["shares"].rename("now")
+    b = prev[prev["cik"].isin(both)].set_index(["cusip", "cik"])["shares"].rename("before")
+    j = pd.concat([a, b], axis=1).fillna(0.0).reset_index()
+    return pd.DataFrame({
+        "cusip": j["cusip"],
+        "n_new": (j["before"] == 0) & (j["now"] > 0),
+        "n_exit": (j["before"] > 0) & (j["now"] == 0),
+        "n_up": (j["before"] > 0) & (j["now"] > j["before"]),
+        "n_down": (j["now"] > 0) & (j["now"] < j["before"]),
+    }).groupby("cusip").sum()  # fmt: skip
+
+
+def holdings_table(work: Path, names: pd.DataFrame) -> pd.DataFrame:
+    """Per (cusip, quarter): holders and shares from the filers on time, and against the
+    quarter before, how many holders are new, left, added or cut. `available` = the day after
+    the filing deadline, the first day all of it is known."""
+    by_period: dict[str, list[Path]] = {}
+    for p in sorted(work.glob("*.parquet")):
+        by_period.setdefault(p.name[:10], []).append(p)
+    out, prev = [], None
+    for period in sorted(by_period):
+        now = _quarter(by_period[period])
+        agg = now.groupby("cusip").agg(n_holders=("cik", "size"), shares=("shares", "sum"))
+        if prev is not None:
+            agg = agg.join(_changes(now, prev), how="left")
+        out.append(agg.reset_index().assign(period=dt.date.fromisoformat(period)))
+        prev = now
+    table = pd.concat(out, ignore_index=True)
+    top = names.groupby(["cusip", "name", "title"], as_index=False)["count"].sum()
+    top = top.sort_values("count").drop_duplicates("cusip", keep="last").set_index("cusip")
+    table = table.join(top[["name", "title"]], on="cusip")
+    late = pd.Timedelta(days=DEADLINE_DAYS + 1)
+    table["available"] = (pd.to_datetime(table["period"]) + late).dt.date
+    for c in HOLDINGS_COUNTS:
+        table[c] = table[c].fillna(0).astype("int64") if c in table else 0
+    return table[HOLDINGS_COLUMNS]
+
+
+def holdings13f(client, out: Path, first_year: int, work: Path = Path("work") / "13f") -> int:
+    page = client._response(HOLDINGS_INDEX)
+    links = holdings_links(page.text) if page is not None else []
+    since = dt.date(first_year - 1, 9, 30)  # one quarter before, for the changes
+    work.mkdir(parents=True, exist_ok=True)
+    names = []
+    for k, url in enumerate(links):
+        file = url.rsplit("/", 1)[-1]
+        response = client._response(url)
+        if response is None:
+            status(f"13F {file}: not published")
+            continue
+        pos, seen = holder_rows(response.content, since)
+        del response
+        for period, part in pos.groupby("period"):
+            part.to_parquet(work / f"{period:%Y-%m-%d}_{k:03d}.parquet", index=False)
+        names.append(seen)
+        status(f"13F {file}: {len(pos)} positions, {pos['period'].nunique()} quarters")
+    if not names:
+        status("13F: nothing read")
+        return 1
+    table = holdings_table(work, pd.concat(names, ignore_index=True))
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_parquet(out / "holdings13f.parquet", index=False)
+    status(f"13F: {len(table)} rows, {table['period'].nunique()} quarters")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
     parser.add_argument(
         "--mode",
-        choices=["insiders", "events8k", "news", "flow", "openbars", "daymins", "indexbars"],
+        choices=[
+            "insiders",
+            "events8k",
+            "holdings13f",
+            "news",
+            "flow",
+            "openbars",
+            "daymins",
+            "indexbars",
+        ],
         required=True,
     )
     parser.add_argument("--out", type=Path, default=Path("out"))
@@ -390,6 +534,14 @@ def main(argv: list[str] | None = None) -> int:
             status("Insiders: SEC_USER_AGENT not set")
             return 1
         return insiders(BulkClient(agent, 5), args.out, args.first_year, dt.date.today())
+    if args.mode == "holdings13f":
+        from trading_os.sec_bulk import BulkClient
+
+        agent = os.environ.get("SEC_USER_AGENT", "")
+        if "@" not in agent:
+            status("13F: SEC_USER_AGENT not set")
+            return 1
+        return holdings13f(BulkClient(agent, 5), args.out, args.first_year)
     if args.mode == "events8k":
         from trading_os.sec_bulk import SUBMISSIONS_ZIP_URL, BulkClient
 
