@@ -27,6 +27,11 @@
   holders were new, left, added or cut since the quarter before. Known the day after the
   45-day filing deadline.
 
+- `guidance`: the earnings press release (8-K exhibit 99) for a list of (cik, accession) filings,
+  the study's EP / EP9M earnings signals, read with fixed text rules: guidance raised, lowered or
+  reaffirmed (Emil, 5 Nov 2026: "can we get that data for free"). Flags and the first matching
+  phrase only, no article text.
+
 Research only, never part of a scan. This repo is public: the job prints counts and status only.
 """
 
@@ -34,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html
 import io
 import os
 import re
@@ -506,6 +512,101 @@ def holdings13f(client, out: Path, first_year: int, work: Path = Path("work") / 
     return 0
 
 
+EDGAR_FILING = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/"
+_EX99 = re.compile(r"(?:ex|exhibit|dex)[-_ ]?99", re.I)
+_GUIDE = (
+    r"(?:guidance|outlook|forecast"
+    r"|full[- ]year (?:revenue|sales|eps|earnings) (?:range|expectations?))"
+)
+_UP = (
+    r"(?:rais(?:e|es|ed|ing)|increas(?:e|es|ed|ing)|boost(?:s|ed|ing)?"
+    r"|lift(?:s|ed|ing)?|upgrad(?:e|es|ed|ing))"
+)
+_DOWN = (
+    r"(?:lower(?:s|ed|ing)?|reduc(?:e|es|ed|ing)|cut(?:s|ting)?"
+    r"|decreas(?:e|es|ed|ing)|withdr(?:aw|aws|ew|awn|awing))"
+)
+_KEEP = (
+    r"(?:reaffirm(?:s|ed|ing)?|reiterat(?:e|es|ed|ing)|maintain(?:s|ed|ing)?|confirm(?:s|ed|ing)?)"
+)
+_GAP = r"(?:(?!percent|per cent)[^.;%]){0,40}"  # same sentence, no growth figure in between
+
+
+def _rule(verb: str, after: str) -> re.Pattern:
+    return re.compile(
+        rf"\b{verb}\b{_GAP}\b{_GUIDE}"
+        + (rf"|\b{_GUIDE}\b[^.;]{{0,30}}\b{after}\b" if after else ""),
+        re.I,
+    )
+
+
+GUIDANCE_RULES = {
+    "raise": _rule(_UP, r"(?:raised|increased)"),
+    "lower": _rule(_DOWN, r"(?:lowered|reduced|cut|withdrawn)"),
+    "reaffirm": _rule(_KEEP, ""),
+    "guidance": re.compile(rf"\b{_GUIDE}\b", re.I),
+}
+
+
+def exhibit_name(names: list[str]) -> str | None:
+    """The press release among a filing's files: an exhibit-99 HTML/text file, 99.1 first."""
+    docs = [n for n in names if n.lower().endswith((".htm", ".html", ".txt")) and _EX99.search(n)]
+    if not docs:
+        return None
+    return sorted(docs, key=lambda n: (not re.search(r"99[-_.]?1(?!\d)", n), len(n), n))[0]
+
+
+def plain_text(raw: str, limit: int = 400_000) -> str:
+    text = re.sub(r"(?is)<(script|style).*?</\1>", " ", raw[: limit * 3])
+    text = html.unescape(re.sub(r"<[^>]+>", " ", text))
+    return re.sub(r"\s+", " ", text)[:limit]
+
+
+def guidance_flags(text: str) -> dict:
+    """Fixed text rules on a press release: raised / lowered / reaffirmed guidance, any guidance
+    at all, and the first raise or lower phrase (at most 120 characters)."""
+    out = {k: bool(rule.search(text)) for k, rule in GUIDANCE_RULES.items()}
+    hit = GUIDANCE_RULES["raise"].search(text) or GUIDANCE_RULES["lower"].search(text)
+    out["phrase"] = hit.group(0)[:120] if hit else ""
+    return out
+
+
+def guidance(client, requests_file: Path, out: Path) -> int:
+    req = pd.read_parquet(requests_file)
+    rows, missing = [], 0
+    for n, r in enumerate(req.itertuples(index=False), 1):
+        base = EDGAR_FILING.format(cik=int(r.cik), acc=str(r.accession).replace("-", ""))
+        try:
+            index = client.json(base + "index.json")
+            names = [i.get("name", "") for i in (index or {}).get("directory", {}).get("item", [])]
+            name = exhibit_name(names)
+            raw = client.text(base + name) if name else None
+        except Exception:  # one bad filing must not stop the run; counted below
+            raw, name = None, None
+        if raw is None:
+            missing += 1
+            rows.append({"cik": int(r.cik), "accession": r.accession, "doc": name, "chars": 0})
+        else:
+            text = plain_text(raw)
+            rows.append(
+                {
+                    "cik": int(r.cik),
+                    "accession": r.accession,
+                    "doc": name,
+                    "chars": len(text),
+                    **guidance_flags(text),
+                }
+            )
+        if n % 1000 == 0:
+            status(f"Guidance: {n} of {len(req)} filings, {missing} without a press release")
+    table = pd.DataFrame(rows)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_parquet(out / "guidance.parquet", index=False)
+    found = int((table["chars"] > 0).sum())
+    status(f"Guidance: {found} press releases read, {missing} missing")
+    return 0 if found else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extra research data (insiders, news)")
     parser.add_argument(
@@ -514,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
             "insiders",
             "events8k",
             "holdings13f",
+            "guidance",
             "news",
             "flow",
             "openbars",
@@ -542,6 +644,14 @@ def main(argv: list[str] | None = None) -> int:
             status("13F: SEC_USER_AGENT not set")
             return 1
         return holdings13f(BulkClient(agent, 5), args.out, args.first_year)
+    if args.mode == "guidance":
+        from trading_os.sec_bulk import BulkClient
+
+        agent = os.environ.get("SEC_USER_AGENT", "")
+        if "@" not in agent:
+            status("Guidance: SEC_USER_AGENT not set")
+            return 1
+        return guidance(BulkClient(agent, 8), args.requests, args.out)
     if args.mode == "events8k":
         from trading_os.sec_bulk import SUBMISSIONS_ZIP_URL, BulkClient
 

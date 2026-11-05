@@ -203,3 +203,26 @@ def test_13f_links_from_the_index_page():
         "https://www.sec.gov/files/x/2013q2_form13f.zip",
         "https://www.sec.gov/y/01jan2024-29feb2024_form13f.zip",
     ]
+
+
+def test_guidance_rules_read_raises_cuts_and_reaffirms():
+    from trading_os.research_extra import guidance_flags, plain_text
+
+    text = plain_text(
+        "<p>The Company raises its full-year 2024 guidance.</p><p>We reaffirm our outlook.</p>"
+    )
+    flags = guidance_flags(text)
+    assert flags["raise"] and flags["reaffirm"] and flags["guidance"] and not flags["lower"]
+    assert flags["phrase"] == "raises its full-year 2024 guidance"
+    assert guidance_flags("We are lowering our fiscal 2025 outlook.")["lower"]
+    assert not guidance_flags("Revenue increased 20 percent, and our outlook remains")["raise"]
+    assert not guidance_flags("Sales increased 20%, outlook strong")["raise"]
+    assert not guidance_flags("Guidance will be given later")["raise"]
+
+
+def test_guidance_picks_the_press_release():
+    from trading_os.research_extra import exhibit_name
+
+    assert exhibit_name(["0001.txt", "a8-k.htm", "ex99-2.htm", "ex99-1.htm"]) == "ex99-1.htm"
+    assert exhibit_name(["d123dex991.htm", "d123d8k.htm"]) == "d123dex991.htm"
+    assert exhibit_name(["form8k.htm"]) is None
