@@ -40,6 +40,7 @@ MIN_HOLDERS = 3  # CUSIPs worth mapping
 MIN_PREV = 5  # holders the quarter before, for a breadth
 NOT_SHARES = r"\b(?:NOTE|NOTES|PUT|CALL|WT|WTS|WARRANT|PFD|PREF|DEB|BOND|RIGHT|RTS|UNIT)\b"
 HIGH_OWN, PILING_IN = 0.80, 0.10  # the study's lines for the card
+MAX_OWN = 1.5  # 13F shares over 150 % of the shares outstanding: left out
 OWN_NOTE = "A+/A in stocks the funds owned over 80 % did worse in the study"
 FILES = 3  # the newest 13F zips: two quarters and one before them
 
@@ -164,9 +165,8 @@ def attach(df: pd.DataFrame, data_dir: Path, session: dt.date) -> pd.DataFrame:
         outstanding = pd.to_numeric(df["market_cap"], errors="coerce") / pd.to_numeric(
             df["close"], errors="coerce"
         )
-        out["fund_own"] = (
-            tick.map(t["shares"]).astype(float) / outstanding.where(outstanding > 0)
-        ).to_numpy()
+        own = tick.map(t["shares"]).astype(float) / outstanding.where(outstanding > 0)
+        out["fund_own"] = own.where(own <= MAX_OWN).to_numpy()  # above: a CUSIP or class mix-up
     return out
 
 

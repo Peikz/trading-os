@@ -90,6 +90,8 @@ def test_attach_only_after_the_quarter_is_known_and_the_card_line(tmp_path):
     row = out.iloc[0].to_dict()
     assert row["fund_holders"] == 120 and abs(row["fund_own"] - 0.9) < 1e-9
     assert pd.isna(out.iloc[1]["fund_own"])
+    df2 = df.assign(market_cap=[50e6, 5e6])  # 9M of 5M shares: a mix-up, left out
+    assert pd.isna(funds13f.attach(df2, tmp_path, dt.date(2026, 8, 18)).iloc[0]["fund_own"])
     line = funds13f.card_tag(row)
     assert line.startswith("🏦 Funds own 90% (13F, Q2 2026)") and "worse in the study" in line
     assert line in board_data.tags(row)
