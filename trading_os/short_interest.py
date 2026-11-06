@@ -21,6 +21,7 @@ from typing import Any
 import pandas as pd
 import requests
 
+from trading_os.live_tracking import BASKET_STRATEGIES
 from trading_os.logsafe import status
 
 DATA_URL = "https://api.finra.org/data/group/otcMarket/name/consolidatedShortInterest"
@@ -101,8 +102,13 @@ def attach(results: dict, table: pd.DataFrame, dtc_max: float) -> dict:
         if "grade" in h:
             shorted = h["grade"].isin(["A+", "A"]) & (h["dtc"] >= dtc_max)
             if shorted.any():
+                strat = h["grade_strategy"] if "grade_strategy" in h else pd.Series(None, h.index)
                 h.loc[shorted, "grade_why"] = [
-                    f"heavily shorted ({d:.1f} days to cover)" for d in h.loc[shorted, "dtc"]
+                    f"heavily shorted ({d:.1f} days to cover)"
+                    + (f" · still {g} in the paper basket" if BASKET_STRATEGIES.get(s) == g else "")
+                    for d, g, s in zip(
+                        h.loc[shorted, "dtc"], h.loc[shorted, "grade"], strat[shorted], strict=True
+                    )
                 ]
                 h.loc[shorted, "grade_before_si"] = h.loc[shorted, "grade"]  # for the paper basket
                 h.loc[shorted, "grade"] = "C"

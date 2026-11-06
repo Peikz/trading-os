@@ -53,17 +53,27 @@ def test_a_too_old_report_is_not_used(tmp_path):
 def test_heavily_shorted_a_plus_becomes_c_with_a_warning():
     table = pd.DataFrame({"ticker": [A, B], "si_date": ["2026-09-30"] * 2, "dtc": [6.2, 1.4]})
     hits = pd.DataFrame({"ticker": [A, B], "grade": ["A+", "A+"], "grade_risk_mult": [2.0, 2.0],
+                         "grade_strategy": ["ep", "ep"],
                          "grade_why": ["5 of 6 quality points"] * 2,
                          "plan_shares": [100.0, 100.0]})  # fmt: skip
     out = short_interest.attach({"ep_am": hits, "ma_surf": hits.assign(grade="C")}, table, 5)
     ep = out["ep_am"].set_index("ticker")
     assert ep.loc[A, "grade"] == "C" and ep.loc[A, "grade_risk_mult"] == 0.0
-    assert ep.loc[A, "grade_why"] == "heavily shorted (6.2 days to cover)"
+    assert (
+        ep.loc[A, "grade_why"]
+        == "heavily shorted (6.2 days to cover) · still A+ in the paper basket"
+    )
     assert pd.isna(ep.loc[A, "plan_shares"])
     assert ep.loc[B, "grade"] == "A+" and ep.loc[B, "plan_shares"] == 100
     assert ep.loc[A, "grade_before_si"] == "A+" and pd.isna(ep.loc[B, "grade_before_si"])
     assert ep.loc[A, "si_tag"] == "⚠️ heavily shorted · 6.2 days to cover (09-30)"
     assert pd.isna(ep.loc[B, "si_tag"])
+    surf_a = short_interest.attach(
+        {"s": hits.assign(grade="A", grade_strategy="qm_surf")}, table, 5
+    )
+    assert (
+        surf_a["s"].set_index("ticker").loc[A, "grade_why"] == "heavily shorted (6.2 days to cover)"
+    )
     surf = out["ma_surf"].set_index("ticker")
     assert surf.loc[A, "si_tag"].startswith("⚠️ heavily shorted")  # C hits get the warning too
 
