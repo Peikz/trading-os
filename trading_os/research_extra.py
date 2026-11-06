@@ -624,6 +624,9 @@ def exhibit_name(names: list[str]) -> str | None:
     return sorted(docs, key=lambda n: (not re.search(r"99[-_.]?1(?!\d)", n), len(n), n))[0]
 
 
+RELEASE_TEXT_CHARS = 20_000  # mode "releases": text kept per press release
+
+
 def plain_text(raw: str, limit: int = 400_000) -> str:
     text = re.sub(r"(?is)<(script|style).*?</\1>", " ", raw[: limit * 3])
     text = html.unescape(re.sub(r"<[^>]+>", " ", text))
@@ -639,7 +642,9 @@ def guidance_flags(text: str) -> dict:
     return out
 
 
-def guidance(client, requests_file: Path, out: Path) -> int:
+def guidance(client, requests_file: Path, out: Path, keep_text: int = 0) -> int:
+    """Guidance flags per earnings press release; with keep_text > 0 also the first keep_text
+    characters of the plain text (mode "releases", written to releases.parquet)."""
     req = pd.read_parquet(requests_file)
     rows, missing = [], 0
     for n, r in enumerate(req.itertuples(index=False), 1):
@@ -663,13 +668,14 @@ def guidance(client, requests_file: Path, out: Path) -> int:
                     "doc": name,
                     "chars": len(text),
                     **guidance_flags(text),
+                    **({"text": text.strip()[:keep_text]} if keep_text else {}),
                 }
             )
         if n % 1000 == 0:
             status(f"Guidance: {n} of {len(req)} filings, {missing} without a press release")
     table = pd.DataFrame(rows)
     out.mkdir(parents=True, exist_ok=True)
-    table.to_parquet(out / "guidance.parquet", index=False)
+    table.to_parquet(out / ("releases.parquet" if keep_text else "guidance.parquet"), index=False)
     found = int((table["chars"] > 0).sum())
     status(f"Guidance: {found} press releases read, {missing} missing")
     return 0 if found else 1
@@ -684,6 +690,7 @@ def main(argv: list[str] | None = None) -> int:
             "events8k",
             "holdings13f",
             "guidance",
+            "releases",
             "news",
             "flow",
             "flowsample",
@@ -722,6 +729,14 @@ def main(argv: list[str] | None = None) -> int:
             status("Guidance: SEC_USER_AGENT not set")
             return 1
         return guidance(BulkClient(agent, 8), args.requests, args.out)
+    if args.mode == "releases":
+        from trading_os.sec_bulk import BulkClient
+
+        agent = os.environ.get("SEC_USER_AGENT", "")
+        if "@" not in agent:
+            status("Releases: SEC_USER_AGENT not set")
+            return 1
+        return guidance(BulkClient(agent, 8), args.requests, args.out, keep_text=RELEASE_TEXT_CHARS)
     if args.mode == "events8k":
         from trading_os.sec_bulk import SUBMISSIONS_ZIP_URL, BulkClient
 

@@ -228,6 +228,28 @@ def test_guidance_picks_the_press_release():
     assert exhibit_name(["form8k.htm"]) is None
 
 
+def test_releases_mode_keeps_the_text(tmp_path):
+    import pandas as pd
+
+    from trading_os.research_extra import guidance
+
+    class Fake:
+        def json(self, url):
+            return {"directory": {"item": [{"name": "a8-k.htm"}, {"name": "ex99-1.htm"}]}}
+
+        def text(self, url):
+            return "<p>Revenue grew 40 %. The Company raises its full-year 2024 guidance.</p>"
+
+    req = tmp_path / "req.parquet"
+    pd.DataFrame({"cik": [1], "accession": ["0000000001-24-000001"]}).to_parquet(req)
+    assert guidance(Fake(), req, tmp_path / "out", keep_text=30) == 0
+    out = pd.read_parquet(tmp_path / "out" / "releases.parquet")
+    assert out["text"].iloc[0] == "Revenue grew 40 %. The Company"[:30]
+    assert bool(out["raise"].iloc[0])
+    assert guidance(Fake(), req, tmp_path / "out2") == 0
+    assert "text" not in pd.read_parquet(tmp_path / "out2" / "guidance.parquet")
+
+
 def test_quote_totals_spread_imbalance_and_last():
     from trading_os.research_extra import quote_totals
 
