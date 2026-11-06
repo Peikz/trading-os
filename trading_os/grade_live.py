@@ -239,21 +239,29 @@ def grade_hits(
             dvol20=rec.get("avg_dollar_volume_20d"),
             adr_pct=adr_pct,
         )
+        entry_rule = rule.get("entries", {}).get(
+            f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
+        )
+        label, risk_mult, why = g.grade, g.risk_mult, g.note or _why(g)
+        pace = rule.get("pace_b")  # EP9M A+ under a 20M pace at 10:15 -> B (Emil, 6 Nov 2026)
+        proj = rec.get("proj_volume")
+        slow = pace and not pd.isna(proj) and float(proj) < float(pace["below"])
+        if slow and label == "A+" and entry_rule == pace["entry"]:
+            label, risk_mult = "B", float(grading["risk_mult"].get("B", 0.0))
+            why = f"{why}; on pace for {float(proj) / 1e6:.0f}M, under {pace['below'] / 1e6:.0f}M"
         rows.append(
             {
-                "grade": g.grade,
+                "grade": label,
                 "grade_strategy": name,
                 "grade_score": g.score,
                 "grade_cost_r": g.cost_r,
-                "grade_why": g.note or _why(g),
+                "grade_why": why,
                 "grade_points": point_text(g),
-                "grade_entry_rule": rule.get("entries", {}).get(
-                    f"{scan}@{slot}", g.plan.get("entry", rule.get("entry"))
-                ),
+                "grade_entry_rule": entry_rule,
                 "grade_hold_sessions": rule.get("hold_sessions")
                 or (21 if rule.get("exit") == "hold_21" else None),
                 "grade_exit": rule.get("exit", "hold"),
-                "grade_risk_mult": g.risk_mult,
+                "grade_risk_mult": risk_mult,
                 "grade_stop": stop,
                 "grade_entry": entry,
                 "grade_stop_basis": basis,

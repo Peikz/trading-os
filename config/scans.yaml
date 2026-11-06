@@ -481,6 +481,11 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
                                             # halved the 2022-26 account result, 14.4 % -> 6.7 %)
       live_scans: [ep9m_pace]
       entries: {ep9m_pace: t_1015, "ep9m_pace@mid": t_1200}   # 12:00 names: the 12:00 plan
+      pace_b: {below: 20000000, entry: t_1015}   # A+ on pace for under 20M at 10:15 -> B, half
+                                            # size (Emil, 6 Nov 2026): 2016-26 +0.05 to +0.25R
+                                            # under 20M vs +0.76 / +1.11R at 20M+; as B the
+                                            # account made 20.5 / 32.0 % vs 17.8 / 31.7 % (data
+                                            # repo docs/research/2026-11-05-hold-longer-and-basket.md)
       stop_adr: 1.0
       hold_sessions: 21
     luk_avwap_flush:

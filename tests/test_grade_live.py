@@ -222,3 +222,17 @@ def test_push_shows_quality_points_not_r():
     lines = notify.grade_lines(row)
     assert lines[0].endswith("Study A+ · 5 of 6 quality points")
     assert "pre-market ~09:15 NY" in " ".join(lines)
+
+
+def test_ep9m_a_plus_under_a_20m_pace_at_1015_is_b():
+    hits = pd.DataFrame([hit(A, proj_volume=12e6), hit(B, proj_volume=25e6), hit(C)])
+    points = {"sessions_since_earnings": 2, "d_neglect_months": 1.5, "revenue_growth_accel": 3.0,
+              "eps_yoy_pct": 20.0, "d_from_52w_high": -5.0}  # fmt: skip
+    extra = pd.DataFrame([points] * 3, index=[A, B, C])
+    market = {"mkt_scan_count": 10}
+    am = grade_live.grade_hits(hits, "ep9m_pace", CFG, market, pd.DataFrame(), extra, slot="am")
+    assert list(am["grade"]) == ["B", "A+", "A+"]  # no pace known: left as it was
+    assert am["grade_risk_mult"].iloc[0] == CFG.grading["risk_mult"]["B"]
+    assert "under 20M" in am["grade_why"].iloc[0]
+    noon = grade_live.grade_hits(hits, "ep9m_pace", CFG, market, pd.DataFrame(), extra, slot="mid")
+    assert list(noon["grade"]) == ["A+", "A+", "A+"]  # the 12:00 plan was not tested

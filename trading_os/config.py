@@ -268,6 +268,7 @@ GRADING_KEYS = {
 GRADING_PRESS_KEYS = {"enabled", "window", "mean_r_above", "mult", "grades"}
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
 # A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
+GRADING_QUALITY_OPTIONAL_KEYS = {"pace_b"}  # {below: shares, entry: plan}: A+ under it -> B
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
 QUALITY_OWN_PLAN = {"stop": {"order", "signal_low"}, "exit": {"trail_ma20", "hold_21"}}
 CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
@@ -598,7 +599,13 @@ def _check_grading(raw: Any) -> None:
     for name, rule in raw["quality"].items():
         own = isinstance(rule, dict) and "exit" in rule
         expected = GRADING_QUALITY_OWN_PLAN_KEYS if own else GRADING_QUALITY_KEYS
-        _check_keys(f"grading.quality.{name}", rule, expected)
+        core = {k: v for k, v in rule.items() if k not in GRADING_QUALITY_OPTIONAL_KEYS}
+        _check_keys(f"grading.quality.{name}", core, expected)
+        pace = rule.get("pace_b")
+        if pace is not None:
+            _check_keys(f"grading.quality.{name}.pace_b", pace, {"below", "entry"})
+            if not float(pace["below"]) > 0 or pace["entry"] not in rule["entries"].values():
+                raise ConfigError(f"grading.quality.{name}.pace_b: a positive below, a plan entry")
         for key, allowed in QUALITY_OWN_PLAN.items() if own else ():
             if rule[key] not in allowed:
                 raise ConfigError(f"grading.quality.{name}.{key}: one of {sorted(allowed)}")
