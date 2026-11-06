@@ -226,3 +226,19 @@ def test_guidance_picks_the_press_release():
     assert exhibit_name(["0001.txt", "a8-k.htm", "ex99-2.htm", "ex99-1.htm"]) == "ex99-1.htm"
     assert exhibit_name(["d123dex991.htm", "d123d8k.htm"]) == "d123dex991.htm"
     assert exhibit_name(["form8k.htm"]) is None
+
+
+def test_quote_totals_spread_imbalance_and_last():
+    from trading_os.research_extra import quote_totals
+
+    q = [
+        {"bp": 9.99, "ap": 10.01, "bs": 3, "as": 1},
+        {"bp": 10.00, "ap": 9.99, "bs": 5, "as": 5},  # crossed: left out
+        {"bp": 10.00, "ap": 10.02, "bs": 1, "as": 3},
+    ]
+    out = quote_totals(q)
+    assert out["quotes"] == 2
+    assert abs(out["spread_bps"] - (20 + 19.98) / 2) < 0.05
+    assert out["size_imb"] == 0.0
+    assert out["bid"] == 10.00 and out["ask_size"] == 3
+    assert quote_totals([])["quotes"] == 0

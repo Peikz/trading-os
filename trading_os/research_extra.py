@@ -12,6 +12,10 @@
   kept: buyer- vs seller-initiated volume (tick test), retail buys and sells by sub-penny
   price improvement off-exchange (Boehmer, Jones, Zhang & Zhang 2021), and large-block
   imbalance.
+- `flowsample`: the same totals for a random sample of ordinary stock-days, the control for
+  `flow` (saved as flow_sample.parquet).
+- `quotes`: NBBO quotes (Alpaca SIP) of short windows, e.g. the minute before an A+ buy: mean
+  quoted spread, bid / ask size imbalance and the last quote (Emil, 6 Nov 2026: "bid and ask").
 - `daymins`: every 1-minute bar (adjusted) of each A+ entry day, for intraday exits and
   VWAP entries.
 - `openbars`: volume in the first 5, 15 and 30 minutes of each EP day (Alpaca 1-minute SIP bars,
@@ -247,7 +251,7 @@ def flow_totals(trades: list[dict], last_price: float | None = None) -> dict:
     return out
 
 
-def flow(client, requests_file: Path, out: Path) -> int:
+def flow(client, requests_file: Path, out: Path, name: str = "flow.parquet") -> int:
     asks = pd.read_parquet(requests_file)
     rows, failed = [], 0
     for k, ask in enumerate(asks.itertuples(index=False), 1):
@@ -269,8 +273,72 @@ def flow(client, requests_file: Path, out: Path) -> int:
         if k % 200 == 0:
             status(f"Flow: {k} of {len(asks)} windows, {failed} failed")
     out.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows, columns=FLOW_COLUMNS).to_parquet(out / "flow.parquet", index=False)
+    pd.DataFrame(rows, columns=FLOW_COLUMNS).to_parquet(out / name, index=False)
     status(f"Flow: {len(rows)} windows, {failed} failed")
+    return 0 if rows else 1
+
+
+QUOTES_URL = "https://data.alpaca.markets/v2/stocks/{symbol}/quotes"
+QUOTE_COLUMNS = [
+    "ticker", "session_date", "start_utc", "quotes", "spread_bps", "size_imb",
+    "bid", "ask", "bid_size", "ask_size",
+]  # fmt: skip
+
+
+def quote_totals(quotes: list[dict]) -> dict:
+    """NBBO quotes of a short window (ap / bp ask and bid, as / bs their sizes in round lots):
+    the mean quoted spread in basis points of the mid, the mean size imbalance (bid - ask) /
+    (bid + ask), and the last quote. Crossed or one-sided quotes are left out."""
+    good = [q for q in quotes if q.get("bp", 0) > 0 and q.get("ap", 0) > q.get("bp", 0)]
+    out = dict.fromkeys(QUOTE_COLUMNS[3:], float("nan"))
+    out["quotes"] = float(len(good))
+    if not good:
+        return out
+    spreads = [(q["ap"] - q["bp"]) / ((q["ap"] + q["bp"]) / 2) * 1e4 for q in good]
+    imbs = [
+        (q.get("bs", 0) - q.get("as", 0)) / (q.get("bs", 0) + q.get("as", 0))
+        for q in good
+        if q.get("bs", 0) + q.get("as", 0) > 0
+    ]
+    last = good[-1]
+    out.update(
+        spread_bps=sum(spreads) / len(spreads),
+        size_imb=sum(imbs) / len(imbs) if imbs else float("nan"),
+        bid=float(last["bp"]),
+        ask=float(last["ap"]),
+        bid_size=float(last.get("bs", 0)),
+        ask_size=float(last.get("as", 0)),
+    )
+    return out
+
+
+def quotes(client, requests_file: Path, out: Path, max_pages: int = 5) -> int:
+    """The quote snapshot for each (ticker, start_utc, end_utc) window, e.g. the minute before a
+    buy; at most `max_pages` pages of 10,000 quotes a window (the newest are kept)."""
+    asks = pd.read_parquet(requests_file)
+    rows, failed = [], 0
+    for k, ask in enumerate(asks.itertuples(index=False), 1):
+        params = {"start": ask.start_utc, "end": ask.end_utc, "limit": 10000, "feed": "sip"}
+        got: list[dict] = []
+        try:
+            for _ in range(max_pages):
+                body = client._get(QUOTES_URL.format(symbol=ask.ticker), params)
+                got += body.get("quotes") or []
+                token = body.get("next_page_token")
+                if not token:
+                    break
+                params = {**params, "page_token": token}
+            rows.append(
+                {"ticker": ask.ticker, "session_date": ask.session_date,
+                 "start_utc": ask.start_utc, **quote_totals(got)}
+            )  # fmt: skip
+        except Exception:  # noqa: BLE001 - counted; the message could carry a symbol
+            failed += 1
+        if k % 500 == 0:
+            status(f"Quotes: {k} of {len(asks)} windows, {failed} failed")
+    out.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=QUOTE_COLUMNS).to_parquet(out / "quotes.parquet", index=False)
+    status(f"Quotes: {len(rows)} windows, {failed} failed")
     return 0 if rows else 1
 
 
@@ -618,6 +686,8 @@ def main(argv: list[str] | None = None) -> int:
             "guidance",
             "news",
             "flow",
+            "flowsample",
+            "quotes",
             "openbars",
             "daymins",
             "indexbars",
@@ -675,6 +745,10 @@ def main(argv: list[str] | None = None) -> int:
     client = AlpacaClient(key, secret, per_minute=150)
     if args.mode == "flow":
         return flow(client, args.requests, args.out)
+    if args.mode == "flowsample":
+        return flow(client, args.requests, args.out, "flow_sample.parquet")
+    if args.mode == "quotes":
+        return quotes(client, args.requests, args.out)
     if args.mode == "openbars":
         return openbars(client, args.requests, args.out)
     if args.mode == "daymins":

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "insiders, events8k, holdings13f (SEC 13F fund holdings), guidance (earnings press releases), news, flow (order flow), openbars (first 5/15/30 minutes), daymins (whole A+ entry days), indexbars (SPY/QQQ/IWM 5-minute bars since 2016)"
+        description: "insiders, events8k, holdings13f (SEC 13F fund holdings), guidance (earnings press releases), news, flow (order flow), flowsample (order flow, random stock-days), quotes (bid/ask snapshots), openbars (first 5/15/30 minutes), daymins (whole A+ entry days), indexbars (SPY/QQQ/IWM 5-minute bars since 2016)"
         type: choice
-        options: [insiders, events8k, holdings13f, guidance, news, flow, openbars, daymins, indexbars]
+        options: [insiders, events8k, holdings13f, guidance, news, flow, flowsample, quotes, openbars, daymins, indexbars]
         default: insiders
 
 concurrency:
@@ -35,7 +35,7 @@ jobs:
       - run: uv sync --frozen --no-dev
 
       - name: The request list (news, flow, guidance)
-        if: ${{ inputs.mode == 'guidance' || inputs.mode == 'news' || inputs.mode == 'flow' || inputs.mode == 'openbars' || inputs.mode == 'daymins' }}
+        if: ${{ inputs.mode == 'guidance' || inputs.mode == 'flowsample' || inputs.mode == 'quotes' || inputs.mode == 'news' || inputs.mode == 'flow' || inputs.mode == 'openbars' || inputs.mode == 'daymins' }}
         env:
           GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
