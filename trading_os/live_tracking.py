@@ -332,28 +332,48 @@ def push_lines(table: pd.DataFrame, labels: Mapping[str, str] | None = None) -> 
 
 # The A+ basket, tracked on paper next to the plans (Emil, 6 Nov 2026: "Yes"; data repo
 # docs/research/2026-11-05-hold-longer-and-basket.md). Every EP / EP9M A+ and Luk flush A gets
-# the same share of the account, no price stop; it is sold at the close of session 10, 21 or 42
-# after the entry session when that close is under the entry price, else at the close of
-# session 63. Not confirmed on 2010-15, so it is a paper plan, never a buy signal.
+# the same share of the account, no price stop. Each session after the entry, in this order:
+# - at the close of session 10, 21 or 42, sold if that close is under the entry price;
+# - sold at the first close under the entry session's low (CUT, Emil 6 Nov 2026: "Switch");
+# - at session 21, a close 19 %+ over the entry lets it run (RUN): from then on it is only sold
+#   at the close of session 63, 84 or 105 when that close is under the session-21 close, else at
+#   session 126.
+# Otherwise out at the close of session 63. Not confirmed on 2010-15: a paper plan, never a buy.
 BASKET_STRATEGIES = {"ep": "A+", "ep9m": "A+", "luk_avwap_flush": "A"}
 BASKET_REVIEWS = (10, 21, 42)
 BASKET_HOLD = 63
+BASKET_RUN_GAIN, BASKET_RUN_AT, BASKET_RUN_CHECKS, BASKET_RUN_HOLD = 0.19, 21, (63, 84, 105), 126
 BASKET_SIZE_PCT = 5.0
 BASKET_EXTRA_COST_PCT = 0.10  # the later exit, as in the study
-# Study, 2022-26 (1,076 trades, net of costs): mean +7.9 %, win rate 33.7 %
-BASKET_STUDY_MEAN_PCT, BASKET_STUDY_WIN_PCT = 7.9, 33.7
+# Study, 2022-26 (1,076 trades, net of costs, these rules): mean +8.1 %, win rate 27.7 %
+BASKET_STUDY_MEAN_PCT, BASKET_STUDY_WIN_PCT = 8.1, 27.7
 
 
-def basket_exit(entry: float, path: pd.DataFrame) -> dict:
-    """`path`: closes of the sessions after the entry session, oldest first."""
+def basket_exit(entry: float, path: pd.DataFrame, entry_low: float = math.nan) -> dict:
+    """`path`: closes of the sessions after the entry session, oldest first; `entry_low`: the
+    entry session's low (no CUT when unknown)."""
     closes = path["close"].to_numpy(dtype=float)
-    for k in BASKET_REVIEWS:
-        if len(closes) < k:
-            break
-        if closes[k - 1] < entry:
-            return {"status": "closed", "exit": float(closes[k - 1]), "sessions": k}
+
+    def closed(k: int) -> dict:
+        return {"status": "closed", "exit": float(closes[k - 1]), "sessions": k}
+
+    for k in range(1, min(len(closes), BASKET_HOLD) + 1):
+        c = closes[k - 1]
+        if k in BASKET_REVIEWS and c < entry:
+            return closed(k)
+        if c < entry_low:
+            return closed(k)
+        if k == BASKET_RUN_AT and c >= entry * (1 + BASKET_RUN_GAIN):
+            for m in BASKET_RUN_CHECKS:
+                if len(closes) < m:
+                    break
+                if closes[m - 1] < c:
+                    return closed(m)
+            if len(closes) >= BASKET_RUN_HOLD:
+                return closed(BASKET_RUN_HOLD)
+            return {"status": "open", "exit": float(closes[-1]), "sessions": len(closes)}
     if len(closes) >= BASKET_HOLD:
-        return {"status": "closed", "exit": float(closes[BASKET_HOLD - 1]), "sessions": BASKET_HOLD}
+        return closed(BASKET_HOLD)
     last = float(closes[-1]) if len(closes) else math.nan
     return {"status": "open", "exit": last, "sessions": len(closes)}
 
@@ -379,7 +399,9 @@ def basket_results(results: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
         start = entry_session(rec["session_date"], rule, list(g["session_date"]))
         if start is None or held_until.get(rec["ticker"], start) > start:
             continue
-        out = basket_exit(rec["entry"], g[g["session_date"] > start])
+        day = g[g["session_date"] == start]
+        low = float(day["low"].iloc[0]) if "low" in day and len(day) else math.nan
+        out = basket_exit(rec["entry"], g[g["session_date"] > start], low)
         risk_pct = (
             (rec["entry"] - rec["stop"]) / rec["entry"] * 100 if rec["stop"] == rec["stop"] else 0
         )

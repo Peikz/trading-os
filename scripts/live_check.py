@@ -111,7 +111,11 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
         "",
         f"Every EP / EP9M A+ and Luk flush A at {lt.BASKET_SIZE_PCT:g} % of the account, no price "
         "stop: sold at the close of session 10, 21 or 42 after the entry when that close is under "
-        f"the entry price, else after {lt.BASKET_HOLD} sessions; a later signal on a held stock is "
+        "the entry price, or at the first close under the entry day's low; a stock up "
+        f"{lt.BASKET_RUN_GAIN:.0%}+ at session 21 runs to {lt.BASKET_RUN_HOLD} sessions (out at "
+        "63, "
+        "84 or 105 under its session-21 close); otherwise out after "
+        f"{lt.BASKET_HOLD} sessions. A later signal on a held stock is "
         "skipped. Net of the study's cost + 0.10 %. Tracked because it beat random stocks in every "
         "year of 2016-26 but not on 2010-15 (data repo docs/research/"
         "2026-11-05-hold-longer-and-basket.md). A paper plan, not a buy signal.",

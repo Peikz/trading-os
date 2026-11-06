@@ -238,3 +238,22 @@ def test_basket_takes_only_its_grades_and_keeps_open_trades_open():
     summary = lt.basket_summary(out, pd.DataFrame(rows))
     assert summary["closed"] == 0 and summary["open"] == 1
     assert summary["verdict"] == "too few trades yet"
+
+
+def test_basket_cut_under_the_entry_day_low():
+    closes = [10.0] + [10.5] * 4 + [9.4] + [12.0] * 70  # session 5 closes under the entry-day low
+    bars_ = basket_bars(closes).assign(low=[9.5] + [10.0] * 75)
+    out = lt.basket_results(pd.DataFrame([plan_row()]), bars_)
+    assert out["sessions"].iloc[0] == 5 and out["net_pct"].iloc[0] == pytest.approx(-6.0 - 0.6)
+
+
+def test_basket_lets_a_19_pct_winner_run_to_126():
+    closes = [10.0] + [12.0] * 20 + [12.5] * 110  # session 21 at +20 %, never under its close
+    days = list(pd.bdate_range("2026-01-02", periods=131).date)
+    bars_ = pd.DataFrame({"ticker": A, "session_date": days, "close": closes, "low": 9.9})
+    out = lt.basket_results(pd.DataFrame([plan_row(session_date=days[0])]), bars_)
+    assert out["sessions"].iloc[0] == 126 and out["net_pct"].iloc[0] == pytest.approx(25.0 - 0.6)
+    closes[63] = 11.0  # under the session-21 close at session 63: out there
+    bars_["close"] = closes
+    out = lt.basket_results(pd.DataFrame([plan_row(session_date=days[0])]), bars_)
+    assert out["sessions"].iloc[0] == 63
