@@ -187,3 +187,54 @@ def test_the_monthly_check_runs_on_a_small_data_repo(tmp_path):
     assert counts["signals"] == 1 and counts["closed"] == 1
     assert any("study +0.50R" in p for p in pushes)
     assert any(line.startswith("| ep | t_1030 | A+ | 1 |") for line in lines)
+
+
+BASKET_DAYS = list(pd.bdate_range("2026-01-02", periods=90).date)
+
+
+def basket_bars(closes, ticker=A):
+    return pd.DataFrame(
+        {"ticker": ticker, "session_date": BASKET_DAYS[: len(closes)], "close": closes}
+    )
+
+
+def plan_row(**kw):
+    base = {
+        "session_date": BASKET_DAYS[0],
+        "ticker": A,
+        "grade": "A+",
+        "grade_strategy": "ep",
+        "entry_rule": "t_1030",
+        "entry": 10.0,
+        "stop": 9.5,
+        "status": "closed",
+        "r_gross": 1.0,
+        "r_net": 0.9,
+    }
+    return base | kw
+
+
+def test_basket_sells_at_the_first_review_under_the_entry():
+    closes = [10.0] + [11.0] * 9 + [9.0] + [12.0] * 70  # session 10 after the entry under 10
+    out = lt.basket_results(pd.DataFrame([plan_row()]), basket_bars(closes))
+    assert out["status"].iloc[0] == "closed" and out["sessions"].iloc[0] == 10
+    # cost: 0.1R x 5 % risk + 0.10 % = 0.6 %
+    assert out["net_pct"].iloc[0] == pytest.approx(-10.0 - 0.6)
+
+
+def test_basket_holds_63_sessions_and_skips_signals_on_a_held_stock():
+    closes = [10.0] + [11.0] * 62 + [13.0] + [13.0] * 10
+    rows = [plan_row(), plan_row(session_date=BASKET_DAYS[5], grade_strategy="ep9m")]
+    out = lt.basket_results(pd.DataFrame(rows), basket_bars(closes))
+    assert len(out) == 1
+    assert out["sessions"].iloc[0] == 63 and out["net_pct"].iloc[0] == pytest.approx(30.0 - 0.6)
+
+
+def test_basket_takes_only_its_grades_and_keeps_open_trades_open():
+    rows = [plan_row(), plan_row(ticker="X", grade="B", grade_strategy="ep9m"),
+            plan_row(ticker="Y", grade_strategy="qm_surf", grade="A")]  # fmt: skip
+    out = lt.basket_results(pd.DataFrame(rows), basket_bars([10.0] + [11.0] * 30))
+    assert list(out["ticker"]) == [A] and out["status"].iloc[0] == "open"
+    summary = lt.basket_summary(out, pd.DataFrame(rows))
+    assert summary["closed"] == 0 and summary["open"] == 1
+    assert summary["verdict"] == "too few trades yet"

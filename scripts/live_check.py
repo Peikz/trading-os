@@ -56,6 +56,13 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     gaps = lt.execution(res, trades, sessions)
     labels = report.SCAN_LABELS | {"ep": "EP", "ep9m": "EP9M", "luk_avwap_flush": "Luk flush"}
     pushes = lt.push_lines(table, labels)
+    basket = lt.basket_results(res, bars)
+    bsum = lt.basket_summary(basket, res)
+    mean = "" if bsum["mean_pct"] != bsum["mean_pct"] else f" {bsum['mean_pct']:+.1f} %"
+    pushes.append(
+        f"A+ basket (paper) · {bsum['closed']} closed{mean} (study +{lt.BASKET_STUDY_MEAN_PCT} %)"
+        f" · {bsum['verdict']}"
+    )
     if len(gaps):
         pushes.append(
             f"Your trades: {len(gaps)} matched · you {gaps['your_r'].mean():+.2f}R vs plan "
@@ -100,6 +107,40 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
             ["grade_strategy", "grade", "ibd_state", "closed", "live_mean_r", "live_win_pct"],
         ),
         "",
+        "## A+ basket, on paper",
+        "",
+        f"Every EP / EP9M A+ and Luk flush A at {lt.BASKET_SIZE_PCT:g} % of the account, no price "
+        "stop: sold at the close of session 10, 21 or 42 after the entry when that close is under "
+        f"the entry price, else after {lt.BASKET_HOLD} sessions; a later signal on a held stock is "
+        "skipped. Net of the study's cost + 0.10 %. Tracked because it beat random stocks in every "
+        "year of 2016-26 but not on 2010-15 (data repo docs/research/"
+        "2026-11-05-hold-longer-and-basket.md). A paper plan, not a buy signal.",
+        "",
+        f"- Closed: {bsum['closed']}, open: {bsum['open']}",
+        f"- Mean net % a trade: {bsum['mean_pct']:+.1f} % (study 2022-26: "
+        f"+{lt.BASKET_STUDY_MEAN_PCT} %), win rate {bsum['win_pct']:.0f} % (study "
+        f"{lt.BASKET_STUDY_WIN_PCT} %)",
+        f"- Verdict: {bsum['verdict']}",
+        f"- Same signals in % of the account, closed trades: basket {bsum['account_pct']:+.1f} %, "
+        f"today's plans {bsum['plans_account_pct']:+.1f} % (1 % / 0.75 % risk, before caps)",
+        "",
+        *(
+            table_md(
+                basket.sort_values("session_date"),
+                [
+                    "session_date",
+                    "ticker",
+                    "grade_strategy",
+                    "entry",
+                    "status",
+                    "sessions",
+                    "net_pct",
+                ],
+            )
+            if len(basket)
+            else ["No basket trades yet."]
+        ),
+        "",
         "## Your trades against the plan",
         "",
         *(
@@ -135,6 +176,7 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
         "open": int((res["status"] == "open").sum()),
         "matched_trades": len(gaps),
         "below_study": int((table["verdict"] == "below the study").sum()),
+        "basket_closed": bsum["closed"],
     }
     return lines, pushes, counts
 

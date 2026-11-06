@@ -22,6 +22,7 @@ and are Emil's own trades doing what the plan would have? Facts, not advice.
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from collections.abc import Iterable, Mapping
 
@@ -327,3 +328,100 @@ def push_lines(table: pd.DataFrame, labels: Mapping[str, str] | None = None) -> 
             f"{study} · {row['verdict']}"
         )
     return out
+
+
+# The A+ basket, tracked on paper next to the plans (Emil, 6 Nov 2026: "Yes"; data repo
+# docs/research/2026-11-05-hold-longer-and-basket.md). Every EP / EP9M A+ and Luk flush A gets
+# the same share of the account, no price stop; it is sold at the close of session 10, 21 or 42
+# after the entry session when that close is under the entry price, else at the close of
+# session 63. Not confirmed on 2010-15, so it is a paper plan, never a buy signal.
+BASKET_STRATEGIES = {"ep": "A+", "ep9m": "A+", "luk_avwap_flush": "A"}
+BASKET_REVIEWS = (10, 21, 42)
+BASKET_HOLD = 63
+BASKET_SIZE_PCT = 5.0
+BASKET_EXTRA_COST_PCT = 0.10  # the later exit, as in the study
+# Study, 2022-26 (1,076 trades, net of costs): mean +7.9 %, win rate 33.7 %
+BASKET_STUDY_MEAN_PCT, BASKET_STUDY_WIN_PCT = 7.9, 33.7
+
+
+def basket_exit(entry: float, path: pd.DataFrame) -> dict:
+    """`path`: closes of the sessions after the entry session, oldest first."""
+    closes = path["close"].to_numpy(dtype=float)
+    for k in BASKET_REVIEWS:
+        if len(closes) < k:
+            break
+        if closes[k - 1] < entry:
+            return {"status": "closed", "exit": float(closes[k - 1]), "sessions": k}
+    if len(closes) >= BASKET_HOLD:
+        return {"status": "closed", "exit": float(closes[BASKET_HOLD - 1]), "sessions": BASKET_HOLD}
+    last = float(closes[-1]) if len(closes) else math.nan
+    return {"status": "open", "exit": last, "sessions": len(closes)}
+
+
+def basket_results(results: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
+    """The basket's paper trades from `plan_results` rows: the first qualifying signal per stock
+    while it is held (a later one on a held stock is skipped), net % of the money put in."""
+    cols = ["session_date", "ticker", "grade_strategy", "entry", "status", "sessions", "net_pct"]
+    if results.empty:
+        return pd.DataFrame(columns=cols)
+    want = results["grade_strategy"].map(BASKET_STRATEGIES)
+    picked = results[(results["grade"] == want) & results["entry"].gt(0)]
+    picked = picked[picked["status"].isin(["closed", "open"])]
+    bars = bars.copy()
+    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
+    by_ticker = {t: g.sort_values("session_date") for t, g in bars.groupby("ticker")}
+    rows, held_until = [], {}
+    for rec in picked.sort_values(["session_date", "ticker"]).to_dict("records"):
+        g = by_ticker.get(rec["ticker"])
+        if g is None:
+            continue
+        rule = str(rec.get("entry_rule") or "")
+        start = entry_session(rec["session_date"], rule, list(g["session_date"]))
+        if start is None or held_until.get(rec["ticker"], start) > start:
+            continue
+        out = basket_exit(rec["entry"], g[g["session_date"] > start])
+        risk_pct = (
+            (rec["entry"] - rec["stop"]) / rec["entry"] * 100 if rec["stop"] == rec["stop"] else 0
+        )
+        cost_r = rec["r_gross"] - rec["r_net"] if rec["r_gross"] == rec["r_gross"] else 0.1
+        cost = cost_r * risk_pct + BASKET_EXTRA_COST_PCT
+        net = (
+            (out["exit"] / rec["entry"] - 1) * 100 - cost
+            if out["exit"] == out["exit"]
+            else math.nan
+        )
+        ahead = g[g["session_date"] > start]["session_date"].tolist()
+        if out["status"] == "open":  # still held: every later signal on it is skipped
+            held_until[rec["ticker"]] = dt.date.max
+        else:
+            held_until[rec["ticker"]] = ahead[out["sessions"] - 1]
+        rows.append(
+            {
+                "session_date": rec["session_date"],
+                "ticker": rec["ticker"],
+                "grade_strategy": rec["grade_strategy"],
+                "entry": rec["entry"],
+                "status": out["status"],
+                "sessions": out["sessions"],
+                "net_pct": net,
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)
+
+
+def basket_summary(basket: pd.DataFrame, results: pd.DataFrame) -> dict:
+    """Closed basket trades against the study, and both plans in % of the account on the same
+    signals: the basket at `BASKET_SIZE_PCT` a stock, today's plans at 1 % (A+) / 0.75 % (A) risk
+    per trade (closed trades only, before any position cap)."""
+    done = basket[basket["status"] == "closed"]["net_pct"].dropna()
+    plans = results[(results["status"] == "closed") & results["grade"].isin(["A+", "A"])]
+    risk = plans["grade"].map({"A+": 1.0, "A": 0.75})
+    return {
+        "closed": len(done),
+        "open": int((basket["status"] == "open").sum()),
+        "mean_pct": done.mean() if len(done) else math.nan,
+        "win_pct": (done > 0).mean() * 100 if len(done) else math.nan,
+        "account_pct": done.sum() * BASKET_SIZE_PCT / 100,
+        "plans_account_pct": float((plans["r_net"] * risk).sum()),
+        "verdict": verdict(done, BASKET_STUDY_MEAN_PCT, BASKET_STUDY_WIN_PCT),
+    }
