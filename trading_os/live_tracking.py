@@ -378,6 +378,20 @@ def basket_exit(entry: float, path: pd.DataFrame, entry_low: float = math.nan) -
     return {"status": "open", "exit": last, "sessions": len(closes)}
 
 
+def basket_signals(signals: pd.DataFrame) -> pd.DataFrame:
+    """The live A+ / A / B signals plus the A+ / A that the short-interest rule turned into C
+    (`grade_before_si`), back at their own grade. The paper basket takes them (Emil, 6 Nov 2026):
+    in the basket the heavily shorted ones did better than skipping them, 45.8 / 45.4 % a year
+    against 37.7 / 35.2 % (2022-26 / 2016-21), while the 1-ADR plans keep them as C."""
+    if signals.empty or "grade" not in signals:
+        return signals.iloc[0:0]
+    live = signals[signals["grade"].isin(LIVE_GRADES)]
+    if "grade_before_si" not in signals:
+        return live
+    back = signals[(signals["grade"] == "C") & signals["grade_before_si"].isin(["A+", "A"])]
+    return pd.concat([live, back.assign(grade=back["grade_before_si"])], ignore_index=True)
+
+
 def basket_results(results: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
     """The basket's paper trades from `plan_results` rows: the first qualifying signal per stock
     while it is held (a later one on a held stock is skipped), net % of the money put in."""

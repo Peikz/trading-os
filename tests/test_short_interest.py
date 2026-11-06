@@ -61,6 +61,7 @@ def test_heavily_shorted_a_plus_becomes_c_with_a_warning():
     assert ep.loc[A, "grade_why"] == "heavily shorted (6.2 days to cover)"
     assert pd.isna(ep.loc[A, "plan_shares"])
     assert ep.loc[B, "grade"] == "A+" and ep.loc[B, "plan_shares"] == 100
+    assert ep.loc[A, "grade_before_si"] == "A+" and pd.isna(ep.loc[B, "grade_before_si"])
     assert ep.loc[A, "si_tag"] == "⚠️ heavily shorted · 6.2 days to cover (09-30)"
     assert pd.isna(ep.loc[B, "si_tag"])
     surf = out["ma_surf"].set_index("ticker")

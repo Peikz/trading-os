@@ -39,15 +39,16 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     cfg = load_config()
     cands = outcomes.load_candidates(data_dir)
     live = cands[cands["grade"].isin(lt.LIVE_GRADES)] if "grade" in cands else cands.iloc[0:0]
+    bsig = lt.basket_signals(cands)  # live + the heavily shorted A+ / A, for the paper basket
     head = [f"# Live check, {today:%d %B %Y}", ""]
     if live.empty:
         line = "No live A+ / A / B signals yet."
         return [*head, line], [line], {"signals": 0}
     back = clock.sessions_back(cfg.schedule, today, LOOKBACK)
-    first = next((i for i, s in enumerate(back) if s >= min(live["session_date"])), len(back))
+    first = next((i for i, s in enumerate(back) if s >= min(bsig["session_date"])), len(back))
     sessions = back[max(0, first - lt.MA_SESSIONS) :]  # the 20-day MA from the first signal
-    bars = history.load_bars(data_dir, sessions)
-    bars = bars[bars["ticker"].isin(set(live["ticker"]))]
+    all_bars = history.load_bars(data_dir, sessions)
+    bars = all_bars[all_bars["ticker"].isin(set(live["ticker"]))]
     res = lt.plan_results(live, bars, lt.exit_rules(cfg.grading))
     table = lt.compare(res)
     trades = dashboard.latest_journal(data_dir)
@@ -56,7 +57,11 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
     gaps = lt.execution(res, trades, sessions)
     labels = report.SCAN_LABELS | {"ep": "EP", "ep9m": "EP9M", "luk_avwap_flush": "Luk flush"}
     pushes = lt.push_lines(table, labels)
-    basket = lt.basket_results(res, bars)
+    bbars = all_bars[all_bars["ticker"].isin(set(bsig["ticker"]))]
+    bres = (
+        res if len(bsig) == len(live) else lt.plan_results(bsig, bbars, lt.exit_rules(cfg.grading))
+    )
+    basket = lt.basket_results(bres, bbars)
     bsum = lt.basket_summary(basket, res)
     mean = "" if bsum["mean_pct"] != bsum["mean_pct"] else f" {bsum['mean_pct']:+.1f} %"
     pushes.append(
@@ -116,8 +121,9 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
         "63, "
         "84 or 105 under its session-21 close); otherwise out after "
         f"{lt.BASKET_HOLD} sessions. A later signal on a held stock is "
-        "skipped. Net of the study's cost + 0.10 %. Tracked because it beat random stocks in every "
-        "year of 2016-26 but not on 2010-15 (data repo docs/research/"
+        "skipped. Heavily shorted A+ / A (graded C for the 1-ADR plans) are in the basket, as in "
+        "the study. Net of the study's cost + 0.10 %. Tracked because it beat random stocks in "
+        "every year of 2016-26 but not on 2010-15 (data repo docs/research/"
         "2026-11-05-hold-longer-and-basket.md). A paper plan, not a buy signal.",
         "",
         f"- Closed: {bsum['closed']}, open: {bsum['open']}",

@@ -240,6 +240,14 @@ def test_basket_takes_only_its_grades_and_keeps_open_trades_open():
     assert summary["verdict"] == "too few trades yet"
 
 
+def test_basket_signals_take_back_the_heavily_shorted_a_plus():
+    sig = pd.DataFrame({"ticker": [A, "X", "Y", "Z"], "grade": ["A+", "C", "C", "C"],
+                        "grade_before_si": [None, "A+", None, "B"]})  # fmt: skip
+    out = lt.basket_signals(sig).set_index("ticker")
+    assert sorted(out.index) == [A, "X"] and out.loc["X", "grade"] == "A+"
+    assert list(lt.basket_signals(sig.drop(columns="grade_before_si"))["ticker"]) == [A]
+
+
 def test_basket_cut_under_the_entry_day_low():
     closes = [10.0] + [10.5] * 4 + [9.4] + [12.0] * 70  # session 5 closes under the entry-day low
     bars_ = basket_bars(closes).assign(low=[9.5] + [10.0] * 75)

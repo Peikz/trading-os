@@ -104,6 +104,7 @@ def attach(results: dict, table: pd.DataFrame, dtc_max: float) -> dict:
                 h.loc[shorted, "grade_why"] = [
                     f"heavily shorted ({d:.1f} days to cover)" for d in h.loc[shorted, "dtc"]
                 ]
+                h.loc[shorted, "grade_before_si"] = h.loc[shorted, "grade"]  # for the paper basket
                 h.loc[shorted, "grade"] = "C"
                 h.loc[shorted, "grade_risk_mult"] = 0.0
                 h.loc[shorted, "grade_points"] = None
