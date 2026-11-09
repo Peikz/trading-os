@@ -66,3 +66,16 @@ setups:                            # spec §5; percentages are percent numbers, 
     up_closes_days: 7
     perf21_min_pct: 50
     stop_max_adr: 1.5
+engine:                            # spec §4 and §6
+  fill: close                      # close of the signal day; or next_open (measures close-fill optimism)
+  slippage_pct: 0.10               # per side
+  commission_pct: 0.08             # per side; the $1 minimum needs a size, so the portfolio step adds it
+  commission_min_usd: 1.0
+  max_hold_days: 252               # a trade still open after this exits at the close ("time")
+  shakeout_days: 3                 # a stop-out is a shakeout if a close beats the entry within 3 sessions
+  exits:
+    E0: {partial: day, partial_frac: 0.3333, partial_day_min: 3, partial_day_max: 5, trail: sma10}
+    E1: {partial: r_multiple, partial_frac: 0.15, partial_r: 3, trail: ema9}
+    E2: {partial: none, trail: sma10}
+    E3: {partial: r_multiple, partial_frac: 0.15, partial_r: 3, trail: ema21}
+  stops: [K0, K1]                  # K0 keep the initial stop; K1 raise it to the entry-day low
