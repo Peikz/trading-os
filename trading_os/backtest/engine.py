@@ -40,6 +40,9 @@ class Played:
     reason: str
     r_gross: float
     partial_k: int | None
+    partial_price: float = float("nan")
+    partial_frac: float = 0.0
+    rest_price: float = float("nan")  # the price the part left after the partial got out at
 
 
 def play(
@@ -68,7 +71,8 @@ def play(
     def done(k: int, px: float, why: str) -> Played:
         rest = 1.0 - sold
         avg = banked + rest * px
-        return Played(k, avg, why, (avg - entry) / risk, pk)
+        part_px = banked / sold if sold else float("nan")
+        return Played(k, avg, why, (avg - entry) / risk, pk, part_px, sold, px)
 
     if fail_at_close:
         return done(f, c[f], "fail_sold")
@@ -159,7 +163,7 @@ def run(
                     fail_at_close=fail,
                 )
                 if fail_day_stop:
-                    p = Played(f, m_stop, "stop", -1.0, None)
+                    p = Played(f, m_stop, "stop", -1.0, None, rest_price=m_stop)
                     q = p
                 else:
                     p = play(mo, mh, ml, mc, tr, **kw)
@@ -182,6 +186,9 @@ def run(
                         "hold_days": p.exit_k - f,
                         "exit_reason": p.reason,
                         "partial_date": dates[p.partial_k] if p.partial_k is not None else None,
+                        "partial_frac": p.partial_frac,
+                        "partial_price": p.partial_price * side,
+                        "rest_price": p.rest_price * side,
                         "r_gross": p.r_gross,
                         "cost_r": cost_r,
                         "r": p.r_gross - cost_r,

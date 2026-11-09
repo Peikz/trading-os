@@ -60,6 +60,7 @@ def test_r_partial_then_breakeven_and_r_no_partial():
     p = play(rows, ex=E1)
     assert p.reason == "breakeven" and p.exit_k == 2 and p.partial_k == 1
     assert p.r_gross == pytest.approx(0.15 * 3.1 + 0.85 * 0.0)
+    assert (p.partial_price, p.partial_frac, p.rest_price) == (13.1, 0.15, 10.0)
     q = play(rows, ex=E1, partial=False)
     assert q.reason == "stop" and q.exit_k == 3
     assert q.r_gross == pytest.approx(-1.0)

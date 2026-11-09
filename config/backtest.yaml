@@ -79,3 +79,15 @@ engine:                            # spec §4 and §6
     E2: {partial: none, trail: sma10}
     E3: {partial: r_multiple, partial_frac: 0.15, partial_r: 3, trail: ema21}
   stops: [K0, K1]                  # K0 keep the initial stop; K1 raise it to the entry-day low
+portfolio:                         # spec §7
+  start_equity: 100_000
+  risk_pct: 0.25                   # of current equity per trade (0.5 and 1 are the alternatives)
+  position_cap_pct: 25             # of equity
+  gross_max_pct: 100               # no margin
+  sizing:
+    P0: {max_positions: 3, open_risk_max_pct: null}
+    P1: {max_positions: 8, open_risk_max_pct: 2}   # a position at break-even counts 0 risk
+  rank_by: perf63                  # when signals outnumber free slots, highest first
+  circuit_breaker: {enabled: true, losses_in_row: 5, risk_factor: 0.5, reset_win_r: 2}
+  groups:                          # longs only; shorts run per setup, never in a long curve
+    longs_combined: [B0, L1, L2, L3]
