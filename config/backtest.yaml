@@ -1,0 +1,15 @@
+# Backtest module (docs/backlog/backtest.md). Research only: nothing here touches live scans.
+# Units: money in USD, volume in shares.
+version: 1
+data:
+  source: bars-alpaca              # release in the private data repo, one file per year
+  years: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+  warmup_sessions: 126             # the longest lookback (perf_126) before signals count
+  index_tickers: [QQQ]             # kept out of the universe, loaded for the regime tag
+universe:
+  price_min: 5.0                   # alternative 1.0 (the Oct 2026 scan floor)
+  avg_volume_days: 20
+  avg_volume_min: 500_000
+  market_cap_min: 300_000_000      # skipped: no point-in-time market cap in the bars
+  exclude_types: [ETF, ETN, ETS, ETV, FUND, INDEX, SP, ADRC, ADRP, ADRR, WARRANT, UNIT, RIGHT, PFD]
+  spac_name_patterns: ["acquisition corp", "acquisition co", "acquisition company", "acquisition inc", "acquisition ltd", "acquisition holdings", "blank check"]
