@@ -129,21 +129,29 @@ def report(
             ],
         ),
         "",
-        "## Phase 2 answers (B0, the current breakout rule)",
+        "## Phase 2 answers (B0 = buy stop as specced; B0C = buy at the close if it passes)",
         "Partial (E0 a third on day 3-5, E1 15 % at +3R, E2 none; K1):",
         fmt(
             trade_sum[
-                (trade_sum["setup"] == "B0")
+                trade_sum["setup"].isin(["B0", "B0C"])
                 & (trade_sum["stop_variant"] == "K1")
                 & trade_sum["exit_variant"].isin(["E0", "E1", "E2"])
             ],
-            ["exit_variant", "n", "expectancy_r", "win_rate", "partial_cost_r"],
+            ["setup", "exit_variant", "n", "expectancy_r", "win_rate", "partial_cost_r"],
         ),
         "",
         "Stop handling (K0 keep vs K1 raise to the entry-day low; E0):",
         fmt(
-            trade_sum[(trade_sum["setup"] == "B0") & (trade_sum["exit_variant"] == "E0")],
-            ["stop_variant", "n", "expectancy_r", "win_rate", "day1_stop_rate", "shakeout_rate"],
+            trade_sum[trade_sum["setup"].isin(["B0", "B0C"]) & (trade_sum["exit_variant"] == "E0")],
+            [
+                "setup",
+                "stop_variant",
+                "n",
+                "expectancy_r",
+                "win_rate",
+                "day1_stop_rate",
+                "shakeout_rate",
+            ],
         ),
         "",
         "Sizing (P0 max 3 vs P1 2 % open risk), account per group on E0/K1:",
