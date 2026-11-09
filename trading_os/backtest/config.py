@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import yaml
@@ -13,7 +14,7 @@ import yaml
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / "config" / "backtest.yaml"
 
 _KEYS = {
-    "": {"version", "data", "universe", "indicators"},
+    "": {"version", "data", "universe", "indicators", "setups"},
     "data": {"source", "years", "warmup_sessions", "index_tickers"},
     "universe": {
         "price_min",
@@ -38,6 +39,51 @@ _KEYS = {
     "indicators.leader": {"top_pct", "above_sma"},
     "indicators.regime": {"ticker", "fast_sma", "mid_sma", "slow_sma", "slope_lookback"},
     "indicators.breadth": {"perf_window", "move_pct", "strong_ratio_min", "weak_ratio_below"},
+    "setups": {"b0", "l1", "l2", "l3", "s1", "s2"},
+    "setups.b0": {
+        "prior_move_min_pct",
+        "prior_move_days",
+        "base_min_days",
+        "base_max_days",
+        "base_depth_max_pct",
+        "tight_days",
+        "tight_range_max_adr",
+        "trigger_above_pivot",
+        "limit_above_trigger",
+        "stop_low_days",
+    },
+    "setups.l1": {
+        "prior_move_min_pct",
+        "prior_move_days",
+        "high_age_min",
+        "high_age_max",
+        "touch_adr",
+        "stop_max_adr",
+    },
+    "setups.l2": {"undercut_days", "stop_max_adr"},
+    "setups.l3": {
+        "gap_min_pct",
+        "volume_min_x",
+        "volume_min",
+        "neglect_perf_max_pct",
+        "stop_max_adr",
+    },
+    "setups.s1": {
+        "former_leader_days",
+        "breakdown_days",
+        "breakdown_volume_x",
+        "bounce_min_days",
+        "bounce_max_days",
+        "touch_adr",
+        "stop_max_adr",
+    },
+    "setups.s2": {
+        "extension_adr",
+        "up_closes_min",
+        "up_closes_days",
+        "perf21_min_pct",
+        "stop_max_adr",
+    },
 }
 
 
@@ -101,6 +147,7 @@ class BacktestConfig:
     data: DataConfig
     universe: UniverseConfig
     indicators: IndicatorConfig
+    setups: Mapping[str, Mapping[str, float]]  # setup id -> its thresholds (all numbers)
 
 
 def _check_keys(section: str, got: Mapping[str, Any]) -> None:
@@ -127,6 +174,10 @@ def parse_config(raw: Mapping[str, Any]) -> BacktestConfig:
     _check_keys("indicators", ind)
     for sub in ("leader", "regime", "breadth"):
         _check_keys(f"indicators.{sub}", ind[sub])
+    st = raw["setups"]
+    _check_keys("setups", st)
+    for name in st:
+        _check_keys(f"setups.{name}", st[name])
     years = _ints(d["years"])
     if not years or list(years) != sorted(set(years)):
         raise ValueError("backtest config data.years: must be ascending and unique")
@@ -168,6 +219,9 @@ def parse_config(raw: Mapping[str, Any]) -> BacktestConfig:
                 strong_ratio_min=float(br["strong_ratio_min"]),
                 weak_ratio_below=float(br["weak_ratio_below"]),
             ),
+        ),
+        setups=MappingProxyType(
+            {n: MappingProxyType({k: float(v) for k, v in st[n].items()}) for n in sorted(st)}
         ),
     )
 
