@@ -13,3 +13,56 @@ universe:
   market_cap_min: 300_000_000      # skipped: no point-in-time market cap in the bars
   exclude_types: [ETF, ETN, ETS, ETV, FUND, INDEX, SP, ADRC, ADRP, ADRR, WARRANT, UNIT, RIGHT, PFD]
   spac_name_patterns: ["acquisition corp", "acquisition co", "acquisition company", "acquisition inc", "acquisition ltd", "acquisition holdings", "blank check"]
+indicators:                        # spec §3; percentages are percent numbers (25 = 25 %)
+  adr_days: 20                     # ADR% = mean of (high / low - 1) over 20 days, x 100
+  ema_spans: [9, 21, 50]
+  sma_windows: [10, 20, 50]
+  vol_avg_days: 50                 # vol50
+  perf_windows: [21, 63, 126]
+  rising_lookback: 5               # rising = MA today > MA 5 sessions ago
+  leader: {top_pct: 2, above_sma: 50}   # top 2 % of the universe on any perf window, close > SMA50
+  avwap_lookback: 63               # anchor: the highest-volume up day in the last 63 sessions
+  regime: {ticker: QQQ, fast_sma: 10, mid_sma: 20, slow_sma: 50, slope_lookback: 5}
+  breadth: {perf_window: 63, move_pct: 25, strong_ratio_min: 1.5, weak_ratio_below: 1.0}
+setups:                            # spec §5; percentages are percent numbers, sizes in ADR$
+  b0:                              # breakout, the current TRADING-OS rule
+    prior_move_min_pct: 30         # low-to-high gain in the window before the base starts
+    prior_move_days: 63
+    base_min_days: 10
+    base_max_days: 40
+    base_depth_max_pct: 25
+    tight_days: 5
+    tight_range_max_adr: 1.5
+    trigger_above_pivot: 1.001     # buy stop at pivot x 1.001
+    limit_above_trigger: 1.01      # no fill if the open is above trigger x 1.01
+    stop_low_days: 10              # max stop 1 ADR is enforced by the stop rule, never skipped
+  l1:                              # pullback to the rising 9/21 EMA or AVWAP
+    prior_move_min_pct: 30
+    prior_move_days: 63
+    high_age_min: 3                # the high was made 3-7 sessions ago
+    high_age_max: 7
+    touch_adr: 0.5                 # the pullback low comes within 0.5 ADR$ of EMA9, EMA21 or AVWAP
+    stop_max_adr: 1.0
+  l2:                              # undercut and reclaim
+    undercut_days: 10
+    stop_max_adr: 1.0
+  l3:                              # catalyst gap-up (EP)
+    gap_min_pct: 10
+    volume_min_x: 3.0              # x vol50 (the day before)
+    volume_min: 300_000
+    neglect_perf_max_pct: 30       # perf126 the day before
+    stop_max_adr: 1.5              # pre-gap ADR$
+  s1:                              # weak bounce into the declining 9/21 EMA (short, info only)
+    former_leader_days: 63
+    breakdown_days: 10
+    breakdown_volume_x: 1.5
+    bounce_min_days: 2
+    bounce_max_days: 4
+    touch_adr: 0.5
+    stop_max_adr: 1.0
+  s2:                              # parabolic short (info only)
+    extension_adr: 3.0             # close >= EMA9 + 3 ADR$ the day before
+    up_closes_min: 5
+    up_closes_days: 7
+    perf21_min_pct: 50
+    stop_max_adr: 1.5
