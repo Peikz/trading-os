@@ -112,7 +112,8 @@ def _runup(h: np.ndarray, low: np.ndarray, days: int) -> np.ndarray:
 
 def b0(w, ind, p: Mapping[str, float]) -> pd.DataFrame:
     """Breakout: prior move, a 10-40 session base with higher lows, trend, tight right side;
-    buy stop over the base high. The longest valid base wins."""
+    buy stop over the base high. The longest valid base wins. Emits B0 (the buy stop, spec)
+    and B0C (bought at the close when the close check passes)."""
     b = _base(w, ind)
     h, low, c, o, v = b["h"], b["l"], b["c"], b["o"], b["v"]
     vol50 = _vol50(ind)
@@ -149,20 +150,13 @@ def b0(w, ind, p: Mapping[str, float]) -> pd.DataFrame:
         entry = np.maximum(o, trigger)
         stop = np.maximum(_shift(_roll(low, int(p["stop_low_days"]), "min"), 1), pivot - adr)
         close_ok = (c > pivot) & (c > (h + low) / 2) & (v > _shift(vol50, 1))
-    return _rows(
-        "B0",
-        w,
-        mask,
-        1,
-        entry,
-        stop,
-        adr,
-        np.inf,  # the stop rule caps it at 1 ADR under the pivot; no skip (spec §5 B0)
-        close_ok=close_ok,
-        pivot=pivot,
-        base_len=base_len,
-        trigger=trigger,
-    )
+    audit = dict(pivot=pivot, base_len=base_len, trigger=trigger)
+    # no skip: the stop rule caps it at 1 ADR under the pivot (spec §5 B0)
+    stop_rows = _rows("B0", w, mask, 1, entry, stop, adr, np.inf, close_ok=close_ok, **audit)
+    # B0C (added 9 Nov 2026, not in the spec): the same breakout bought at the close, only
+    # when the close check passes; known at the close, so no fail_sold and no look-ahead.
+    close_rows = _rows("B0C", w, mask & close_ok, 1, c, stop, adr, np.inf, **audit)
+    return pd.concat([stop_rows, close_rows], ignore_index=True)
 
 
 def l1(w, ind, p: Mapping[str, float]) -> pd.DataFrame:

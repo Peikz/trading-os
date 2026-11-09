@@ -91,3 +91,4 @@ portfolio:                         # spec §7
   circuit_breaker: {enabled: true, losses_in_row: 5, risk_factor: 0.5, reset_win_r: 2}
   groups:                          # longs only; shorts run per setup, never in a long curve
     longs_combined: [B0, L1, L2, L3]
+    longs_combined_b0c: [B0C, L1, L2, L3]   # added 9 Nov 2026: the close-entry breakout instead

@@ -40,7 +40,9 @@ def run(w, setup, leader=None):
     return st.SETUPS[setup](w, i, P[setup.lower()]), i
 
 
-def one(rows, day):
+def one(rows, day, setup=None):
+    if setup is not None:
+        rows = rows[rows["setup"] == setup]
     hit = rows[rows["session_date"] == day]
     assert len(hit) == 1, rows[["session_date", "entry", "stop", "skip"]]
     return hit.iloc[0]
@@ -63,7 +65,7 @@ def test_b0_breakout_fires_on_the_trigger_day():
     opens[t], highs[t], lows[t] = 13.95, 14.6, 13.9
     w = chart(close, volume=vol, opens=opens, highs=highs, lows=lows)
     rows, i = run(w, "B0")
-    r = one(rows, w["close"].index[t])
+    r = one(rows, w["close"].index[t], "B0")
     base_len = int(r["base_len"])
     assert 10 <= base_len <= 40
     assert r["pivot"] == pytest.approx(highs[t - base_len : t].max())
@@ -76,7 +78,12 @@ def test_b0_breakout_fires_on_the_trigger_day():
     assert r["side"] == 1
     # the same chart without the volume on the trigger day fails the close check
     w2 = chart(close, volume=np.r_[vol[:-1], 100_000], opens=opens, highs=highs, lows=lows)
-    assert not bool(one(run(w2, "B0")[0], w2["close"].index[t])["close_ok"])
+    rows2 = run(w2, "B0")[0]
+    assert not bool(one(rows2, w2["close"].index[t], "B0")["close_ok"])
+    # B0C buys at the close only when the close check passes
+    c_row = one(rows, w["close"].index[t], "B0C")
+    assert c_row["entry"] == pytest.approx(close[t]) and c_row["stop"] == pytest.approx(r["stop"])
+    assert (rows2["setup"] == "B0C").sum() == 0
 
 
 def test_l1_pullback_fires_after_a_3_to_7_day_dip():
@@ -186,6 +193,7 @@ def test_signals_combines_and_sorts():
     out = st.signals(w, ind.compute(w, CFG), P)
     assert list(out.columns) == st.ROW_COLUMNS
     assert out["setup"].tolist() == ["L3"]
+    assert set(st.SETUPS) == {"B0", "L1", "L2", "L3", "S1", "S2"}  # B0 also emits B0C
 
 
 @pytest.mark.parametrize("t", [130, 170, 198])
