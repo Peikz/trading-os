@@ -1,0 +1,85 @@
+# Daily-bar backtest (docs/backlog/backtest.md, step 7): runs one config over the bars-alpaca
+# release and commits the run folder (trades, equity, summary, report, spot check, config) to
+# the private data repo under backtests/<run_id>/. Manual runs only; research, never live rules.
+# This repo is public: the log carries counts and the run folder's name only.
+
+name: Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: Config file in this repo
+        default: config/backtest.yaml
+      run_id:
+        description: "Run folder name (default: the UTC time)"
+        default: ""
+
+concurrency:
+  group: data-repo            # every job that writes trading-os-data shares this group
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo (ticker types and backtests only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+          sparse-checkout: |
+            data/ep_enrich/tickers.parquet
+            backtests/
+          sparse-checkout-cone-mode: false
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Bars
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          mkdir -p bars
+          gh release download bars-alpaca -R "${{ github.repository_owner }}/trading-os-data" -D bars -p '20*.parquet'
+          echo "bar files $(ls bars | wc -l)"
+
+      - name: Run
+        env:
+          CONFIG: ${{ inputs.config }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          args=(--config "$CONFIG" --bars-dir bars --data-dir data-repo)
+          if [ -n "$RUN_ID" ]; then args+=(--run-id "$RUN_ID"); fi
+          uv run --frozen --no-dev python -m trading_os.backtest.run "${args[@]}"
+
+      - name: Commit the run folder
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add --sparse backtests
+          if git diff --cached --quiet; then
+            echo "Backtest: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "backtest: run folder (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Backtest: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Backtest: push failed after 3 attempts"
+          exit 1
