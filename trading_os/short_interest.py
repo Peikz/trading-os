@@ -105,7 +105,11 @@ def attach(results: dict, table: pd.DataFrame, dtc_max: float) -> dict:
                 strat = h["grade_strategy"] if "grade_strategy" in h else pd.Series(None, h.index)
                 h.loc[shorted, "grade_why"] = [
                     f"heavily shorted ({d:.1f} days to cover)"
-                    + (f" · still {g} in the paper basket" if BASKET_STRATEGIES.get(s) == g else "")
+                    + (
+                        f" · still {g} in the paper basket"
+                        if g in BASKET_STRATEGIES.get(s, ())
+                        else ""
+                    )
                     for d, g, s in zip(
                         h.loc[shorted, "dtc"], h.loc[shorted, "grade"], strat[shorted], strict=True
                     )

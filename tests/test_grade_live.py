@@ -264,13 +264,13 @@ def test_under_weekly_ma_uses_weeks_that_ended_before_the_entry_week():
     assert grade_live.under_weekly_ma(spike, dt.date(2026, 11, 9))[A] == 0.0
 
 
-def test_luk_flush_a_under_its_40_week_ma_gets_twice_the_size():
+def test_luk_flush_a_under_its_40_week_ma_is_a_plus_at_twice_the_a_size():
     hits = pd.DataFrame([hit(A), hit(B), hit(C)])
     stocks = pd.DataFrame(
         {"d_tight5_adr": [2.0, 2.0, 2.0], "d_under_w40": [1.0, 0.0, np.nan]}, index=[A, B, C]
     )
     out = grade_live.grade_hits(hits, "luk_flush", CFG, {"mkt_scan_count": 10}, stocks)
-    assert list(out["grade"]) == ["A", "A", "A"]
+    assert list(out["grade"]) == ["A+", "A", "A"]  # A under its 40-week MA -> A+ at 2x A
     base = CFG.grading["risk_mult"]["A"]
     assert list(out["grade_risk_mult"]) == [2 * base, base, base]
     assert "40-week MA" in out["grade_why"].iloc[0] and "40-week" not in out["grade_why"].iloc[1]

@@ -267,10 +267,13 @@ def grade_hits(
         if slow and label == "A+" and entry_rule == pace["entry"]:
             label, risk_mult = "B", float(grading["risk_mult"].get("B", 0.0))
             why = f"{why}; on pace for {float(proj) / 1e6:.0f}M, under {pace['below'] / 1e6:.0f}M"
-        up = rule.get("under_w40")  # Luk flush A under its 40-week MA -> x2 (Emil, 9 Nov 2026)
+        up = rule.get(
+            "under_w40"
+        )  # Luk flush A under its 40-week MA -> A+ at x2 (Emil, 9 Nov 2026)
         if up and label == up["grade"] and feats.get("d_under_w40") == 1.0:
-            risk_mult = float(risk_mult) * float(up["mult"])
-            why = f"{why}; under its 40-week MA, x{float(up['mult']):g} size"
+            label, risk_mult = up["label"], float(risk_mult) * float(up["mult"])
+            size = f"x{float(up['mult']):g} the {up['grade']} size"
+            why = f"{why}; under its 40-week MA: {up['label']}, {size}"
         rows.append(
             {
                 "grade": label,
