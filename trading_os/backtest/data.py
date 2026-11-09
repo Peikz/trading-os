@@ -11,101 +11,25 @@ from __future__ import annotations
 
 import argparse
 import re
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
-import yaml
 
 from trading_os.audit import ordinary_ticker
+from trading_os.backtest.config import (  # noqa: F401 (re-exported)
+    DEFAULT_PATH,
+    BacktestConfig,
+    UniverseConfig,
+    load_config,
+    parse_config,
+)
 from trading_os.logsafe import status
 
-DEFAULT_PATH = Path(__file__).resolve().parents[2] / "config" / "backtest.yaml"
 BAR_COLUMNS = ["session_date", "ticker", "open", "high", "low", "close", "volume"]
 SURVIVORSHIP_LINE = (
     "Survivorship: delisted tickers are included (Alpaca bars, bars-alpaca release)."
 )
-
-_KEYS = {
-    "": {"version", "data", "universe"},
-    "data": {"source", "years", "warmup_sessions", "index_tickers"},
-    "universe": {
-        "price_min",
-        "avg_volume_days",
-        "avg_volume_min",
-        "market_cap_min",
-        "exclude_types",
-        "spac_name_patterns",
-    },
-}
-
-
-@dataclass(frozen=True)
-class DataConfig:
-    source: str
-    years: tuple[int, ...]
-    warmup_sessions: int
-    index_tickers: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class UniverseConfig:
-    price_min: float
-    avg_volume_days: int
-    avg_volume_min: float
-    market_cap_min: float | None
-    exclude_types: frozenset[str]
-    spac_name_patterns: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class BacktestConfig:
-    data: DataConfig
-    universe: UniverseConfig
-
-
-def _check_keys(section: str, got: Mapping[str, Any]) -> None:
-    want = _KEYS[section]
-    missing, unknown = want - set(got), set(got) - want
-    where = section or "top level"
-    if missing:
-        raise ValueError(f"backtest config {where}: missing {sorted(missing)}")
-    if unknown:
-        raise ValueError(f"backtest config {where}: unknown {sorted(unknown)}")
-
-
-def parse_config(raw: Mapping[str, Any]) -> BacktestConfig:
-    _check_keys("", raw)
-    if raw["version"] != 1:
-        raise ValueError(f"backtest config: version {raw['version']} is not supported")
-    d, u = raw["data"], raw["universe"]
-    _check_keys("data", d)
-    _check_keys("universe", u)
-    years = tuple(int(y) for y in d["years"])
-    if not years or list(years) != sorted(set(years)):
-        raise ValueError("backtest config data.years: must be ascending and unique")
-    return BacktestConfig(
-        data=DataConfig(
-            source=str(d["source"]),
-            years=years,
-            warmup_sessions=int(d["warmup_sessions"]),
-            index_tickers=tuple(str(t) for t in d["index_tickers"]),
-        ),
-        universe=UniverseConfig(
-            price_min=float(u["price_min"]),
-            avg_volume_days=int(u["avg_volume_days"]),
-            avg_volume_min=float(u["avg_volume_min"]),
-            market_cap_min=None if u["market_cap_min"] is None else float(u["market_cap_min"]),
-            exclude_types=frozenset(str(t) for t in u["exclude_types"]),
-            spac_name_patterns=tuple(str(p).lower() for p in u["spac_name_patterns"]),
-        ),
-    )
-
-
-def load_config(path: Path = DEFAULT_PATH) -> BacktestConfig:
-    return parse_config(yaml.safe_load(Path(path).read_text(encoding="utf-8")))
 
 
 def excluded_tickers(listed: pd.DataFrame, cfg: UniverseConfig) -> set[str]:

@@ -13,3 +13,14 @@ universe:
   market_cap_min: 300_000_000      # skipped: no point-in-time market cap in the bars
   exclude_types: [ETF, ETN, ETS, ETV, FUND, INDEX, SP, ADRC, ADRP, ADRR, WARRANT, UNIT, RIGHT, PFD]
   spac_name_patterns: ["acquisition corp", "acquisition co", "acquisition company", "acquisition inc", "acquisition ltd", "acquisition holdings", "blank check"]
+indicators:                        # spec §3; percentages are percent numbers (25 = 25 %)
+  adr_days: 20                     # ADR% = mean of (high / low - 1) over 20 days, x 100
+  ema_spans: [9, 21, 50]
+  sma_windows: [10, 20, 50]
+  vol_avg_days: 50                 # vol50
+  perf_windows: [21, 63, 126]
+  rising_lookback: 5               # rising = MA today > MA 5 sessions ago
+  leader: {top_pct: 2, above_sma: 50}   # top 2 % of the universe on any perf window, close > SMA50
+  avwap_lookback: 63               # anchor: the highest-volume up day in the last 63 sessions
+  regime: {ticker: QQQ, fast_sma: 10, mid_sma: 20, slow_sma: 50, slope_lookback: 5}
+  breadth: {perf_window: 63, move_pct: 25, strong_ratio_min: 1.5, weak_ratio_below: 1.0}
