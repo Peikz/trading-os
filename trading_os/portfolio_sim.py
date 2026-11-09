@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
+GRADE_RANK = {"A++": 0, "A+": 0, "A": 1, "B": 2, "C": 3}
 
 
 @dataclass(frozen=True)

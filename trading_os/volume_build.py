@@ -93,6 +93,6 @@ def card_tag(row) -> str | None:
     if vb is None or pd.isna(vb) or vb < WATCH_MIN:
         return None
     text = f"📈 Volume built up {vb:.1f}x in the 5 days before"
-    if row.get("grade") == "A+" and row.get("grade_strategy") in ("ep", "ep9m"):
+    if row.get("grade") in ("A++", "A+") and row.get("grade_strategy") in ("ep", "ep9m"):
         text += f" ({STUDY_NOTE})"
     return text

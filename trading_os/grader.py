@@ -40,7 +40,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-GRADES = ("A+", "A", "B", "C")
+GRADES = ("A++", "A+", "A", "B", "C")  # A++: EP A+ 10:30 under its 10-week MA
 OPEN_ENTRIES = {"open", "orh_5m", "next_open", "next_orb_5m"}
 OFFHOURS_ENTRIES = {"ah_1645", "ah_1800", "pm_0705", "pm_0800", "pm_0915"}
 

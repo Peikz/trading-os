@@ -166,7 +166,7 @@ def test_strategy_rules_how_tested_grades_and_notes(data, client):  # noqa: F811
     assert tested["setups"] and "Size per grade" in tested["caption"]
     assert tested["write_up"] is None
     grades = client.get("/api/research/grades").json()
-    assert [r["Grade"] for r in grades["sizes"]][:2] == ["A+", "A"]
+    assert [r["Grade"] for r in grades["sizes"]][:3] == ["A++", "A+", "A"]
     assert grades["strategies"] and len(grades["costs"]) == 3
     (data / "docs" / "research").mkdir(parents=True)
     (data / "docs" / "research" / "2026-10-20-study.md").write_text("# A study\n")

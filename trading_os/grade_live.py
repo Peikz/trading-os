@@ -278,6 +278,7 @@ def grade_hits(
         under10 = feats.get("d_under_w10")
         if note and label == "A+" and entry_rule == note["entry"] and under10 in (0.0, 1.0):
             side = "under" if under10 == 1.0 else "over"
+            label = note["label"] if side == "under" else label  # A++: the A+ size
             other = "over" if side == "under" else "under"
             n, win, r = note[side]
             n2, win2, r2 = note[other]

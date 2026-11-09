@@ -271,7 +271,8 @@ GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", 
 GRADING_QUALITY_OPTIONAL_KEYS = {"pace_b"}  # {below: shares, entry: plan}: A+ under it -> B
 # under_w40 {grade, label, mult}: that grade under its 40-week MA -> label, risk x mult
 # (Luk flush, 9 Nov 2026)
-# w10_note {entry, under, over}: EP A+ at that plan, a 10-week MA note ([trades, win %, R])
+# w10_note {entry, label, under, over}: EP A+ at that plan, a 10-week MA note ([trades,
+# win %, R]); under it -> label (A++, same size)
 GRADING_QUALITY_OPTIONAL_KEYS = GRADING_QUALITY_OPTIONAL_KEYS | {"under_w40", "w10_note"}
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
 QUALITY_OWN_PLAN = {"stop": {"order", "signal_low"}, "exit": {"trail_ma20", "hold_21"}}
@@ -617,7 +618,9 @@ def _check_grading(raw: Any) -> None:
                 raise ConfigError(f"grading.quality.{name}.under_w40: one of its grades, mult > 0")
         note = rule.get("w10_note")
         if note is not None:
-            _check_keys(f"grading.quality.{name}.w10_note", note, {"entry", "under", "over"})
+            _check_keys(
+                f"grading.quality.{name}.w10_note", note, {"entry", "label", "under", "over"}
+            )
             sides_ok = all(
                 isinstance(note[k], list) and len(note[k]) == 3 for k in ("under", "over")
             )

@@ -28,9 +28,9 @@ from trading_os import board_data, chart_series, dashboard, heat, notify, screen
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
 from trading_os.config import load_config
 
-GRADED = ("A+", "A", "B")
+GRADED = ("A++", "A+", "A", "B")
 SCOPES = {
-    "graded": "A+ / A / B",
+    "graded": "A++ / A+ / A / B",
     "pushed": "Pushed, incl. C",
     "all": "Every scan hit",
     "watchlists": "My watchlists",

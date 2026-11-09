@@ -443,14 +443,14 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   heavily_shorted_dtc: 5                    # A+/A at 5+ days to cover (FINRA) -> C, and a
                                             # warning on every hit (Emil, 25 Oct 2026: skipping
                                             # them raised the account in 2018-21 and 2022-26) # per-grade history (private, data repo)
-  risk_mult: {"A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
-  push: {"A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
+  risk_mult: {"A++": 2.0, "A+": 2.0, "A": 1.5, "B": 1.0, "C": 0.0}  # x the account's risk per trade
+  push: {"A++": full, "A+": full, "A": full, "B": line, "C": count}   # C is saved and only counted
   ungraded: "C: no edge after costs in the 2016-26 study"   # every scan without a scorecard
   # Pressing (Emil, 5 Nov 2026: "Skrue op"): while the last 20 closed live A+/A signals (played
   # by their plans) averaged more than +1R, new A+/A trades get x2 risk (`press.py`). Study:
   # 18.1 -> 20.9 %/yr 2022-26, 32.2 -> 38.1 % 2016-21, same drawdown, beat random timing in both
   # (data repo docs/research/2026-11-05-qullamaggie-his-way.md). Off until 20 have closed.
-  press: {enabled: true, window: 20, mean_r_above: 1.0, mult: 2.0, grades: ["A+", "A"]}
+  press: {enabled: true, window: 20, mean_r_above: 1.0, mult: 2.0, grades: ["A++", "A+", "A"]}
   # Quality counts (variable search, 21 Oct 2026; report section 9). quality_enabled: true
   # (all), false, or a list of the strategies switched on in place of their scorecards. On for
   # all three (Emil, 21 Oct 2026: "switch to quality grades"; SPEC §11.17).
@@ -472,7 +472,8 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
       live_scans: [ep_am, ep_ah]            # held 21 sessions); 4 is C (Emil, 21 Oct 2026):
                                             # +0.12R, ~0R per signal day
       entries: {ep_am: t_1030, ep_ah: ah_1645}
-      w10_note: {entry: t_1030, under: [170, 36, 1.07], over: [288, 24, 0.19]}  # trades, win %,
+      w10_note: {entry: t_1030, label: "A++", under: [170, 36, 1.07], over: [288, 24, 0.19]}  # A+ under
+                                            # its 10-week MA -> A++ at the A+ size. Trades, win %,
                                             # R. A+ 10:30 vs its 10-week MA (last
                                             # completed week), 2016-26 mean net R a trade: a note
                                             # only. Size changes didn't help the account, the
