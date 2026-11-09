@@ -472,6 +472,11 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
       live_scans: [ep_am, ep_ah]            # held 21 sessions); 4 is C (Emil, 21 Oct 2026):
                                             # +0.12R, ~0R per signal day
       entries: {ep_am: t_1030, ep_ah: ah_1645}
+      w10_note: {entry: t_1030, under: [170, 36, 1.07], over: [288, 24, 0.19]}  # trades, win %,
+                                            # R. A+ 10:30 vs its 10-week MA (last
+                                            # completed week), 2016-26 mean net R a trade: a note
+                                            # only. Size changes didn't help the account, the
+                                            # 20 % position cap binds (Emil, 9 Nov 2026)
       stop_adr: 1.0
       hold_sessions: 21
     ep9m:

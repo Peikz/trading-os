@@ -274,3 +274,32 @@ def test_luk_flush_a_under_its_40_week_ma_is_a_plus_at_twice_the_a_size():
     base = CFG.grading["risk_mult"]["A"]
     assert list(out["grade_risk_mult"]) == [2 * base, base, base]
     assert "40-week MA" in out["grade_why"].iloc[0] and "40-week" not in out["grade_why"].iloc[1]
+
+
+def test_ep_a_plus_at_1030_gets_a_10_week_ma_note_and_keeps_its_size():
+    hits = pd.DataFrame(
+        [hit(A, earnings_flag=True), hit(B, earnings_flag=True), hit(C, earnings_flag=True)]
+    )
+    points = {"d_neglect_months": 1.5, "revenue_growth_accel": 3.0, "eps_yoy_pct": 20.0,
+              "d_from_52w_high": -5.0}  # fmt: skip
+    stocks = pd.DataFrame([points] * 3, index=[A, B, C]).assign(d_under_w10=[1.0, 0.0, np.nan])
+    am = grade_live.grade_hits(hits, "ep_am", CFG, {"mkt_scan_count": 10}, stocks, slot="am")
+    assert list(am["grade"]) == ["A+", "A+", "A+"]
+    assert (am["grade_risk_mult"] == CFG.grading["risk_mult"]["A+"]).all()
+    why = list(am["grade_why"])
+    assert (
+        "under its 10-week MA: study 170 trades, 36% won, +1.07R a trade (over: 288, 24%, +0.19R)"
+        in why[0]
+    )
+    assert (
+        "over its 10-week MA: study 288 trades, 24% won, +0.19R a trade (under: 170, 36%, +1.07R)"
+        in why[1]
+    )
+    assert "10-week" not in why[2]  # too little history: no note
+    ah = grade_live.grade_hits(hits, "ep_ah", CFG, {"mkt_scan_count": 10}, stocks, slot="ah")
+    assert not ah["grade_why"].str.contains("10-week").any()  # the 16:45 plan: not studied
+
+
+def test_weekly_ma_weeks_per_scan():
+    assert grade_live.weekly_ma_weeks("ep_am", CFG.grading) == {10}
+    assert grade_live.weekly_ma_weeks("luk_flush", CFG.grading) == {40}

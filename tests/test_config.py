@@ -110,3 +110,10 @@ def test_luk_flush_under_w40_names_one_of_its_grades(raw):
     bad["grading"]["quality"]["luk_avwap_flush"]["under_w40"] = {"grade": "A", "label": "A+"}
     with pytest.raises(ConfigError, match="missing keys"):
         parse_config(bad)
+
+
+def test_ep_w10_note_names_one_of_its_plans(raw):
+    bad = copy.deepcopy(raw)
+    bad["grading"]["quality"]["ep"]["w10_note"]["entry"] = "t_1200"
+    with pytest.raises(ConfigError, match="w10_note"):
+        parse_config(bad)
