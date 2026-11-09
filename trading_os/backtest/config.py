@@ -14,7 +14,7 @@ import yaml
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / "config" / "backtest.yaml"
 
 _KEYS = {
-    "": {"version", "data", "universe", "indicators", "setups"},
+    "": {"version", "data", "universe", "indicators", "setups", "engine", "portfolio"},
     "data": {"source", "years", "warmup_sessions", "index_tickers"},
     "universe": {
         "price_min",
@@ -40,6 +40,28 @@ _KEYS = {
     "indicators.regime": {"ticker", "fast_sma", "mid_sma", "slow_sma", "slope_lookback"},
     "indicators.breadth": {"perf_window", "move_pct", "strong_ratio_min", "weak_ratio_below"},
     "setups": {"b0", "l1", "l2", "l3", "s1", "s2"},
+    "portfolio": {
+        "start_equity",
+        "risk_pct",
+        "position_cap_pct",
+        "gross_max_pct",
+        "sizing",
+        "rank_by",
+        "circuit_breaker",
+        "groups",
+    },
+    "portfolio.sizing": {"max_positions", "open_risk_max_pct"},
+    "portfolio.circuit_breaker": {"enabled", "losses_in_row", "risk_factor", "reset_win_r"},
+    "engine": {
+        "fill",
+        "slippage_pct",
+        "commission_pct",
+        "commission_min_usd",
+        "max_hold_days",
+        "shakeout_days",
+        "exits",
+        "stops",
+    },
     "setups.b0": {
         "prior_move_min_pct",
         "prior_move_days",
@@ -142,12 +164,142 @@ class IndicatorConfig:
     breadth: BreadthConfig
 
 
+EXIT_KEYS = {
+    "none": {"partial", "trail"},
+    "day": {"partial", "partial_frac", "partial_day_min", "partial_day_max", "trail"},
+    "r_multiple": {"partial", "partial_frac", "partial_r", "trail"},
+}
+TRAILS = {"sma10", "sma20", "sma50", "ema9", "ema21", "ema50"}
+STOP_VARIANTS = {"K0", "K1"}
+
+
+@dataclass(frozen=True)
+class ExitConfig:
+    partial: str  # none | day | r_multiple
+    trail: str
+    partial_frac: float = 0.0
+    partial_day_min: int = 0
+    partial_day_max: int = 0
+    partial_r: float = 0.0
+
+
+@dataclass(frozen=True)
+class EngineConfig:
+    fill: str  # close | next_open
+    slippage_pct: float
+    commission_pct: float
+    commission_min_usd: float
+    max_hold_days: int
+    shakeout_days: int
+    exits: Mapping[str, ExitConfig]
+    stops: tuple[str, ...]
+
+
+def _exit(name: str, raw: Mapping[str, Any]) -> ExitConfig:
+    kind = raw.get("partial")
+    if kind not in EXIT_KEYS:
+        raise ValueError(
+            f"backtest config engine.exits.{name}: partial must be one of {sorted(EXIT_KEYS)}"
+        )
+    want, got = EXIT_KEYS[kind], set(raw)
+    if want != got:
+        raise ValueError(
+            f"backtest config engine.exits.{name}: "
+            f"missing {sorted(want - got)}, unknown {sorted(got - want)}"
+        )
+    if raw["trail"] not in TRAILS:
+        raise ValueError(
+            f"backtest config engine.exits.{name}: trail must be one of {sorted(TRAILS)}"
+        )
+    return ExitConfig(
+        partial=kind,
+        trail=str(raw["trail"]),
+        partial_frac=float(raw.get("partial_frac", 0.0)),
+        partial_day_min=int(raw.get("partial_day_min", 0)),
+        partial_day_max=int(raw.get("partial_day_max", 0)),
+        partial_r=float(raw.get("partial_r", 0.0)),
+    )
+
+
+def _engine(raw: Mapping[str, Any]) -> EngineConfig:
+    _check_keys("engine", raw)
+    if raw["fill"] not in ("close", "next_open"):
+        raise ValueError("backtest config engine.fill: close or next_open")
+    stops = tuple(str(s) for s in raw["stops"])
+    if not stops or set(stops) - STOP_VARIANTS:
+        raise ValueError(f"backtest config engine.stops: a subset of {sorted(STOP_VARIANTS)}")
+    return EngineConfig(
+        fill=str(raw["fill"]),
+        slippage_pct=float(raw["slippage_pct"]),
+        commission_pct=float(raw["commission_pct"]),
+        commission_min_usd=float(raw["commission_min_usd"]),
+        max_hold_days=int(raw["max_hold_days"]),
+        shakeout_days=int(raw["shakeout_days"]),
+        exits=MappingProxyType({n: _exit(n, e) for n, e in raw["exits"].items()}),
+        stops=stops,
+    )
+
+
+@dataclass(frozen=True)
+class SizingConfig:
+    max_positions: int
+    open_risk_max_pct: float | None
+
+
+@dataclass(frozen=True)
+class BreakerConfig:
+    enabled: bool
+    losses_in_row: int
+    risk_factor: float
+    reset_win_r: float
+
+
+@dataclass(frozen=True)
+class PortfolioConfig:
+    start_equity: float
+    risk_pct: float
+    position_cap_pct: float
+    gross_max_pct: float
+    sizing: Mapping[str, SizingConfig]
+    rank_by: str
+    circuit_breaker: BreakerConfig
+    groups: Mapping[str, tuple[str, ...]]
+
+
+def _portfolio(raw: Mapping[str, Any]) -> PortfolioConfig:
+    _check_keys("portfolio", raw)
+    sizing = {}
+    for name, sz in raw["sizing"].items():
+        _check_keys("portfolio.sizing", sz)
+        cap = sz["open_risk_max_pct"]
+        sizing[name] = SizingConfig(int(sz["max_positions"]), None if cap is None else float(cap))
+    cb = raw["circuit_breaker"]
+    _check_keys("portfolio.circuit_breaker", cb)
+    return PortfolioConfig(
+        start_equity=float(raw["start_equity"]),
+        risk_pct=float(raw["risk_pct"]),
+        position_cap_pct=float(raw["position_cap_pct"]),
+        gross_max_pct=float(raw["gross_max_pct"]),
+        sizing=MappingProxyType(sizing),
+        rank_by=str(raw["rank_by"]),
+        circuit_breaker=BreakerConfig(
+            bool(cb["enabled"]),
+            int(cb["losses_in_row"]),
+            float(cb["risk_factor"]),
+            float(cb["reset_win_r"]),
+        ),
+        groups=MappingProxyType({g: tuple(map(str, v)) for g, v in raw["groups"].items()}),
+    )
+
+
 @dataclass(frozen=True)
 class BacktestConfig:
     data: DataConfig
     universe: UniverseConfig
     indicators: IndicatorConfig
     setups: Mapping[str, Mapping[str, float]]  # setup id -> its thresholds (all numbers)
+    engine: EngineConfig
+    portfolio: PortfolioConfig
 
 
 def _check_keys(section: str, got: Mapping[str, Any]) -> None:
@@ -220,6 +372,8 @@ def parse_config(raw: Mapping[str, Any]) -> BacktestConfig:
                 weak_ratio_below=float(br["weak_ratio_below"]),
             ),
         ),
+        engine=_engine(raw["engine"]),
+        portfolio=_portfolio(raw["portfolio"]),
         setups=MappingProxyType(
             {n: MappingProxyType({k: float(v) for k, v in st[n].items()}) for n in sorted(st)}
         ),
