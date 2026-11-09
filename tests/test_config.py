@@ -91,3 +91,14 @@ def test_pm_gap_basis_must_be_known(raw):
     bad["scans"]["ep9m_early"]["pm_gap_basis"] = "premarket_open"
     with pytest.raises(ConfigError, match="pm_gap_basis"):
         parse_config(bad)
+
+
+def test_luk_flush_under_w40_names_one_of_its_grades(raw):
+    assert raw["grading"]["quality"]["luk_avwap_flush"]["under_w40"] == {"grade": "A", "mult": 2}
+    bad = copy.deepcopy(raw)
+    bad["grading"]["quality"]["luk_avwap_flush"]["under_w40"] = {"grade": "A+", "mult": 2}
+    with pytest.raises(ConfigError, match="under_w40"):
+        parse_config(bad)
+    bad["grading"]["quality"]["luk_avwap_flush"]["under_w40"] = {"grade": "A"}
+    with pytest.raises(ConfigError, match="missing keys"):
+        parse_config(bad)

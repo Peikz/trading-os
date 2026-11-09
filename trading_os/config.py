@@ -269,6 +269,8 @@ GRADING_PRESS_KEYS = {"enabled", "window", "mean_r_above", "mult", "grades"}
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
 # A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
 GRADING_QUALITY_OPTIONAL_KEYS = {"pace_b"}  # {below: shares, entry: plan}: A+ under it -> B
+# under_w40 {grade, mult}: that grade under its 40-week MA -> risk x mult (Luk flush, 9 Nov 2026)
+GRADING_QUALITY_OPTIONAL_KEYS = GRADING_QUALITY_OPTIONAL_KEYS | {"under_w40"}
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
 QUALITY_OWN_PLAN = {"stop": {"order", "signal_low"}, "exit": {"trail_ma20", "hold_21"}}
 CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
@@ -606,6 +608,11 @@ def _check_grading(raw: Any) -> None:
             _check_keys(f"grading.quality.{name}.pace_b", pace, {"below", "entry"})
             if not float(pace["below"]) > 0 or pace["entry"] not in rule["entries"].values():
                 raise ConfigError(f"grading.quality.{name}.pace_b: a positive below, a plan entry")
+        up = rule.get("under_w40")
+        if up is not None:
+            _check_keys(f"grading.quality.{name}.under_w40", up, {"grade", "mult"})
+            if up["grade"] not in {g for _, g in rule["grades"]} or not float(up["mult"]) > 0:
+                raise ConfigError(f"grading.quality.{name}.under_w40: one of its grades, mult > 0")
         for key, allowed in QUALITY_OWN_PLAN.items() if own else ():
             if rule[key] not in allowed:
                 raise ConfigError(f"grading.quality.{name}.{key}: one of {sorted(allowed)}")

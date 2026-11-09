@@ -236,3 +236,41 @@ def test_ep9m_a_plus_under_a_20m_pace_at_1015_is_b():
     assert "under 20M" in am["grade_why"].iloc[0]
     noon = grade_live.grade_hits(hits, "ep9m_pace", CFG, market, pd.DataFrame(), extra, slot="mid")
     assert list(noon["grade"]) == ["A+", "A+", "A+"]  # the 12:00 plan was not tested
+
+
+def weekly_bars(ticker, weekly_closes, last_friday):
+    """One bar a session; each week's sessions close at that week's value."""
+    rows = []
+    fridays = pd.date_range(end=pd.Timestamp(last_friday), periods=len(weekly_closes), freq="W-FRI")
+    for fri, close in zip(fridays, weekly_closes, strict=True):
+        for back in range(4, -1, -1):
+            rows.append({"ticker": ticker, "session_date": (fri - pd.Timedelta(days=back)).date(),
+                         "close": float(close)})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def test_under_weekly_ma_uses_weeks_that_ended_before_the_entry_week():
+    friday = dt.date(2026, 11, 6)
+    falling = weekly_bars(A, np.linspace(30, 10, 45), friday)
+    rising = weekly_bars(B, np.linspace(10, 30, 45), friday)
+    short = weekly_bars(C, np.linspace(30, 10, 30), friday)
+    out = grade_live.under_weekly_ma(pd.concat([falling, rising, short]), dt.date(2026, 11, 9))
+    assert out[A] == 1.0 and out[B] == 0.0
+    assert C not in out  # fewer than 40 completed weeks: missing
+    # entry on Friday 6 Nov: that week hasn't ended, so a spike in it doesn't count
+    spike = pd.concat([weekly_bars(A, np.linspace(30, 10, 45), friday)])
+    spike.loc[spike["session_date"] >= dt.date(2026, 11, 2), "close"] = 100.0
+    assert grade_live.under_weekly_ma(spike, friday)[A] == 1.0
+    assert grade_live.under_weekly_ma(spike, dt.date(2026, 11, 9))[A] == 0.0
+
+
+def test_luk_flush_a_under_its_40_week_ma_gets_twice_the_size():
+    hits = pd.DataFrame([hit(A), hit(B), hit(C)])
+    stocks = pd.DataFrame(
+        {"d_tight5_adr": [2.0, 2.0, 2.0], "d_under_w40": [1.0, 0.0, np.nan]}, index=[A, B, C]
+    )
+    out = grade_live.grade_hits(hits, "luk_flush", CFG, {"mkt_scan_count": 10}, stocks)
+    assert list(out["grade"]) == ["A", "A", "A"]
+    base = CFG.grading["risk_mult"]["A"]
+    assert list(out["grade_risk_mult"]) == [2 * base, base, base]
+    assert "40-week MA" in out["grade_why"].iloc[0] and "40-week" not in out["grade_why"].iloc[1]
