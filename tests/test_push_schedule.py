@@ -1,6 +1,7 @@
 """The push schedule since 27 Oct 2026 (Emil): pre-market (EP-PM only), morning, midday (only
 when there is something new) and after hours (EP-AH, the close's setups and the market line);
-the close and weekly runs save without a push; a tap opens the dashboard."""
+the close run saves without a push; a tap opens the dashboard. The weekly lists (QM gainers,
+growth buckets) push on Saturday again since 9 Nov 2026 (Emil)."""
 
 import datetime as dt
 
@@ -39,8 +40,11 @@ def test_what_pushes_and_when():
         "ma_surf": ("ah",),
         "parabolic_long": ("ah",),
         "parabolic_short": ("ah",),
+        "qm_gainers": ("weekly",),
+        "growth_bucket_1": ("weekly",),
+        "growth_bucket_2": ("weekly",),
     }
-    assert job.SILENT_SLOTS == ("eod", "weekly") and job.QUIET_WHEN_EMPTY == ("mid",)
+    assert job.SILENT_SLOTS == ("eod",) and job.QUIET_WHEN_EMPTY == ("mid",)
     assert cfg.schedule.weekly_weekday == 5  # Saturday
 
 

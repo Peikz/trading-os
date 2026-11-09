@@ -49,7 +49,7 @@ TV_RETRY_WAIT_S = 30
 # The pushes since 27 Oct 2026 (Emil): pre-market (EP-PM only), morning, midday (only when
 # there is something new) and after hours (EP-AH, the close's setups and the market line).
 # The close and the weekly runs scan and save without a push of their own.
-SILENT_SLOTS = ("eod", "weekly")
+SILENT_SLOTS = ("eod",)  # the weekly pushes again since 9 Nov 2026 (Emil)
 QUIET_WHEN_EMPTY = ("mid",)
 NTFY_RETRY_WAIT_S = 10
 
