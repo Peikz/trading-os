@@ -55,7 +55,7 @@ the extra starts are harmless.
 | EOD | 16:15–23:59 (starts 16:17, again 17:00) | All end-of-day scans, breadth, Market Light, charts, report. No push of its own since 27 Oct 2026: its setups and the market line go out in the after-hours push (a close run that only finishes after it sends them itself) |
 | After-hours check | 16:40–17:10 (starts 16:50, again 16:56) | The evening push: the market line, EP-AH (earnings movers after the close, to buy before 17:00, Saxo's extended hours end), and the close's Luk flush, EP9M AVWAP, MA-surf and parabolics for tomorrow |
 | Outcomes | starts 18:00 weekdays | Fills in what happened 5/10/20/60 sessions after each signal |
-| Weekly | **Saturday**, starts 09:00 Copenhagen (since 27 Oct 2026; was Sunday) | QM gainers, growth buckets, tight bases, the weekly scan count (market heat). Saved for the dashboard, no push |
+| Weekly | **Saturday**, starts 09:00 Copenhagen (since 27 Oct 2026; was Sunday) | QM gainers, growth buckets, tight bases, the weekly scan count (market heat). Pushed Saturday morning (again since 9 Nov 2026), and on the dashboard |
 | Live check | the 1st of each month | The live A+ / A / B signals against the grading study, split by the IBD market state too, and your trades against their plan (section 11, Live results) |
 | Jobs log (26 Oct 2026) | once a day | The open-job count of ~480 listed companies' job boards, saved to `data/jobs/`, to test hiring growth as an EP variable once there is history |
 | Keepalive | monthly | Keeps GitHub from switching off the scheduled jobs |

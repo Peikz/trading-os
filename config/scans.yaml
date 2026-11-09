@@ -173,15 +173,15 @@ scans:
 
   # --- Weekly (SPEC §6.3) ---
   qm_gainers:
-    {enabled: true, phase: 1, slot: weekly, action: log,
+    {enabled: true, phase: 1, slot: weekly, action: push,
      top_pct: 2, return_windows: [22, 63, 126], adr_min_pct: 4,
      avg_dollar_volume_20d_min: 10_000_000, price_gt: 5}
   growth_bucket_1:
-    {enabled: true, phase: 1, slot: weekly, action: log,
+    {enabled: true, phase: 1, slot: weekly, action: push,
      price_gt: 10, avg_volume_gt: 100_000, rev_growth_q_min_pct: 40,
      quarters_to_check: 2, annual_revenue_gt: 25_000_000}
   growth_bucket_2:
-    {enabled: true, phase: 1, slot: weekly, action: log,
+    {enabled: true, phase: 1, slot: weekly, action: push,
      price_gt: 10, avg_volume_gt: 200_000, eps_growth_q_min_pct: 40,
      rev_growth_q_min_pct: 20, quarters_to_check: 2}
   tight_bases:                              # HTB + Ants merged (needs daily history)

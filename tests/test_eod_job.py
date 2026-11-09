@@ -32,7 +32,7 @@ def _grades_off(monkeypatch):
     cfg = ep_day_pushing(load_config())  # EP-Day is the example pushing scan here
     off = dataclasses.replace(cfg, grading=MappingProxyType({**cfg.grading, "enabled": False}))
     monkeypatch.setattr(job, "load_config", lambda *a, **k: off)
-    # The close and weekly runs push nothing since 27 Oct 2026 (test_the_close_run_is_silent);
+    # The close run pushes nothing since 27 Oct 2026 (test_the_close_run_is_silent);
     # here they stay the example push, to pin the message layout.
     monkeypatch.setattr(job, "SILENT_SLOTS", ())
 
