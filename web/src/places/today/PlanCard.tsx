@@ -10,7 +10,7 @@ import { copy, usd } from "../../format";
 import { stripIcons } from "../../plain";
 import { Icon } from "../../ui/Icon";
 
-const GRADED = ["A+", "A", "B"];
+const GRADED = ["A++", "A+", "A", "B"];
 
 /** The ticket for a row (`/api/ticket`): the plan's order type, or `kind` at `price`. */
 export function useTicket(row: BoardRow | null, kind: string | null, price: number | null) {

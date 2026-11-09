@@ -472,7 +472,7 @@ def grade_blocks(hits: pd.DataFrame) -> None:
     the history behind the grade, why, and the plan (C hits are saved, not shown)."""
     if "grade" not in hits:
         return
-    keep = hits["grade"].isin(["A+", "A", "B"])
+    keep = hits["grade"].isin(["A++", "A+", "A", "B"])
     if not keep.any():  # most scans, most days: nothing to show
         return
     graded = hits[keep]

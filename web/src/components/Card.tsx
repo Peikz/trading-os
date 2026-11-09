@@ -7,7 +7,13 @@ import { stockLink } from "../routes";
 /** The full chart of a stock (Stocks, with drawing, AVWAPs, intraday and notes). */
 export const chartLink = (ticker: string) => stockLink(ticker);
 
-const GRADE_CLASS: Record<string, string> = { "A+": "g-aplus", A: "g-a", B: "g-b", C: "g-c" };
+const GRADE_CLASS: Record<string, string> = {
+  "A++": "g-aplus",
+  "A+": "g-aplus",
+  A: "g-a",
+  B: "g-b",
+  C: "g-c",
+};
 
 export function GradeBadge({ grade, large }: { grade: string; large?: boolean }) {
   return (

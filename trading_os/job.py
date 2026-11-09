@@ -546,8 +546,8 @@ def _close_market_head(data_dir: Path, session, ibd_info: dict | None) -> list[s
 # push comes at 10:17 New York: after the open (EP9M AVWAP) and after MA-surf's buy-stop goes
 # live at 10:00, so those two are a check that the order is in; Luk flush is bought at 10:30.
 PLANNED = {
-    "luk_flush": (("A+", "A", "B"), "Luk flush", "buy 10:30 New York"),
-    "ep9m_avwap": (("A+", "A", "B"), "EP9M AVWAP", "bought at the open?"),
+    "luk_flush": (("A++", "A+", "A", "B"), "Luk flush", "buy 10:30 New York"),
+    "ep9m_avwap": (("A++", "A+", "A", "B"), "EP9M AVWAP", "bought at the open?"),
     "ma_surf": (None, "MA-surf", "buy-stop {pivot} live since 10:00?"),
 }
 

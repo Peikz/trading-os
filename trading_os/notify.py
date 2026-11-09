@@ -131,7 +131,7 @@ ENTRY_TEXT = {
 EXIT_TEXT = {"trail_ma20": "trail the 20-day MA: out on a close under it",
              "hold_21": "out at the close after 21 sessions"}  # fmt: skip
 AH_CARRIED_TEXT = "found after hours last night: the study bought at 16:45 NY, before 17:00"
-GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3}
+GRADE_RANK = {"A++": 0, "A+": 0, "A": 1, "B": 2, "C": 3}
 
 
 def best_first(hits: pd.DataFrame) -> pd.DataFrame:
@@ -636,7 +636,7 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     # Pivot watches (BO-Watch, MA-surf) keep theirs: the pivot and stop are the plan.
     if row.get("grade") != "C" or scan in PIVOT_SCANS:
         out += [Line("plan", INDENT + text) for text in plan_lines(row)]
-    buys = row.get("grade") in ("A+", "A") or scan in PIVOT_SCANS
+    buys = row.get("grade") in ("A++", "A+", "A") or scan in PIVOT_SCANS
     ticket = saxo_line(row, scan) if buys else None
     if ticket:
         out.append(Line("plan", INDENT + ticket))

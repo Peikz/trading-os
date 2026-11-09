@@ -16,7 +16,7 @@ import streamlit as st
 
 from trading_os import board_data, dashboard, notify, positions_view, report, ticket
 
-GRADE_COLOURS = {"A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
+GRADE_COLOURS = {"A++": "#0b5a26", "A+": "#1a7f37", "A": "#2da44e", "B": "#bf8700", "C": "#6e7781"}
 
 
 def _version(path) -> int:
@@ -403,7 +403,7 @@ def plan_card(row, n: int, cfg, data_dir, account, usd_rate, open_chart) -> None
             st.markdown("#### On your watchlist")
             st.caption("No setup today. It shows here while it is on Flag green.")
             return
-        lines = notify.grade_lines(row) if grade in ("A+", "A", "B") else []
+        lines = notify.grade_lines(row) if grade in ("A++", "A+", "A", "B") else []
         when = lines[1] if len(lines) > 1 else "Not graded: no study edge"
         st.markdown(f"#### {when[:1].upper()}{when[1:]}")
         order_block(row, f"plan_{n}", cfg, data_dir, account, usd_rate)
@@ -527,7 +527,7 @@ def today_rows(runs, cfg, data_dir, scan_frames, exchanges) -> tuple[pd.DataFram
     """Today's list: the A+ / A / B hits, your open positions, your Flag green list (each row
     tagged with its `_section`), and how many C hits were left out."""
     found = collect(runs, cfg, scan_frames, exchanges)
-    graded = found[found["grade"].isin(["A+", "A", "B"])] if len(found) else found
+    graded = found[found["grade"].isin(["A++", "A+", "A", "B"])] if len(found) else found
     parts = [graded.assign(_section="act")] if len(graded) else []
     held = dashboard.latest_positions(data_dir)
     if len(held) and "ticker" in held:
