@@ -491,6 +491,11 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
     luk_avwap_flush:
       parts: [market_cool_lt45, tight_5d]
       grades: [[2, "A"]]                    # both: +0.57R on 2022-26
+      under_w40: {grade: "A", label: "A+", mult: 2}  # A under its 40-week MA (last completed
+                                            # week) -> A+ at 2x the A size, 0.75 -> 1.5 % risk
+                                            # (Emil, 9 Nov 2026). +2.15 vs +0.55R a
+                                            # trade; account 34.8 / 19.2 % vs 32.4 / 18.3 % a year
+                                            # (data repo docs/research/2026-11-09-weekly-monthly-ma.md)
       live_scans: [luk_flush]
       entries: {luk_flush: next_1030}
       stop_adr: 1.0

@@ -119,6 +119,24 @@ def stock_features(bars: pd.DataFrame, asof: dt.date, sessions: list) -> pd.Data
     return table
 
 
+def under_weekly_ma(bars: pd.DataFrame, entry_session: dt.date, weeks: int = 40) -> pd.Series:
+    """1.0 when the stock's last completed weekly close before the entry week is under the
+    `weeks`-week average of weekly closes, else 0.0; missing with fewer weeks (Emil, 9 Nov
+    2026: the Luk flush 40-week study, weeks that ended before the entry day's week)."""
+    if bars.empty:
+        return pd.Series(dtype=float, name="d_under_w40")
+    monday = pd.Timestamp(entry_session) - pd.Timedelta(days=entry_session.weekday())
+    out = {}
+    for ticker, g in bars.groupby("ticker"):
+        close = g.set_index(pd.to_datetime(g["session_date"]))["close"].sort_index()
+        wk = close.resample("W-FRI").last().dropna()
+        wk = wk[wk.index < monday]
+        if len(wk) < weeks:
+            continue
+        out[ticker] = 1.0 if wk.iloc[-1] < wk.iloc[-weeks:].mean() else 0.0
+    return pd.Series(out, dtype=float, name="d_under_w40")
+
+
 def load_stats(data_dir: Path, cfg) -> dict:
     path = Path(data_dir) / cfg.grading["stats_file"]
     if not path.exists():
@@ -249,6 +267,13 @@ def grade_hits(
         if slow and label == "A+" and entry_rule == pace["entry"]:
             label, risk_mult = "B", float(grading["risk_mult"].get("B", 0.0))
             why = f"{why}; on pace for {float(proj) / 1e6:.0f}M, under {pace['below'] / 1e6:.0f}M"
+        up = rule.get(
+            "under_w40"
+        )  # Luk flush A under its 40-week MA -> A+ at x2 (Emil, 9 Nov 2026)
+        if up and label == up["grade"] and feats.get("d_under_w40") == 1.0:
+            label, risk_mult = up["label"], float(risk_mult) * float(up["mult"])
+            size = f"x{float(up['mult']):g} the {up['grade']} size"
+            why = f"{why}; under its 40-week MA: {up['label']}, {size}"
         rows.append(
             {
                 "grade": label,
@@ -358,6 +383,12 @@ def uses_growth(scan: str, grading: Mapping[str, Any]) -> bool:
     return bool(feats & set(GROWTH_FEATURES))
 
 
+def grading_rule_uses_w40(scan: str, grading: Mapping[str, Any]) -> bool:
+    """Whether the scan's quality rule sizes up under the 40-week MA."""
+    _, rule = rule_for(scan, grading)
+    return bool(rule and rule.get("under_w40"))
+
+
 def add_grades(
     results: Mapping[str, pd.DataFrame],
     data_dir: Path,
@@ -393,6 +424,13 @@ def add_grades(
             bars = pd.concat([bars[bars["session_date"] != asof], today], ignore_index=True)
         bars = bars[bars["ticker"].isin(tickers)]
         stocks = stock_features(bars, asof, sessions)
+        if any(grading_rule_uses_w40(n, cfg.grading) for n in graded):
+            nxt = clock.sessions_after(cfg.schedule, asof, 1, asof + dt.timedelta(days=10))
+            if slot in ("eod", "ah") and nxt:
+                w40 = under_weekly_ma(bars, nxt[0])
+            else:
+                w40 = under_weekly_ma(bars, session)
+            stocks = stocks.join(w40, how="outer") if len(stocks) else w40.to_frame()
     stats = load_stats(data_dir, cfg)
     press_state = press.load(data_dir, session)
     out = {}

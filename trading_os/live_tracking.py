@@ -339,7 +339,11 @@ def push_lines(table: pd.DataFrame, labels: Mapping[str, str] | None = None) -> 
 #   at the close of session 63, 84 or 105 when that close is under the session-21 close, else at
 #   session 126.
 # Otherwise out at the close of session 63. Not confirmed on 2010-15: a paper plan, never a buy.
-BASKET_STRATEGIES = {"ep": "A+", "ep9m": "A+", "luk_avwap_flush": "A"}
+BASKET_STRATEGIES = {
+    "ep": ("A+",),
+    "ep9m": ("A+",),
+    "luk_avwap_flush": ("A", "A+"),
+}  # Luk A+: A under the 40-week MA
 BASKET_REVIEWS = (10, 21, 42)
 BASKET_HOLD = 63
 BASKET_RUN_GAIN, BASKET_RUN_AT, BASKET_RUN_CHECKS, BASKET_RUN_HOLD = 0.19, 21, (63, 84, 105), 126
@@ -399,7 +403,11 @@ def basket_results(results: pd.DataFrame, bars: pd.DataFrame) -> pd.DataFrame:
     if results.empty:
         return pd.DataFrame(columns=cols)
     want = results["grade_strategy"].map(BASKET_STRATEGIES)
-    picked = results[(results["grade"] == want) & results["entry"].gt(0)]
+    match = [
+        g in w if isinstance(w, tuple) else False
+        for g, w in zip(results["grade"], want, strict=True)
+    ]
+    picked = results[pd.Series(match, index=results.index) & results["entry"].gt(0)]
     picked = picked[picked["status"].isin(["closed", "open"])]
     bars = bars.copy()
     bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
@@ -452,6 +460,8 @@ def basket_summary(basket: pd.DataFrame, results: pd.DataFrame) -> dict:
     done = basket[basket["status"] == "closed"]["net_pct"].dropna()
     plans = results[(results["status"] == "closed") & results["grade"].isin(["A+", "A"])]
     risk = plans["grade"].map({"A+": 1.0, "A": 0.75})
+    luk_plus = (plans["grade"] == "A+") & (plans.get("grade_strategy") == "luk_avwap_flush")
+    risk = risk.where(~luk_plus, 1.5)  # Luk flush A+ = A under its 40-week MA at 2x (9 Nov 2026)
     return {
         "closed": len(done),
         "open": int((basket["status"] == "open").sum()),

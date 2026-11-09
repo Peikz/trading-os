@@ -265,3 +265,14 @@ def test_basket_lets_a_19_pct_winner_run_to_126():
     bars_["close"] = closes
     out = lt.basket_results(pd.DataFrame([plan_row(session_date=days[0])]), bars_)
     assert out["sessions"].iloc[0] == 63
+
+
+def test_basket_takes_luk_flush_a_and_its_a_plus_and_sizes_the_a_plus_at_1_5_pct():
+    rows = [plan_row(grade="A", grade_strategy="luk_avwap_flush", entry_rule="next_1030"),
+            plan_row(ticker="X", grade="A+", grade_strategy="luk_avwap_flush",
+                     entry_rule="next_1030", session_date=BASKET_DAYS[1])]  # fmt: skip
+    bars = pd.concat([basket_bars([10.0] + [11.0] * 30), basket_bars([10.0] * 31, ticker="X")])
+    out = lt.basket_results(pd.DataFrame(rows), bars)
+    assert sorted(out["ticker"]) == sorted([A, "X"])
+    summary = lt.basket_summary(out, pd.DataFrame(rows))
+    assert summary["plans_account_pct"] == pytest.approx(0.9 * 0.75 + 0.9 * 1.5)
