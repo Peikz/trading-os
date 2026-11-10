@@ -254,7 +254,8 @@ def message(hit: dict, when: str) -> tuple[str, str]:
         body = (
             f"Now {price:.2f} · {hit['note']} · {when}\n"
             f"Add rule: buy the same shares near the close; stop of all shares to the entry "
-            f"{hit['plan_stop']:.2f}; sell all with the first shares on the plan's day."
+            f"{hit['plan_stop']:.2f}; sell all with the first shares on the plan's day.\n"
+            "Study rule 2016-26, not confirmed on 2010-15."
         )
     elif hit["kind"] == "stop":
         title = f"🛑 {t} at your stop {level:.2f}"

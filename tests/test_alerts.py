@@ -180,3 +180,4 @@ def test_the_add_alert_waits_for_1545_and_fires_once_per_position(tmp_path):
     assert module.check(tmp_path, cfg, Prices(), nxt, items, push, now=late) == 0  # not again
     assert sent[0][0] == f"➕ {A} is 2R up (11.00)"
     assert "entry 10.00" in sent[0][1] and "day 2/10" in sent[0][1]
+    assert "not confirmed on 2010-15" in sent[0][1]
