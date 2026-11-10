@@ -100,7 +100,7 @@ def attach(results: dict, table: pd.DataFrame, dtc_max: float) -> dict:
             lookup[["dtc", "si_date"]], on="ticker"
         )
         if "grade" in h:
-            shorted = h["grade"].isin(["A++", "A+", "A"]) & (h["dtc"] >= dtc_max)
+            shorted = h["grade"].isin(["A+++", "A++", "A+", "A"]) & (h["dtc"] >= dtc_max)
             if shorted.any():
                 strat = h["grade_strategy"] if "grade_strategy" in h else pd.Series(None, h.index)
                 h.loc[shorted, "grade_why"] = [

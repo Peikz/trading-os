@@ -133,7 +133,7 @@ def card_facts(row: Mapping[str, Any]) -> list[str]:
     """The card's lines under its head: when to buy, the plan (entry, stop, shares, risk), the
     tags, the history and why. Facts only; the decision stays the human's."""
     grade = row.get("grade", "C")
-    lines = notify.grade_lines(row) if grade in ("A++", "A+", "A", "B") else []
+    lines = notify.grade_lines(row) if grade in ("A+++", "A++", "A+", "A", "B") else []
     facts = [*lines[1:2], *notify.plan_lines(row), *tags(row)]
     hist = history(row)
     if hist:
@@ -560,7 +560,7 @@ def decision(row: Mapping[str, Any], cfg) -> dict | None:
     the session it is for. None for anything but A+ / A / B (no study edge, no plan time)."""
     from trading_os import clock
 
-    if row.get("grade") not in ("A++", "A+", "A", "B"):
+    if row.get("grade") not in ("A+++", "A++", "A+", "A", "B"):
         return None
     if row.get("carried_from") == "ah":  # the morning after: that buy time has passed
         return {

@@ -137,6 +137,50 @@ def under_weekly_ma(bars: pd.DataFrame, entry_session: dt.date, weeks: int = 40)
     return pd.Series(out, dtype=float, name=f"d_under_w{weeks}")
 
 
+def earlier_signal(bars: pd.DataFrame, session: dt.date, cfg, days: int = 90) -> pd.Series:
+    """1.0 when the stock had an EP-Day or an EP9M day (the EP history rules, from its daily
+    bars) in the `days` calendar days before `session`, else 0.0 (Emil, 10 Nov 2026: the
+    earlier-signal grades). Bars before `session` only."""
+    name = "d_earlier_ep"
+    if bars.empty:
+        return pd.Series(dtype=float, name=name)
+    ep, ep9 = cfg.scans["ep_day"], cfg.scans["ep9m"]
+    start = pd.Timestamp(session) - pd.Timedelta(days=days)
+    out = {}
+    for ticker, g in bars.groupby("ticker"):
+        g = g.assign(day=pd.to_datetime(g["session_date"])).sort_values("day")
+        g = g[g["day"] < pd.Timestamp(session)]
+        c, v = g["close"].astype(float), g["volume"].astype(float)
+        pc = c.shift(1)
+        rvol = v / v.shift(1).rolling(hm.RVOL_DAYS).mean()
+        is_ep = (
+            ((g["open"] / pc - 1) * 100 >= ep["gap_min_pct"])
+            & (rvol >= ep["rvol_min"])
+            & (v >= ep["volume_min"])
+            & (c >= ep["price_min"])
+        )
+        is_ep9m = (v >= ep9["volume_min"]) & ((c / pc - 1) * 100 >= ep9["chg_min_pct"])
+        hit = (is_ep | is_ep9m) & (g["day"] >= start)
+        out[ticker] = 1.0 if hit.any() else 0.0
+    return pd.Series(out, dtype=float, name=name)
+
+
+def w10_earlier_grade(rule10: Mapping[str, Any], under10, earlier) -> tuple[str, str] | None:
+    """(grade, why) from the 10-week MA and the earlier signal; None without the 10-week MA."""
+    if under10 not in (0.0, 1.0):
+        return None
+    side = "under" if under10 == 1.0 else "over"
+    key = f"{side}_earlier" if earlier == 1.0 else side
+    grade = rule10["grades"][key]
+    n, win, r = rule10["study"][key]
+    word = "an" if earlier == 1.0 else "no"
+    why = (
+        f"{side} its 10-week MA, {word} EP/EP9M in the {rule10['days']} days before: {grade}"
+        f"{' (no push)' if grade == 'C' else ''}; study {n} trades, {win}% won, {r:+.2f}R a trade"
+    )
+    return grade, why
+
+
 def load_stats(data_dir: Path, cfg) -> dict:
     path = Path(data_dir) / cfg.grading["stats_file"]
     if not path.exists():
@@ -274,18 +318,14 @@ def grade_hits(
             label, risk_mult = up["label"], float(risk_mult) * float(up["mult"])
             size = f"x{float(up['mult']):g} the {up['grade']} size"
             why = f"{why}; under its 40-week MA: {up['label']}, {size}"
-        note = rule.get("w10_note")  # EP A+ 10:30 vs its 10-week MA: a fact (Emil, 9 Nov 2026)
-        under10 = feats.get("d_under_w10")
-        if note and label == "A+" and entry_rule == note["entry"] and under10 in (0.0, 1.0):
-            side = "under" if under10 == 1.0 else "over"
-            label = note["label"] if side == "under" else label  # A++: the A+ size
-            other = "over" if side == "under" else "under"
-            n, win, r = note[side]
-            n2, win2, r2 = note[other]
-            why = (
-                f"{why}; {side} its 10-week MA: study {n} trades, {win}% won, {r:+.2f}R a trade "
-                f"({other}: {n2}, {win2}%, {r2:+.2f}R)"
-            )
+        rule10 = rule.get("w10_earlier")  # EP / EP9M A+ (Emil, 10 Nov 2026): same size, C no push
+        if rule10 and label == "A+" and entry_rule == rule10["entry"]:
+            found = w10_earlier_grade(rule10, feats.get("d_under_w10"), feats.get("d_earlier_ep"))
+            if found:
+                label, more = found
+                why = f"{why}; {more}"
+                if label not in ("A+++", "A++", "A+"):
+                    risk_mult = float(grading["risk_mult"].get(label, 0.0))
         rows.append(
             {
                 "grade": label,
@@ -400,7 +440,7 @@ def weekly_ma_weeks(scan: str, grading: Mapping[str, Any]) -> set[int]:
     _, rule = rule_for(scan, grading)
     if not rule:
         return set()
-    return ({40} if rule.get("under_w40") else set()) | ({10} if rule.get("w10_note") else set())
+    return ({40} if rule.get("under_w40") else set()) | ({10} if rule.get("w10_earlier") else set())
 
 
 def add_grades(
@@ -443,6 +483,11 @@ def add_grades(
         entry_day = nxt[0] if slot in ("eod", "ah") and nxt else session
         for w in sorted(weeks):
             col = under_weekly_ma(bars, entry_day, weeks=w)
+            stocks = stocks.join(col, how="outer") if len(stocks) else col.to_frame()
+        days = [r["w10_earlier"]["days"] for n in graded if (r := rule_for(n, cfg.grading)[1])
+                and r.get("w10_earlier")]  # fmt: skip
+        if days:
+            col = earlier_signal(bars, entry_day, cfg, days=max(days))
             stocks = stocks.join(col, how="outer") if len(stocks) else col.to_frame()
     stats = load_stats(data_dir, cfg)
     press_state = press.load(data_dir, session)

@@ -387,7 +387,7 @@ function SidePanel({ item }: { item: Item }) {
       </section>
     );
   }
-  if (!["A++", "A+", "A", "B", "C"].includes(row.grade)) {
+  if (!["A+++", "A++", "A+", "A", "B", "C"].includes(row.grade)) {
     return (
       <section className="card" aria-label={`${row.ticker} screen`}>
         <b>{row.ticker}</b> <span className="muted">{row.run_label}</span>
@@ -557,7 +557,7 @@ function PhoneCard({
   onMessage: (t: string) => void;
 }) {
   const row = item.row;
-  const graded = row && ["A++", "A+", "A", "B", "C"].includes(row.grade) && item.kind !== "watch";
+  const graded = row && ["A+++", "A++", "A+", "A", "B", "C"].includes(row.grade) && item.kind !== "watch";
   const { view } = useTicket(graded ? row! : null, null, null);
   const [bars, setBars] = useState<{ t: string; c: Spark } | null>(null);
   useEffect(() => {

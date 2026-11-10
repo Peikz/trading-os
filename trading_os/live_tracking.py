@@ -29,7 +29,7 @@ from collections.abc import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-LIVE_GRADES = ("A++", "A+", "A", "B")  # B: the EP9M AVWAP re-entry (26 Oct 2026)
+LIVE_GRADES = ("A+++", "A++", "A+", "A", "B")  # B: the EP9M AVWAP re-entry (26 Oct 2026)
 # The grading study's median cost in R per entry time (validated_trades_v3, quality plans).
 STUDY_COST_R = {
     "t_1030": 0.10,
@@ -340,7 +340,7 @@ def push_lines(table: pd.DataFrame, labels: Mapping[str, str] | None = None) -> 
 #   session 126.
 # Otherwise out at the close of session 63. Not confirmed on 2010-15: a paper plan, never a buy.
 BASKET_STRATEGIES = {
-    "ep": ("A++", "A+"),
+    "ep": ("A+++", "A++", "A+"),
     "ep9m": ("A+",),
     "luk_avwap_flush": ("A", "A+"),
 }  # Luk A+: A under the 40-week MA
@@ -392,7 +392,9 @@ def basket_signals(signals: pd.DataFrame) -> pd.DataFrame:
     live = signals[signals["grade"].isin(LIVE_GRADES)]
     if "grade_before_si" not in signals:
         return live
-    back = signals[(signals["grade"] == "C") & signals["grade_before_si"].isin(["A++", "A+", "A"])]
+    back = signals[
+        (signals["grade"] == "C") & signals["grade_before_si"].isin(["A+++", "A++", "A+", "A"])
+    ]
     return pd.concat([live, back.assign(grade=back["grade_before_si"])], ignore_index=True)
 
 
@@ -458,8 +460,10 @@ def basket_summary(basket: pd.DataFrame, results: pd.DataFrame) -> dict:
     signals: the basket at `BASKET_SIZE_PCT` a stock, today's plans at 1 % (A+) / 0.75 % (A) risk
     per trade (closed trades only, before any position cap)."""
     done = basket[basket["status"] == "closed"]["net_pct"].dropna()
-    plans = results[(results["status"] == "closed") & results["grade"].isin(["A++", "A+", "A"])]
-    risk = plans["grade"].map({"A++": 1.0, "A+": 1.0, "A": 0.75})
+    plans = results[
+        (results["status"] == "closed") & results["grade"].isin(["A+++", "A++", "A+", "A"])
+    ]
+    risk = plans["grade"].map({"A+++": 1.0, "A++": 1.0, "A+": 1.0, "A": 0.75})
     luk_plus = (plans["grade"] == "A+") & (plans.get("grade_strategy") == "luk_avwap_flush")
     risk = risk.where(~luk_plus, 1.5)  # Luk flush A+ = A under its 40-week MA at 2x (9 Nov 2026)
     return {
