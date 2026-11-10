@@ -80,7 +80,15 @@ def test_an_ungraded_row_is_sized_as_a_b_and_without_account_there_is_no_size(ac
     assert plain["ticket"] is None and "account.yaml" in plain["note"]
 
 
-def test_placed_in_saxo_saves_a_plan_for_the_next_session(account, client):
+@pytest.fixture
+def plan_day(monkeypatch):
+    """Plans expire against New York's today: pin it near the test session."""
+    from trading_os import journal_view
+
+    monkeypatch.setattr(journal_view, "ny_today", lambda cfg: dt.date(2026, 11, 2))
+
+
+def test_placed_in_saxo_saves_a_plan_for_the_next_session(account, client, plan_day):
     row = board_row(client, B)
     out = client.post("/api/ticket/place", json={"row": row, "kind": "stop"}).json()
     saved = plans.load(account)
@@ -185,7 +193,7 @@ def test_positions_cards(account, client, monkeypatch):
     assert any(f.startswith("Plan: sell at the close after") for f in card["facts"])
 
 
-def test_plans_suggest_create_and_cancel(account, client):
+def test_plans_suggest_create_and_cancel(account, client, plan_day):
     s = client.get("/api/journal/plans/suggest?entry=10&stop=9").json()
     assert s["suggestion"]["shares"] == 500 and s["text"].startswith("Suggested: 500 shares")
     body = {"session": "2026-11-02", "ticker": A, "entry": 10, "stop": 9, "shares": 500}
