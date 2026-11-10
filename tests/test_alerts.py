@@ -131,3 +131,52 @@ def test_once_builds_the_watch_list_at_once_on_a_fresh_machine(tmp_path, monkeyp
     monkeypatch.setattr(module.AlpacaClient, "latest_prices", lambda self, s: {A: 10.0})
     assert module.main(["--data-dir", str(tmp_path), "--once", "--no-push"]) == 0
     assert "watching 1" in capsys.readouterr().out
+
+
+def test_the_add_alert_takes_one_fill_hold_longs_in_sessions_1_to_10():
+    days = [dt.date(2026, 10, d) for d in (13, 14, 15, 16, 19, 20, 21, 22)]
+    positions = pd.DataFrame(
+        {
+            "ticker": [A, B, A + "X", B + "X", A + "Y"],
+            "setup": ["ep9m", "ma_surf", "luk_avwap_flush", "ep_am", "ep_ah"],
+            "direction": ["long", "long", "long", "long", "short"],
+            "entry_avg": [10.0, 10.0, 20.0, 10.0, 10.0],
+            "order_stop": [9.5, 9.5, 19.0, 9.5, 10.5],
+            "entry_date": [dt.date(2026, 10, 20), DAY, DAY, dt.date(2026, 10, 20), DAY],
+            "fills": [1, 1, 1, 2, 1],
+        }
+    )
+    items = alerts.add_items(positions, DAY, days).set_index("ticker")
+    # MA-surf trails (not a hold plan), the luk entry is today (day 0), the EP was added to,
+    # the short is left out
+    assert items.index.tolist() == [A]
+    assert items.loc[A, "level"] == 11.0 and items.loc[A, "plan_stop"] == 10.0
+    assert items.loc[A, "note"] == "day 2/10" and items.loc[A, "key"] == f"add:{A}:2026-10-20"
+    more = [dt.date(2026, 10, d) for d in (23, 26, 27, 28, 29, 30)]
+    more += [dt.date(2026, 11, d) for d in (2, 3, 4)]
+    late = alerts.add_items(positions, dt.date(2026, 11, 4), days + more)
+    assert late["ticker"].tolist() == [A + "X"]  # the EP9M is on day 11; the Luk flush on day 9
+
+
+def test_the_add_alert_waits_for_1545_and_fires_once_per_position(tmp_path):
+    module = watcher()
+    items = pd.DataFrame(
+        [{"key": f"add:{A}:2026-10-20", "kind": "add", "ticker": A, "level": 11.0,
+          "direction": "above", "note": "day 2/10", "plan_stop": 10.0}]
+    )  # fmt: skip
+    sent = []
+
+    class Prices:
+        def latest_prices(self, symbols):
+            return {A: 11.2}
+
+    cfg = load_config()
+    noon = dt.datetime(2026, 10, 22, 16, 0, tzinfo=dt.UTC)  # 12:00 New York
+    late = dt.datetime(2026, 10, 22, 19, 50, tzinfo=dt.UTC)  # 15:50 New York
+    push = lambda title, body: sent.append((title, body))  # noqa: E731
+    assert module.check(tmp_path, cfg, Prices(), DAY, items, push, now=noon) == 0
+    assert module.check(tmp_path, cfg, Prices(), DAY, items, push, now=late) == 1
+    nxt = dt.date(2026, 10, 23)
+    assert module.check(tmp_path, cfg, Prices(), nxt, items, push, now=late) == 0  # not again
+    assert sent[0][0] == f"➕ {A} is 2R up (11.00)"
+    assert "entry 10.00" in sent[0][1] and "day 2/10" in sent[0][1]

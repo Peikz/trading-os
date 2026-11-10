@@ -1,7 +1,8 @@
 """Price-alert watcher (Emil, 22 Oct 2026): every minute of the regular session, live prices for
-last close's BO-Watch and MA-surf pivots, your open positions' stops and your own dashboard
-alerts; one ntfy push per event (`trading_os/alerts.py`). Runs on the PC for now, later on the
-server: `scripts\\start_alerts.ps1`. Facts only; nothing places orders.
+last close's BO-Watch and MA-surf pivots, your open positions' stops, your own dashboard
+alerts and the +2R add on open EP/EP9M/Luk positions (from 15:45); one ntfy push per event
+(`trading_os/alerts.py`). Runs on the PC for now, later on the server:
+`scripts\\start_alerts.ps1`. Facts only; nothing places orders.
 
 uv run python scripts/alert_watch.py --data-dir ../trading-os-data          # runs until stopped
 uv run python scripts/alert_watch.py --data-dir ../trading-os-data --once   # one check now
@@ -41,24 +42,30 @@ def last_close_candidates(data_dir: Path, cfg, session: dt.date) -> pd.DataFrame
 
 
 def watch_list(data_dir: Path, cfg, session: dt.date) -> pd.DataFrame:
+    positions = dashboard.latest_positions(data_dir)
     return pd.concat(
         [
             alerts.pivot_items(last_close_candidates(data_dir, cfg, session), session),
-            alerts.stop_items(dashboard.latest_positions(data_dir), session),
+            alerts.stop_items(positions, session),
             alerts.own_items(alerts.current(data_dir)),
+            alerts.add_items(positions, session, clock.sessions_back(cfg.schedule, session, 15)),
         ],
         ignore_index=True,
     )
 
 
-def check(data_dir: Path, cfg, client, session: dt.date, items: pd.DataFrame, push) -> int:
-    """One pass: prices, new hits, one push each. Returns how many fired."""
+def check(
+    data_dir: Path, cfg, client, session: dt.date, items: pd.DataFrame, push, now=None
+) -> int:
+    """One pass: prices, new hits, one push each. Returns how many fired. The add items wait
+    until 15:45 New York (the study adds at the close)."""
+    now = now or dt.datetime.now(dt.UTC)
+    if len(items) and clock.ny_time(cfg.schedule, now).time() < alerts.ADD_FROM:
+        items = items[items["kind"] != "add"]
     if items.empty:
         return 0
     prices = client.latest_prices(items["ticker"])
-    done = {h["key"] for h in alerts.fired(data_dir, session)}
-    found = alerts.hits(items, prices, done)
-    now = dt.datetime.now(dt.UTC)
+    found = alerts.hits(items, prices, alerts.fired_keys(data_dir, session))
     for hit in found.to_dict("records"):
         title, body = alerts.message(hit, clock.both_times(now))
         push(title, body)
