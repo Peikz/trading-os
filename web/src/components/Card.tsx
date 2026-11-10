@@ -8,6 +8,7 @@ import { stockLink } from "../routes";
 export const chartLink = (ticker: string) => stockLink(ticker);
 
 const GRADE_CLASS: Record<string, string> = {
+  "A+++": "g-aplus",
   "A++": "g-aplus",
   "A+": "g-aplus",
   A: "g-a",

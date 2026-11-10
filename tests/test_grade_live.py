@@ -276,31 +276,68 @@ def test_luk_flush_a_under_its_40_week_ma_is_a_plus_at_twice_the_a_size():
     assert "40-week MA" in out["grade_why"].iloc[0] and "40-week" not in out["grade_why"].iloc[1]
 
 
-def test_ep_a_plus_at_1030_under_its_10_week_ma_is_a_plus_plus_at_the_same_size():
-    hits = pd.DataFrame(
-        [hit(A, earnings_flag=True), hit(B, earnings_flag=True), hit(C, earnings_flag=True)]
-    )
+def test_ep_a_plus_at_1030_is_graded_by_its_10_week_ma_and_an_earlier_signal():
+    tickers = [A, B, C, "DDQ", "EEQ"]
+    hits = pd.DataFrame([hit(t, earnings_flag=True) for t in tickers])
     points = {"d_neglect_months": 1.5, "revenue_growth_accel": 3.0, "eps_yoy_pct": 20.0,
               "d_from_52w_high": -5.0}  # fmt: skip
-    stocks = pd.DataFrame([points] * 3, index=[A, B, C]).assign(d_under_w10=[1.0, 0.0, np.nan])
+    stocks = pd.DataFrame([points] * 5, index=tickers).assign(
+        d_under_w10=[1.0, 1.0, 0.0, 0.0, np.nan], d_earlier_ep=[1.0, 0.0, 1.0, 0.0, 1.0]
+    )
     am = grade_live.grade_hits(hits, "ep_am", CFG, {"mkt_scan_count": 10}, stocks, slot="am")
-    assert list(am["grade"]) == ["A++", "A+", "A+"]
-    assert (am["grade_risk_mult"] == CFG.grading["risk_mult"]["A+"]).all()  # same size
+    assert list(am["grade"]) == ["A+++", "A++", "A+", "C", "A+"]  # no 10-week MA: as it was
+    size = CFG.grading["risk_mult"]["A+"]
+    assert list(am["grade_risk_mult"]) == [size, size, size, CFG.grading["risk_mult"]["C"], size]
     why = list(am["grade_why"])
-    assert (
-        "under its 10-week MA: study 170 trades, 36% won, +1.07R a trade (over: 288, 24%, +0.19R)"
-        in why[0]
-    )
-    assert (
-        "over its 10-week MA: study 288 trades, 24% won, +0.19R a trade (under: 170, 36%, +1.07R)"
-        in why[1]
-    )
-    assert "10-week" not in why[2]  # too little history: no note
+    assert "under its 10-week MA, an EP/EP9M in the 90 days before: A+++" in why[0]
+    assert "study 57 trades, 42% won, +1.69R a trade" in why[0]
+    assert "over its 10-week MA, no EP/EP9M in the 90 days before: C (no push)" in why[3]
+    assert "10-week" not in why[4]
     ah = grade_live.grade_hits(hits, "ep_ah", CFG, {"mkt_scan_count": 10}, stocks, slot="ah")
-    assert not ah["grade_why"].str.contains("10-week").any()  # the 16:45 plan: not studied
-    assert list(ah["grade"]) == ["A+", "A+", "A+"]
+    assert not ah["grade_why"].str.contains("10-week").any()  # the 16:45 plan: unchanged
+
+
+def test_ep9m_a_plus_at_1015_is_graded_by_its_10_week_ma_and_an_earlier_signal():
+    tickers = [A, B, C, "DDQ"]
+    hits = pd.DataFrame([hit(t, proj_volume=30e6) for t in tickers])
+    points = {"sessions_since_earnings": 2, "d_neglect_months": 1.5, "revenue_growth_accel": 3.0,
+              "eps_yoy_pct": 20.0, "d_from_52w_high": -5.0}  # fmt: skip
+    extra = pd.DataFrame([points] * 4, index=tickers)
+    stocks = pd.DataFrame(
+        {"d_under_w10": [1.0, 1.0, 0.0, 0.0], "d_earlier_ep": [1.0, 0.0, 1.0, 0.0]}, index=tickers
+    )
+    market = {"mkt_scan_count": 10}
+    am = grade_live.grade_hits(hits, "ep9m_pace", CFG, market, stocks, extra, slot="am")
+    assert list(am["grade"]) == ["A++", "C", "A+", "C"]
+    noon = grade_live.grade_hits(hits, "ep9m_pace", CFG, market, stocks, extra, slot="mid")
+    assert list(noon["grade"]) == ["A+"] * 4  # the 12:00 plan was not tested
+
+
+def ep_bars(ticker, days, spikes):
+    """Flat bars at 20 with 1M volume; `spikes`: session -> (open, close, volume)."""
+    rows = []
+    for d in days:
+        o, c, v = spikes.get(d, (20.0, 20.0, 1e6))
+        rows.append({"ticker": ticker, "session_date": d, "open": o, "high": max(o, c),
+                     "low": min(o, c), "close": c, "volume": v})  # fmt: skip
+    return rows
+
+
+def test_earlier_signal_finds_an_ep_day_or_ep9m_in_the_90_days_before():
+    days = list(clock.sessions_back(CFG.schedule, dt.date(2026, 11, 9), 200))
+    session = days[-1]
+    near, far, ep9 = days[-30], days[-120], days[-10]
+    rows = (
+        ep_bars(A, days, {near: (23.0, 24.0, 5e6)})  # EP-Day: gap 15 %, RVOL 5
+        + ep_bars(B, days, {far: (23.0, 24.0, 5e6)})  # over 90 days back
+        + ep_bars(C, days, {ep9: (20.0, 21.0, 10e6)})  # EP9M: 10M shares, +5 %
+        + ep_bars("DDQ", days, {session: (23.0, 24.0, 5e6)})  # the day itself doesn't count
+    )
+    out = grade_live.earlier_signal(pd.DataFrame(rows), session, CFG, days=90)
+    assert out.to_dict() == {A: 1.0, B: 0.0, C: 1.0, "DDQ": 0.0}
 
 
 def test_weekly_ma_weeks_per_scan():
     assert grade_live.weekly_ma_weeks("ep_am", CFG.grading) == {10}
     assert grade_live.weekly_ma_weeks("luk_flush", CFG.grading) == {40}
+    assert grade_live.weekly_ma_weeks("ep9m_pace", CFG.grading) == {10}

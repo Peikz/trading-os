@@ -2,6 +2,7 @@
 import type { FieldKind, Value } from "./api";
 
 export const GRADE_COLOURS: Record<string, string> = {
+  "A+++": "#063d19",
   "A++": "#0b5a26",
   "A+": "#1a7f37",
   A: "#2da44e",

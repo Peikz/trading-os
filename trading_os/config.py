@@ -271,9 +271,11 @@ GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", 
 GRADING_QUALITY_OPTIONAL_KEYS = {"pace_b"}  # {below: shares, entry: plan}: A+ under it -> B
 # under_w40 {grade, label, mult}: that grade under its 40-week MA -> label, risk x mult
 # (Luk flush, 9 Nov 2026)
-# w10_note {entry, label, under, over}: EP A+ at that plan, a 10-week MA note ([trades,
-# win %, R]); under it -> label (A++, same size)
-GRADING_QUALITY_OPTIONAL_KEYS = GRADING_QUALITY_OPTIONAL_KEYS | {"under_w40", "w10_note"}
+# w10_earlier {entry, days, grades, study}: A+ at that plan by its 10-week MA (under / over) and
+# an EP-Day/EP9M in the `days` before (`_earlier`) -> that grade, same size; study [trades,
+# win %, R] per side (EP / EP9M, Emil 10 Nov 2026)
+W10_SIDES = ("under_earlier", "under", "over_earlier", "over")
+GRADING_QUALITY_OPTIONAL_KEYS = GRADING_QUALITY_OPTIONAL_KEYS | {"under_w40", "w10_earlier"}
 GRADING_QUALITY_OWN_PLAN_KEYS = {"parts", "grades", "live_scans", "entries", "stop", "exit"}
 QUALITY_OWN_PLAN = {"stop": {"order", "signal_low"}, "exit": {"trail_ma20", "hold_21"}}
 CONDITION_TESTS = {"equals", "min", "max", "above", "below"}
@@ -616,17 +618,21 @@ def _check_grading(raw: Any) -> None:
             _check_keys(f"grading.quality.{name}.under_w40", up, {"grade", "label", "mult"})
             if up["grade"] not in {g for _, g in rule["grades"]} or not float(up["mult"]) > 0:
                 raise ConfigError(f"grading.quality.{name}.under_w40: one of its grades, mult > 0")
-        note = rule.get("w10_note")
-        if note is not None:
-            _check_keys(
-                f"grading.quality.{name}.w10_note", note, {"entry", "label", "under", "over"}
+        w10 = rule.get("w10_earlier")
+        if w10 is not None:
+            where = f"grading.quality.{name}.w10_earlier"
+            _check_keys(where, w10, {"entry", "days", "grades", "study"})
+            _check_keys(f"{where}.grades", w10["grades"], set(W10_SIDES))
+            _check_keys(f"{where}.study", w10["study"], set(W10_SIDES))
+            ok = (
+                w10["entry"] in rule["entries"].values()
+                and int(w10["days"]) > 0
+                and set(w10["grades"].values()) <= set(raw["risk_mult"])
+                and all(isinstance(v, list) and len(v) == 3 for v in w10["study"].values())
             )
-            sides_ok = all(
-                isinstance(note[k], list) and len(note[k]) == 3 for k in ("under", "over")
-            )
-            if note["entry"] not in rule["entries"].values() or not sides_ok:
+            if not ok:
                 raise ConfigError(
-                    f"grading.quality.{name}.w10_note: one of its plans, [trades, win %, R]"
+                    f"{where}: one of its plans, days > 0, known grades, [trades, win %, R]"
                 )
         for key, allowed in QUALITY_OWN_PLAN.items() if own else ():
             if rule[key] not in allowed:

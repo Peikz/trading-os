@@ -112,8 +112,12 @@ def test_luk_flush_under_w40_names_one_of_its_grades(raw):
         parse_config(bad)
 
 
-def test_ep_w10_note_names_one_of_its_plans(raw):
+def test_ep_w10_earlier_names_one_of_its_plans_and_known_grades(raw):
     bad = copy.deepcopy(raw)
-    bad["grading"]["quality"]["ep"]["w10_note"]["entry"] = "t_1200"
-    with pytest.raises(ConfigError, match="w10_note"):
+    bad["grading"]["quality"]["ep"]["w10_earlier"]["grades"]["over"] = "Z"
+    with pytest.raises(ConfigError, match="w10_earlier"):
+        parse_config(bad)
+    bad = copy.deepcopy(raw)
+    bad["grading"]["quality"]["ep"]["w10_earlier"]["entry"] = "t_1200"
+    with pytest.raises(ConfigError, match="w10_earlier"):
         parse_config(bad)
