@@ -26,7 +26,8 @@ Tables (release `sec-10y` in the data repo):
 - `companies`: name, SIC, a sector from SIC (`SECTOR_RULES`), exchange, filer category, SPAC
   and fund flags.
 - `balance` (`--mode balance`, Emil 11 Nov 2026): per filing, the balance sheet on its own
-  date: assets, liabilities, equity, current assets and liabilities, cash (`BALANCE_TAGS`);
+  date: assets, liabilities, equity, current assets and liabilities, cash (`BALANCE_TAGS`),
+  and the 10-K cover's public float with its own date;
   `accepted` is the day after `filed` (that mode skips the submissions download).
 - `ticker_cik`: every Massive ticker (and SEC's current ones) with its CIK and the dates it
   applies to; a ticker that moved to another company gets one row per company.
@@ -147,6 +148,10 @@ BALANCE_CONCEPTS: dict[tuple[str, str, str], tuple[str, int]] = {
     for group, tags in BALANCE_TAGS.items()
     for i, t in enumerate(tags)
 }
+# The 10-K cover's public float (Emil, 11 Nov 2026): the market value of shares held by
+# non-affiliates, measured on the last day of the second fiscal quarter, so its date differs
+# from the balance sheet's; kept with its own `public_float_as_of`.
+BALANCE_CONCEPTS[("dei", "EntityPublicFloat", "USD")] = ("public_float", 0)
 METRICS = ("eps", "revenue", "net_income")
 QUARTER_DAYS, YEAR_DAYS = (70, 120), (330, 380)  # durations that count as a quarter / a year
 
@@ -865,6 +870,9 @@ def balance_table(facts: pd.DataFrame, filings: pd.DataFrame | None = None) -> p
     in it; comparatives from earlier dates are dropped) and one column per `BALANCE_TAGS` group.
     `accepted` is the filing's acceptance when `filings` has it, else the day after `filed`."""
     columns = ["cik", "as_of", "filed", "accepted", "form", "accession", *BALANCE_TAGS]
+    columns += ["public_float", "public_float_as_of"]
+    pf = facts[(facts["group"] == "public_float") & facts["start"].isna()]
+    pf = pf.sort_values("end").drop_duplicates("accn", keep="last").set_index("accn")
     d = facts[facts["group"].isin(BALANCE_TAGS) & facts["start"].isna()]
     if d.empty:
         return pd.DataFrame(columns=columns)
@@ -882,6 +890,8 @@ def balance_table(facts: pd.DataFrame, filings: pd.DataFrame | None = None) -> p
     for group in BALANCE_TAGS:
         if group not in out:
             out[group] = np.nan
+    out["public_float"] = out["accn"].map(pf["val"]) if len(pf) else np.nan
+    out["public_float_as_of"] = out["accn"].map(pf["end"].dt.date) if len(pf) else None
     out = out.rename(columns={"accn": "accession", "end": "as_of"})
     out["as_of"] = out["as_of"].dt.date
     out["filed"] = out["filed"].dt.date
@@ -900,7 +910,7 @@ def build_balance(client: BulkClient, conf: Mapping, work: Path, out: Path) -> i
     status(f"SEC balance: {len(facts)} facts")
     table = balance_table(facts)
     table.to_parquet(out / "balance.parquet", **PARQUET_OPTIONS)
-    filled = {g: int(table[g].notna().sum()) for g in BALANCE_TAGS}
+    filled = {g: int(table[g].notna().sum()) for g in (*BALANCE_TAGS, "public_float")}
     status(f"SEC balance: {len(table)} filings, {table['cik'].nunique()} filers, filled {filled}")
     return len(table)
 

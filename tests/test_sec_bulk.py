@@ -518,3 +518,38 @@ def test_balance_keeps_each_filings_own_date_and_the_preferred_tag(tmp_path):
     assert row["equity"] == 200  # StockholdersEquity outranks the incl.-minority tag
     assert pd.isna(row["liabilities"])
     assert row["accepted"] == pd.Timestamp("2025-05-02", tz="UTC")  # no filings: day after filed
+
+
+def test_balance_carries_the_public_float_with_its_own_date(tmp_path):
+    body = {
+        "cik": 11,
+        "facts": {
+            "us-gaap": {
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            _fact(None, "2025-12-31", 900, "k1", 2025, "FY", "10-K", "2026-02-20")
+                        ]
+                    }
+                }
+            },
+            "dei": {
+                "EntityPublicFloat": {
+                    "units": {
+                        "USD": [
+                            _fact(None, "2025-06-30", 400, "k1", 2025, "FY", "10-K", "2026-02-20")
+                        ]
+                    }
+                }
+            },
+        },
+    }
+    path = tmp_path / "companyfacts.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("CIK0000000011.json", json.dumps(body))
+    facts = sec_bulk.read_facts(path, None, "2013-01-01", sec_bulk.BALANCE_CONCEPTS)
+    row = sec_bulk.balance_table(facts).iloc[0]
+    assert row["assets"] == 900 and row["as_of"] == D(
+        2025, 12, 31
+    )  # the float date doesn't drop it
+    assert row["public_float"] == 400 and row["public_float_as_of"] == D(2025, 6, 30)
