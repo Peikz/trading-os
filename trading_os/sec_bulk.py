@@ -25,6 +25,9 @@ Tables (release `sec-10y` in the data repo):
   share classes summed) or, when a filing has none, weighted-average basic shares.
 - `companies`: name, SIC, a sector from SIC (`SECTOR_RULES`), exchange, filer category, SPAC
   and fund flags.
+- `balance` (`--mode balance`, Emil 11 Nov 2026): per filing, the balance sheet on its own
+  date: assets, liabilities, equity, current assets and liabilities, cash (`BALANCE_TAGS`);
+  `accepted` is the day after `filed` (that mode skips the submissions download).
 - `ticker_cik`: every Massive ticker (and SEC's current ones) with its CIK and the dates it
   applies to; a ticker that moved to another company gets one row per company.
 
@@ -126,6 +129,24 @@ CONCEPTS: dict[tuple[str, str, str], tuple[str, int]] = {
     ("us-gaap", "WeightedAverageNumberOfSharesOutstandingBasic", "shares"): ("shares_avg", 0),
 }
 TAG_NAMES = {(g, r): c for (_, c, _), (g, r) in CONCEPTS.items()}
+# Balance sheet (Emil, 11 Nov 2026: "market cap about equal to assets"): instant facts from the
+# same filings, read only by `--mode balance` into `balance.parquet`. Lowest rank wins per column.
+BALANCE_TAGS: dict[str, tuple[str, ...]] = {
+    "assets": ("Assets",),
+    "liabilities": ("Liabilities",),
+    "equity": (
+        "StockholdersEquity",
+        "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+    ),
+    "current_assets": ("AssetsCurrent",),
+    "current_liabilities": ("LiabilitiesCurrent",),
+    "cash": ("CashAndCashEquivalentsAtCarryingValue",),
+}
+BALANCE_CONCEPTS: dict[tuple[str, str, str], tuple[str, int]] = {
+    ("us-gaap", t, "USD"): (group, i)
+    for group, tags in BALANCE_TAGS.items()
+    for i, t in enumerate(tags)
+}
 METRICS = ("eps", "revenue", "net_income")
 QUARTER_DAYS, YEAR_DAYS = (70, 120), (330, 380)  # durations that count as a quarter / a year
 
@@ -648,8 +669,15 @@ def header_todo(
 # --------------------------------------------------------------------------- companyfacts
 
 
-def read_facts(path: Path, ciks: set[int] | None, since: str) -> pd.DataFrame:
-    """The `CONCEPTS` facts from 10-Q/10-K-family filings with an end date since `since`."""
+def read_facts(
+    path: Path,
+    ciks: set[int] | None,
+    since: str,
+    concepts: Mapping[tuple[str, str, str], tuple[str, int]] | None = None,
+) -> pd.DataFrame:
+    """The `CONCEPTS` (or `concepts`) facts from 10-Q/10-K-family filings with an end date
+    since `since`."""
+    concepts = CONCEPTS if concepts is None else concepts
     cols: dict[str, list] = {
         k: [] for k in ("cik", "group", "rank", "start", "end", "val", "accn", "fy", "fp", "form")
     }
@@ -661,7 +689,7 @@ def read_facts(path: Path, ciks: set[int] | None, since: str) -> pd.DataFrame:
                 continue
             cik = parsed[0]
             facts = json.loads(zf.read(member)).get("facts") or {}
-            for (taxonomy, concept, unit), (group, rank) in CONCEPTS.items():
+            for (taxonomy, concept, unit), (group, rank) in concepts.items():
                 entries = (
                     ((facts.get(taxonomy) or {}).get(concept) or {}).get("units", {}).get(unit)
                 )
@@ -830,6 +858,51 @@ def shares_table(facts: pd.DataFrame, filings: pd.DataFrame) -> pd.DataFrame:
     out["filed"] = out["filed"].dt.date
     columns = ["cik", "as_of", "filed", "accepted", "form", "accession", "shares", "source"]
     return out[[*columns, "classes"]].sort_values(["cik", "accepted"]).reset_index(drop=True)
+
+
+def balance_table(facts: pd.DataFrame, filings: pd.DataFrame | None = None) -> pd.DataFrame:
+    """balance.parquet: one row per filing with its own balance-sheet date (the latest instant
+    in it; comparatives from earlier dates are dropped) and one column per `BALANCE_TAGS` group.
+    `accepted` is the filing's acceptance when `filings` has it, else the day after `filed`."""
+    columns = ["cik", "as_of", "filed", "accepted", "form", "accession", *BALANCE_TAGS]
+    d = facts[facts["group"].isin(BALANCE_TAGS) & facts["start"].isna()]
+    if d.empty:
+        return pd.DataFrame(columns=columns)
+    d = d[d["end"] == d.groupby("accn")["end"].transform("max")]
+    d = d.sort_values("rank").drop_duplicates(["accn", "group"])
+    wide = d.pivot_table(
+        index=["cik", "accn", "end"], columns="group", values="val", aggfunc="first"
+    )
+    meta = d.groupby("accn")[["form", "filed"]].first()
+    out = wide.reset_index().join(meta, on="accn")
+    if filings is None:  # same fallback as `_filing_times`: after the close of the filing day
+        out["accepted"] = (out["filed"] + pd.Timedelta(days=1)).dt.tz_localize("UTC")
+    else:
+        out["accepted"] = _filing_times(filings, out)
+    for group in BALANCE_TAGS:
+        if group not in out:
+            out[group] = np.nan
+    out = out.rename(columns={"accn": "accession", "end": "as_of"})
+    out["as_of"] = out["as_of"].dt.date
+    out["filed"] = out["filed"].dt.date
+    return out[columns].sort_values(["cik", "accepted"]).reset_index(drop=True)
+
+
+def build_balance(client: BulkClient, conf: Mapping, work: Path, out: Path) -> int:
+    """`--mode balance`: companyfacts.zip -> out/balance.parquet (every filer, since
+    `facts_since`). No submissions download, so `accepted` is the day after `filed`."""
+    out.mkdir(parents=True, exist_ok=True)
+    facts_zip = work / "companyfacts.zip"
+    if not facts_zip.exists():
+        client.download(COMPANYFACTS_ZIP_URL, facts_zip)
+    status(f"SEC balance: companyfacts.zip {facts_zip.stat().st_size >> 20} MB")
+    facts = read_facts(facts_zip, None, str(conf["facts_since"]), BALANCE_CONCEPTS)
+    status(f"SEC balance: {len(facts)} facts")
+    table = balance_table(facts)
+    table.to_parquet(out / "balance.parquet", **PARQUET_OPTIONS)
+    filled = {g: int(table[g].notna().sum()) for g in BALANCE_TAGS}
+    status(f"SEC balance: {len(table)} filings, {table['cik'].nunique()} filers, filled {filled}")
+    return len(table)
 
 
 # --------------------------------------------------------------------------- tickers
@@ -1316,7 +1389,7 @@ def _main(argv: list[str] | None = None) -> int:
     from trading_os.config import load_config
 
     parser = argparse.ArgumentParser(description="SEC EDGAR bulk fundamentals (10 years)")
-    parser.add_argument("--mode", choices=["check", "build"], default="check")
+    parser.add_argument("--mode", choices=["check", "build", "balance"], default="check")
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--bars", type=Path, help="folder with the 10-year YYYY.parquet bars")
     parser.add_argument("--work", type=Path, default=Path("work"))
@@ -1341,6 +1414,10 @@ def _main(argv: list[str] | None = None) -> int:
             f"SEC bulk check: {sum(v for (k, _), v in counts.items() if k == 'all=all')} filings"
         )
         report_audit(counts)
+        return 0
+    if args.mode == "balance":
+        args.work.mkdir(parents=True, exist_ok=True)
+        build_balance(client, conf, args.work, args.out)
         return 0
     if args.data_dir is None:
         status("SEC bulk: --data-dir is required for a build")

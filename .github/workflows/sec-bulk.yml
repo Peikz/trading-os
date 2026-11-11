@@ -2,7 +2,9 @@
 # 20 Oct 2026). "build" downloads submissions.zip and companyfacts.zip, checks ambiguous
 # earnings acceptance times against EDGAR's filing headers (cached in the release, so a rerun
 # continues), builds the five tables and uploads them to the data repo's "sec-10y" release
-# (not git). "check" compares JSON and header times on a small sample. Manual runs only.
+# (not git). "check" compares JSON and header times on a small sample. "balance" (Emil, 11 Nov
+# 2026) reads only companyfacts.zip into balance.parquet (assets, liabilities, equity, current
+# assets/liabilities, cash per filing) and uploads that one file. Manual runs only.
 # This repo is public: the job prints counts and status only.
 
 name: SEC bulk
@@ -11,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "build = the five tables to release sec-10y; check = acceptance-time audit"
+        description: "build = the five tables to release sec-10y; check = acceptance-time audit; balance = balance.parquet"
         type: choice
-        options: [build, check]
+        options: [build, check, balance]
         default: build
       since:
         description: "older build: facts and events from this date (e.g. 2009-01-01); empty = config"
@@ -85,3 +87,12 @@ jobs:
           REPO="${{ github.repository_owner }}/trading-os-data"
           gh release upload "${{ inputs.release }}" out/*.parquet out/summary.json -R "$REPO" --clobber
           echo "uploaded: $(ls out | wc -l) files"
+
+      - name: Upload the balance sheet
+        if: ${{ inputs.mode == 'balance' }}
+        env:
+          GH_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          REPO="${{ github.repository_owner }}/trading-os-data"
+          gh release upload "${{ inputs.release }}" out/balance.parquet -R "$REPO" --clobber
+          echo "uploaded: balance.parquet"
