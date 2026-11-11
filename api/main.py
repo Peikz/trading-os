@@ -298,6 +298,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         (Nov 2026). Stocks without bars come back empty."""
         tickers = [x.strip().upper() for x in t.split(",") if x.strip()][:60]
         out = {}
+        board_data.today_bars([x for x in tickers if len(x) <= 12])  # one TradingView call for all
         for ticker in dict.fromkeys(tickers):
             if len(ticker) > 12:
                 continue

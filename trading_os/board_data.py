@@ -322,9 +322,81 @@ def ticker_bars(path: Path | None, ticker: str) -> pd.DataFrame:
     return bars.drop_duplicates("session_date").sort_values("session_date")
 
 
-def daily_bars(data_dir: Path, ticker: str) -> pd.DataFrame:
-    """One stock's 2-year daily bars: the same source as the Streamlit charts."""
-    return ticker_bars(bars_file(data_dir, ticker), ticker)
+def daily_bars(data_dir: Path, ticker: str, live: bool = True) -> pd.DataFrame:
+    """One stock's 2-year daily bars: the same source as the Streamlit charts. The bars file is
+    refreshed each morning, so during a session `live` adds today's candle so far from
+    TradingView (`with_today`)."""
+    bars = ticker_bars(bars_file(data_dir, ticker), ticker)
+    return with_today(bars, ticker) if live else bars
+
+
+# --- today's candle (Emil, 11 Nov 2026: "the dashboard graph doesn't update frequently")
+
+TODAY_TTL_S = 60  # TradingView is asked at most once a minute per stock
+US_EXCHANGES = ("NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "CBOE", "BATS")
+_today_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+def _session_today(now: dt.datetime | None = None) -> dt.date | None:
+    """Today's session date in New York once it has opened (09:30), else None (weekend,
+    holiday, before the open)."""
+    from trading_os import clock
+    from trading_os.config import load_config
+
+    schedule = load_config().schedule
+    ny = clock.ny_time(schedule, now or dt.datetime.now(dt.UTC))
+    if not clock.is_session(schedule, ny.date()) or ny.time() < dt.time(9, 30):
+        return None
+    return ny.date()
+
+
+def _fetch_today(tickers: list[str]) -> dict[str, dict]:
+    """ticker -> {open, high, low, close, volume} for the current session, US listings only."""
+    from tradingview_screener import Query, col
+
+    fields = ("name", "exchange", "open", "high", "low", "close", "volume")
+    query = Query().select(*fields).where(col("name").isin(tickers)).limit(len(tickers) * 4)
+    _, raw = query.get_scanner_data(timeout=15)
+    raw = raw[raw["exchange"].isin(US_EXCHANGES)].drop_duplicates("name")
+    out = {}
+    for row in raw.to_dict("records"):
+        values = [row.get(k) for k in ("open", "high", "low", "close")]
+        if all(isinstance(v, int | float) and v > 0 for v in values):
+            out[row["name"]] = {k: float(row[k]) for k in ("open", "high", "low", "close")}
+            out[row["name"]]["volume"] = float(row.get("volume") or 0)
+    return out
+
+
+def today_bars(tickers, now: float | None = None, fetch=None) -> dict[str, dict]:
+    """Today's candles for several stocks at once, cached `TODAY_TTL_S` seconds per stock.
+    Offline or a TradingView error: whatever the cache has (possibly nothing)."""
+    import time
+
+    now = time.monotonic() if now is None else now
+    wanted = [t for t in dict.fromkeys(tickers) if t]
+    stale = [t for t in wanted if now - _today_cache.get(t, (-1e18, None))[0] > TODAY_TTL_S]
+    if stale:
+        got = {}
+        with contextlib.suppress(Exception):
+            got = (fetch or _fetch_today)(stale)
+        for t in stale:
+            _today_cache[t] = (now, got.get(t))
+    return {t: _today_cache[t][1] for t in wanted if _today_cache.get(t, (0, None))[1]}
+
+
+def with_today(
+    bars: pd.DataFrame, ticker: str, session: dt.date | None = None, fetch=None
+) -> pd.DataFrame:
+    """`bars` plus today's candle so far when a session is under way and the file doesn't have
+    it yet. The bars file stays the source for every earlier day."""
+    session = session or _session_today()
+    if session is None or bars.empty or bars["session_date"].max() >= session:
+        return bars
+    bar = today_bars([ticker], fetch=fetch).get(ticker)
+    if bar is None:
+        return bars
+    row = pd.DataFrame([{"session_date": session, "ticker": ticker, **bar}])
+    return pd.concat([bars, row[[c for c in bars.columns if c in row]]], ignore_index=True)
 
 
 # --- the board's other sources: your watchlists and a screen's results (moved from app/board.py)

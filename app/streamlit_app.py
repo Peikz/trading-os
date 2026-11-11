@@ -367,9 +367,14 @@ def read_big(path: str, columns: tuple | None = None) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600)
-def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
-    """One stock's 2-year daily bars from the compact bars-2y file (fetched from GitHub)."""
+def _file_bars(folder: str, ticker: str) -> pd.DataFrame:
     return board_data.ticker_bars(bars_file(folder, ticker), ticker)
+
+
+def ticker_bars(folder: str, ticker: str) -> pd.DataFrame:
+    """One stock's 2-year daily bars from the compact bars-2y file (fetched from GitHub, cached
+    10 minutes) plus today's candle so far (TradingView, refreshed each minute)."""
+    return board_data.with_today(_file_bars(folder, ticker), ticker)
 
 
 def bars_file(folder: str, ticker: str) -> Path | None:
