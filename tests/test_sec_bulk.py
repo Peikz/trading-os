@@ -463,3 +463,58 @@ def test_sector_from_sic():
 def test_config_has_the_sec_bulk_section():
     conf = load_config().sec_bulk
     assert conf["quarter_sessions"] == 63 and str(conf["events_since"]) == "2015-01-01"
+
+
+def test_balance_keeps_each_filings_own_date_and_the_preferred_tag(tmp_path):
+    def inst(end, val, accn, filed):
+        return _fact(None, end, val, accn, 2025, "Q1", "10-Q", filed)
+
+    body = {
+        "cik": 9,
+        "facts": {
+            "us-gaap": {
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            inst("2025-03-31", 500, "b1", "2025-05-01"),
+                            inst("2024-12-31", 450, "b1", "2025-05-01"),
+                        ]
+                    }
+                },
+                "StockholdersEquity": {
+                    "units": {"USD": [inst("2025-03-31", 200, "b1", "2025-05-01")]}
+                },
+                "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest": {
+                    "units": {"USD": [inst("2025-03-31", 210, "b1", "2025-05-01")]}
+                },
+                "Revenues": {
+                    "units": {
+                        "USD": [
+                            _fact(
+                                "2025-01-01",
+                                "2025-03-31",
+                                99,
+                                "b1",
+                                2025,
+                                "Q1",
+                                "10-Q",
+                                "2025-05-01",
+                            )
+                        ]
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / "companyfacts.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("CIK0000000009.json", json.dumps(body))
+    facts = sec_bulk.read_facts(path, None, "2013-01-01", sec_bulk.BALANCE_CONCEPTS)
+    assert set(facts["group"]) == {"assets", "equity"}  # revenue isn't a balance concept
+    table = sec_bulk.balance_table(facts)
+    assert len(table) == 1
+    row = table.iloc[0]
+    assert row["as_of"] == D(2025, 3, 31) and row["assets"] == 500  # the comparative is dropped
+    assert row["equity"] == 200  # StockholdersEquity outranks the incl.-minority tag
+    assert pd.isna(row["liabilities"])
+    assert row["accepted"] == pd.Timestamp("2025-05-02", tz="UTC")  # no filings: day after filed
