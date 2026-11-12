@@ -117,6 +117,9 @@ def tags(row: Mapping[str, Any]) -> list[str]:
     funds = funds13f.card_tag(row)
     if funds:
         out.append(funds)
+    small = row.get("float_tag")  # float under $300M (`float_size`, Emil 12 Nov 2026)
+    if isinstance(small, str) and small:
+        out.append(small)
     return out
 
 
@@ -164,7 +167,11 @@ def key_stats(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     chips.append(("ADR", f"{adr:.1f}%" if adr is not None else "–"))
     chips.append(("$ vol 20d", money(num("avg_dollar_volume_20d"))))
     fl = num("float_shares")
-    chips.append(("Float", f"{fl / 1e6:,.0f}M" if fl is not None else "–"))
+    usd = num("float_usd")  # float x price (`float_size`); the shares alone on older rows
+    if fl is not None and usd is not None:
+        chips.append(("Float", f"{fl / 1e6:,.0f}M · {money(usd)}"))
+    else:
+        chips.append(("Float", f"{fl / 1e6:,.0f}M" if fl is not None else "–"))
     hi = num("pct_from_52w_high")
     chips.append(("From 52w high", f"{hi:+.0f}%" if hi is not None else "–"))
     rs = num("rs_pct")

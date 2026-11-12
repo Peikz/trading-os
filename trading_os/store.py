@@ -163,6 +163,10 @@ AUDIT_COLUMNS = [
     "ibd_state",
     "ibd_dist",
     "ibd_tag",
+    # Float in dollars and its band (Emil, 12 Nov 2026: tracked live, `float_size`)
+    "float_usd",
+    "float_band",
+    "float_tag",
 ]
 _PHASE2_FLOAT = ["pivot", "order_stop", "risk_adr", "base_len"]
 _PHASE2_BOOL = ["b1", "b2", "b3", "b4", "b5"]

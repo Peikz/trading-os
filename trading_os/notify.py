@@ -629,6 +629,9 @@ def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     si_tag = row.get("si_tag")  # days to cover >= 5 (Emil, 25 Oct 2026)
     if isinstance(si_tag, str) and si_tag:
         out.append(Line("plan", INDENT + si_tag))
+    float_tag = row.get("float_tag")  # float under $300M (Emil, 12 Nov 2026: tracked live)
+    if isinstance(float_tag, str) and float_tag:
+        out.append(Line("plan", INDENT + float_tag))
     pm = premarket_line(row) if slot == "pm" else afterhours_line(row) if slot == "ah" else None
     if pm:
         out.append(Line("plan", INDENT + pm))
