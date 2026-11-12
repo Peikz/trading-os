@@ -121,6 +121,7 @@ def plan_results(
         "study_mean_r",
         "study_win_pct",
         "ibd_state",
+        "float_band",
     ]
     if signals.empty or "grade" not in signals:
         return pd.DataFrame(columns=cols)
@@ -182,6 +183,7 @@ def plan_results(
                 "study_mean_r": _num(rec.get("grade_stat_mean_r")),
                 "study_win_pct": _num(rec.get("grade_stat_win_pct")),
                 "ibd_state": rec.get("ibd_state"),
+                "float_band": rec.get("float_band"),
             }
         )
     return pd.DataFrame(rows, columns=cols)
@@ -475,3 +477,30 @@ def basket_summary(basket: pd.DataFrame, results: pd.DataFrame) -> dict:
         "plans_account_pct": float((plans["r_net"] * risk).sum()),
         "verdict": verdict(done, BASKET_STUDY_MEAN_PCT, BASKET_STUDY_WIN_PCT),
     }
+
+
+def by_float(results: pd.DataFrame) -> pd.DataFrame:
+    """Closed live trades per strategy and grade, split by the float band at the signal
+    (`float_size`; Emil, 12 Nov 2026: tracked, not a rule). Signals from before the band was
+    stored count as "unknown"."""
+    cols = ["grade_strategy", "grade", "float_band", "closed", "live_mean_r", "live_win_pct"]
+    if results.empty:
+        return pd.DataFrame(columns=cols)
+    done = results[results["status"] == "closed"].copy()
+    if done.empty:
+        return pd.DataFrame(columns=cols)
+    band = done["float_band"] if "float_band" in done else pd.Series(index=done.index, dtype=object)
+    done["float_band"] = band.where(band.notna(), "unknown")
+    rows = []
+    keys = ["grade_strategy", "grade", "float_band"]
+    for key, part in done.groupby(keys, dropna=False):
+        r = part["r_net"].dropna()
+        rows.append(
+            dict(zip(keys, key, strict=True))
+            | {
+                "closed": len(part),
+                "live_mean_r": r.mean() if len(r) else math.nan,
+                "live_win_pct": (r > 0).mean() * 100 if len(r) else math.nan,
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)

@@ -213,6 +213,7 @@ def run(slot: str, label: str, args: argparse.Namespace) -> int:
     results = _with_sizing(results, args.data_dir, cfg)
     results = _with_grades(results, args.data_dir, cfg, session, slot, extras, df)
     results = _with_short_interest(results, args.data_dir, cfg, session)
+    results = _with_float(results)
     results = _with_heat_tags(results, args.data_dir, session)
     ibd_info = _ibd_state(args.data_dir, session, slot, extras)
     results = _with_ibd(results, ibd_info)
@@ -507,6 +508,21 @@ def _with_short_interest(results: dict, data_dir: Path, cfg, session) -> dict:
         return out
     except Exception as exc:  # noqa: BLE001
         status(f"Short interest: FAILED ({type(exc).__name__}), left out")
+        return results
+
+
+def _with_float(results: dict) -> dict:
+    """Float in dollars, its band and the small-float warning on every hit (`float_size`).
+    Facts only: a problem leaves the columns out."""
+    from trading_os import float_size
+
+    try:
+        out = float_size.attach(results)
+        n = sum(int(h["float_tag"].notna().sum()) for h in out.values() if "float_tag" in h)
+        status(f"Float: {n} hits with a small float")
+        return out
+    except Exception as exc:  # noqa: BLE001
+        status(f"Float: FAILED ({type(exc).__name__}), left out")
         return results
 
 

@@ -112,6 +112,17 @@ def build(data_dir: Path, today: dt.date) -> tuple[list[str], list[str], dict]:
             ["grade_strategy", "grade", "ibd_state", "closed", "live_mean_r", "live_win_pct"],
         ),
         "",
+        "## By float (tracked, not a rule)",
+        "",
+        "In the 2016-26 study small floats (under $300M) were weaker in 2022-26 but not in "
+        "2016-21 (research doc, 12 Nov). This split shows which way it goes now. Float = "
+        "TradingView float shares x the price at the signal.",
+        "",
+        *table_md(
+            lt.by_float(res),
+            ["grade_strategy", "grade", "float_band", "closed", "live_mean_r", "live_win_pct"],
+        ),
+        "",
         "## A+ basket, on paper",
         "",
         f"Every EP / EP9M A+ and Luk flush A at {lt.BASKET_SIZE_PCT:g} % of the account, no price "
