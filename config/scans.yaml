@@ -450,7 +450,11 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   # by their plans) averaged more than +1R, new A+/A trades get x2 risk (`press.py`). Study:
   # 18.1 -> 20.9 %/yr 2022-26, 32.2 -> 38.1 % 2016-21, same drawdown, beat random timing in both
   # (data repo docs/research/2026-11-05-qullamaggie-his-way.md). Off until 20 have closed.
-  press: {enabled: true, window: 20, mean_r_above: 1.0, mult: 2.0, grades: ["A+++", "A++", "A+", "A"]}
+  # Switched off 13 Nov 2026 (Emil left the call to the research session): re-tested on the
+  # four-grade base, trades after a strong run were not the better ones per trade and a blind
+  # check on an earlier period failed, so what is left is extra risk, not timing (data repo
+  # docs/research/2026-11-13-capital-use.md, section 7).
+  press: {enabled: false, window: 20, mean_r_above: 1.0, mult: 2.0, grades: ["A+++", "A++", "A+", "A"]}
   # Second signal (Emil, 13 Nov 2026: "Ja, marker push"): an A+/A hit on a stock whose first
   # live plan is still open gets a tag and half the grade's risk, in place of being skipped
   # (`second_signal.py`; data repo docs/research/2026-11-13-capital-use.md).
