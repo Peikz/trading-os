@@ -451,6 +451,10 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
   # 18.1 -> 20.9 %/yr 2022-26, 32.2 -> 38.1 % 2016-21, same drawdown, beat random timing in both
   # (data repo docs/research/2026-11-05-qullamaggie-his-way.md). Off until 20 have closed.
   press: {enabled: true, window: 20, mean_r_above: 1.0, mult: 2.0, grades: ["A+++", "A++", "A+", "A"]}
+  # Second signal (Emil, 13 Nov 2026: "Ja, marker push"): an A+/A hit on a stock whose first
+  # live plan is still open gets a tag and half the grade's risk, in place of being skipped
+  # (`second_signal.py`; data repo docs/research/2026-11-13-capital-use.md).
+  second_signal: {enabled: true, mult: 0.5, grades: ["A+++", "A++", "A+", "A"]}
   # Quality counts (variable search, 21 Oct 2026; report section 9). quality_enabled: true
   # (all), false, or a list of the strategies switched on in place of their scorecards. On for
   # all three (Emil, 21 Oct 2026: "switch to quality grades"; SPEC §11.17).

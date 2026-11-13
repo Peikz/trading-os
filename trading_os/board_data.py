@@ -105,9 +105,10 @@ def collect(
 
 
 def tags(row: Mapping[str, Any]) -> list[str]:
-    """The card's tags: heat, heavily shorted, IBD, a volume build before the day, funds."""
+    """The card's tags: a second signal, heat, heavily shorted, IBD, a volume build before the
+    day, funds."""
     out = []
-    for key in ("heat_tag", "si_tag", "ibd_tag"):
+    for key in ("second_tag", "heat_tag", "si_tag", "ibd_tag"):
         v = row.get(key)
         if isinstance(v, str) and v:
             out.append(v)

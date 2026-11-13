@@ -623,6 +623,9 @@ def wrap(parts: Iterable[str], width: int) -> list[str]:
 def _block(row: Mapping[str, Any], scan: str, slot: str) -> list[Line]:
     out = [Line("hit", "▸ " + _first_line(row, scan, slot))]
     out += [Line("plan", INDENT + text) for text in grade_lines(row)]
+    second_tag = row.get("second_tag")  # the stock's first plan is still open (13 Nov 2026)
+    if isinstance(second_tag, str) and second_tag:
+        out.append(Line("plan", INDENT + second_tag))
     heat_tag = row.get("heat_tag")
     if isinstance(heat_tag, str) and heat_tag:
         out.append(Line("plan", INDENT + heat_tag))

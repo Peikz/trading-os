@@ -31,7 +31,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import clock, grader, history, press, sizing
+from trading_os import clock, grader, history, press, second_signal, sizing
 from trading_os import history_metrics as hm
 
 FEATURE_SESSIONS = 260  # the 52-week high before the signal (quality counts)
@@ -491,6 +491,10 @@ def add_grades(
             stocks = stocks.join(col, how="outer") if len(stocks) else col.to_frame()
     stats = load_stats(data_dir, cfg)
     press_state = press.load(data_dir, session)
+    second = cfg.grading["second_signal"]
+    firsts = second_signal.held(data_dir, cfg, session, slot) if second["enabled"] else {}
+    from trading_os.notify import SCAN_LABELS as labels
+
     out = {}
     for name, hits in results.items():
         if hits.empty:
@@ -507,5 +511,6 @@ def add_grades(
         graded_hits = grade_hits(hits, name, cfg, market, stocks, extra, asof, slot)
         graded_hits = with_stats(graded_hits, stats)
         graded_hits = press.apply(graded_hits, press_state, cfg.grading["press"])
+        graded_hits = second_signal.apply(graded_hits, name, firsts, second, session, labels)
         out[name] = resize(graded_hits, account, usd_rate)
     return out
