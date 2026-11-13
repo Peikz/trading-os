@@ -264,8 +264,10 @@ GRADING_KEYS = {
     "costs",
     "strategies",
     "press",
+    "second_signal",
 }
 GRADING_PRESS_KEYS = {"enabled", "window", "mean_r_above", "mult", "grades"}
+GRADING_SECOND_KEYS = {"enabled", "mult", "grades"}
 GRADING_QUALITY_KEYS = {"parts", "grades", "live_scans", "entries", "stop_adr", "hold_sessions"}
 # A setup on its own plan (MA-surf, Emil 23 Oct 2026): the scan's order stop, a trailing exit.
 GRADING_QUALITY_OPTIONAL_KEYS = {"pace_b"}  # {below: shares, entry: plan}: A+ under it -> B
@@ -595,6 +597,7 @@ def _check_grading(raw: Any) -> None:
     _check_keys("grading", raw, GRADING_KEYS)
     _check_keys("grading.costs", raw["costs"], GRADING_COST_KEYS)
     _check_keys("grading.press", raw["press"], GRADING_PRESS_KEYS)
+    _check_keys("grading.second_signal", raw["second_signal"], GRADING_SECOND_KEYS)
     for name, spec in raw["conditions"].items():
         if "feature" not in spec or not set(spec) - {"feature"} <= CONDITION_TESTS:
             raise ConfigError(f"grading.conditions.{name}: a feature and {sorted(CONDITION_TESTS)}")

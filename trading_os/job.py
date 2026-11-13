@@ -325,17 +325,33 @@ def _press_line(data_dir: Path, cfg, session) -> list[str]:
 
 
 def _update_press(data_dir: Path, cfg, session) -> None:
-    """After the close is saved: replay the live A+/A signals and save the pressing state for
-    the next runs. Counts only in the log (the state itself is a result)."""
-    from trading_os import press
+    """After the close is saved: replay the live A+/A signals once and save what the next runs
+    read: the pressing state and the plans still open (`second_signal`). Counts only in the
+    log (the states themselves are results)."""
+    from trading_os import press, second_signal
 
-    if not cfg.grading["enabled"] or not cfg.grading["press"]["enabled"]:
+    grading = cfg.grading
+    on_press, second = grading["press"]["enabled"], grading["second_signal"]
+    if not grading["enabled"] or not (on_press or second["enabled"]):
         return
+    grades = set(grading["press"]["grades"]) | set(second["grades"])
     try:
-        st = press.update(data_dir, cfg, session)
-        status(f"Pressing: state saved ({st['closed']} closed signals)")
+        replay = press.live_results(data_dir, cfg, session, grades)
     except Exception as exc:  # noqa: BLE001 - sizing stays as it was
         status(f"Pressing: update FAILED ({type(exc).__name__}), last state kept")
+        return
+    if on_press:
+        try:
+            st = press.update(data_dir, cfg, session, results=replay)
+            status(f"Pressing: state saved ({st['closed']} closed signals)")
+        except Exception as exc:  # noqa: BLE001 - sizing stays as it was
+            status(f"Pressing: update FAILED ({type(exc).__name__}), last state kept")
+    if second["enabled"]:
+        try:
+            n = second_signal.update(data_dir, session, replay[0], set(second["grades"]))
+            status(f"Second signal: {n} open plans saved")
+        except Exception as exc:  # noqa: BLE001 - the tag then reads the last saved plans
+            status(f"Second signal: update FAILED ({type(exc).__name__}), last plans kept")
 
 
 def _with_volume_build(uni: pd.DataFrame, data_dir: Path, cfg, session, slot, df) -> pd.DataFrame:
@@ -750,13 +766,16 @@ EVENING_NOTE = "flagged last evening (16:50)"
 
 def _flagged_last_evening(results: dict, data_dir: Path, cfg, session) -> dict:
     """EP 10:30 gaps the 16:50 after-hours check pushed the evening before get a note instead
-    of a second buy (one position per stock, as in the study's portfolio runs)."""
+    of a second buy. A hit tagged as a second signal (`second_signal`, Emil 13 Nov 2026) keeps
+    its plan, at the tag's size."""
     hits = results.get("ep_am")
     if hits is None or hits.empty:
         return results
     previous = clock.previous_session(cfg.schedule, session)
     evening = store.pushed_in(data_dir, previous, "ah").get("ep_ah", set())
     flagged = hits["ticker"].isin(evening)
+    if "second_tag" in hits:
+        flagged &= hits["second_tag"].isna()
     status(f"EP 10:30: {int(flagged.sum())} flagged last evening")
     if not flagged.any():
         return results

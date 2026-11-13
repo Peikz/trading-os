@@ -96,6 +96,8 @@ AUDIT_COLUMNS = [
     "fund_own",  # 13F shares / shares outstanding, last quarter (`funds13f`, Emil 5 Nov 2026)
     "fund_breadth",  # 13F net new holders / holders the quarter before
     "press_mult",  # pressing's risk multiple on the hit (`press`, Emil 5 Nov 2026)
+    "second_mult",  # a second signal's risk multiple (`second_signal`, Emil 13 Nov 2026)
+    "second_tag",
     "tightness_adr",
     "cats",
     "cats_growth",

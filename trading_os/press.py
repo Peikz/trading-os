@@ -97,20 +97,20 @@ def line(st: Mapping[str, Any] | None) -> list[str]:
     ]
 
 
-def update(data_dir: Path, cfg, today: dt.date, lookback: int = 400) -> dict:
-    """Play out the live A+ / A signals and save the state as of `today`'s close."""
+def live_results(
+    data_dir: Path, cfg, today: dt.date, grades, lookback: int = 400
+) -> tuple[pd.DataFrame, list]:
+    """The scheduled live `grades` signals played out by their plans up to `today`, and the
+    sessions their bars cover."""
     from trading_os import clock, history, outcomes
     from trading_os import live_tracking as lt
 
-    conf = cfg.grading["press"]
     cands = outcomes.load_candidates(data_dir)
-    live = cands[cands["grade"].isin(conf["grades"])] if "grade" in cands else cands.iloc[0:0]
+    live = cands[cands["grade"].isin(set(grades))] if "grade" in cands else cands.iloc[0:0]
     if "run_kind" in live:
         live = live[live["run_kind"] == "scheduled"]
     if live.empty:
-        st = state(pd.DataFrame(columns=["status", "grade"]), [], conf, today)
-        save(data_dir, st)
-        return st
+        return pd.DataFrame(columns=["status", "grade"]), []
     back = clock.sessions_back(cfg.schedule, today, lookback)
     first = next((i for i, s in enumerate(back) if s >= min(live["session_date"])), len(back))
     sessions = back[max(0, first - lt.MA_SESSIONS) :]
@@ -118,6 +118,14 @@ def update(data_dir: Path, cfg, today: dt.date, lookback: int = 400) -> dict:
     bars = bars[bars["ticker"].isin(set(live["ticker"]))]
     res = lt.plan_results(live, bars, lt.exit_rules(cfg.grading))
     have = sorted(pd.to_datetime(bars["session_date"]).dt.date.unique()) if len(bars) else []
+    return res, have
+
+
+def update(data_dir: Path, cfg, today: dt.date, lookback: int = 400, results=None) -> dict:
+    """Play out the live A+ / A signals and save the state as of `today`'s close. `results`:
+    `live_results` when the caller already has them."""
+    conf = cfg.grading["press"]
+    res, have = results or live_results(data_dir, cfg, today, conf["grades"], lookback)
     st = state(res, have, conf, today)
     save(data_dir, st)
     return st
