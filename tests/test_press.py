@@ -7,7 +7,7 @@ import pandas as pd
 from trading_os import press
 from trading_os.config import load_config
 
-CONF = load_config().grading["press"]
+CONF = {**load_config().grading["press"], "enabled": True}  # the rule itself; live it is off
 DAYS = [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(200)]
 
 
@@ -46,6 +46,10 @@ def test_apply_doubles_a_plus_and_a_only():
     same = press.apply(hits, {"active": False, "mult": 1.0}, CONF)
     assert same["grade_risk_mult"].tolist() == [2.0, 1.5, 1.0, 0.0]
     assert press.apply(hits, None, CONF)["grade_risk_mult"].tolist() == [2.0, 1.5, 1.0, 0.0]
+    off = press.apply(
+        hits, on, {**CONF, "enabled": False}
+    )  # switched off: a saved state is ignored
+    assert off["grade_risk_mult"].tolist() == [2.0, 1.5, 1.0, 0.0]
 
 
 def test_a_saved_state_is_used_only_for_later_sessions(tmp_path):

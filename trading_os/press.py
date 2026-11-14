@@ -79,7 +79,10 @@ def apply(
     """`grade_risk_mult` x the press multiple on the `grades` hits, with `press_mult` stored."""
     if hits.empty or "grade" not in hits or "grade_risk_mult" not in hits:
         return hits
-    mult = float(st["mult"]) if st and st.get("active") else 1.0
+    on = (
+        bool(conf.get("enabled", True)) and bool(st) and bool(st.get("active"))
+    )  # off: no old state
+    mult = float(st["mult"]) if on else 1.0
     out = hits.copy()
     on = out["grade"].isin(set(conf["grades"]))
     out["press_mult"] = pd.Series(1.0, index=out.index).where(~on, mult)
