@@ -15,7 +15,7 @@ import requests
 from trading_os import clock, history, timer
 from trading_os.config import Config, load_config
 from trading_os.logsafe import run_guarded, status
-from trading_os.massive import MassiveClient, RateLimiter
+from trading_os.massive import MassiveClient, MassiveError, RateLimiter
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,42 @@ def _check() -> int:
             status(f"Massive check: {label}: HTTP {code}, {count} results")
         except requests.RequestException as exc:
             status(f"Massive check: {label}: {type(exc).__name__}")
+    _check_options(client, oldest)
     return 1 if failures else 0
+
+
+def _check_options(client: MassiveClient, oldest: dt.date) -> None:
+    """Which options data the plan includes (15 Nov 2026): contract lists as of a date, one
+    contract's daily bars, and the per-stock snapshot. Counts and HTTP codes only."""
+    for label, day in (("window start", oldest), ("2023-08-01", dt.date(2023, 8, 1))):
+        try:
+            code, count = client.probe(
+                "/v3/reference/options/contracts",
+                {"underlying_ticker": "AAPL", "as_of": day.isoformat(), "limit": 5},
+            )
+            status(f"Massive check: options contracts as of {label}: HTTP {code}, {count} results")
+        except requests.RequestException as exc:
+            status(f"Massive check: options contracts as of {label}: {type(exc).__name__}")
+    try:
+        found = (
+            client._get(
+                "/v3/reference/options/contracts",
+                {"underlying_ticker": "AAPL", "as_of": oldest.isoformat(), "limit": 1},
+            ).get("results")
+            or []
+        )
+        if found:
+            end = oldest + dt.timedelta(days=10)
+            path = f"/v2/aggs/ticker/{found[0]['ticker']}/range/1/day/{oldest}/{end}"
+            code, count = client.probe(path, {})
+            status(f"Massive check: one contract's daily bars: HTTP {code}, {count} bars")
+    except (requests.RequestException, KeyError, MassiveError) as exc:
+        status(f"Massive check: one contract's daily bars: {type(exc).__name__}")
+    try:
+        code, count = client.probe("/v3/snapshot/options/AAPL", {"limit": 5})
+        status(f"Massive check: options snapshot: HTTP {code}, {count} results")
+    except requests.RequestException as exc:
+        status(f"Massive check: options snapshot: {type(exc).__name__}")
 
 
 def _run(args: argparse.Namespace) -> int:
