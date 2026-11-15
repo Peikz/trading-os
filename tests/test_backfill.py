@@ -65,6 +65,22 @@ def test_check_reports_counts_only(capsys, monkeypatch):
     assert "news OK, 1 headlines" in out
 
 
+def test_options_check_logs_codes_and_counts_only(capsys):
+    class Probe:
+        def probe(self, path, params):
+            return (403, 0) if "snapshot" in path else (200, 3)
+
+        def _get(self, path, params):
+            return {"results": [{"ticker": "O:ZZZ261120C00100000"}]}
+
+    backfill._check_options(Probe(), dt.date(2024, 11, 18))
+    out = capsys.readouterr().out
+    assert "options contracts as of window start: HTTP 200, 3 results" in out
+    assert "one contract's daily bars: HTTP 200, 3 bars" in out
+    assert "options snapshot: HTTP 403" in out
+    assert "ZZZ" not in out
+
+
 def test_window_never_goes_past_the_plan():
     cfg = load_config()
     sessions = backfill.window(cfg, FRI)
