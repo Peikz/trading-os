@@ -48,11 +48,21 @@ def targets(tmp_path, rows):
     pd.DataFrame(rows, columns=["ticker", "day", "ref_price"]).to_parquet(path)
 
 
-def test_nearest_three_expirations():
+def test_nearest_two_expirations():
     cs = [contract(i, f"2026-03-{d}") for i, d in enumerate(["20", "06", "13", "27", "06"])]
     kept = ov.nearest_expirations(cs)
-    assert {c["expiration_date"] for c in kept} == {"2026-03-06", "2026-03-13", "2026-03-20"}
-    assert len(kept) == 4
+    assert {c["expiration_date"] for c in kept} == {"2026-03-06", "2026-03-13"}
+    assert len(kept) == 3
+
+
+def test_expired_contracts_always_asked_live_ones_only_near_today():
+    fake = Fake([contract(1, "2026-03-06")])
+    _, calls = ov.list_contracts(fake, T, dt.date(2026, 3, 2), 50.0, today=dt.date(2026, 11, 15))
+    assert [p["expired"] for p in fake.params] == ["true"] and calls == 2
+    fake = Fake([contract(1, "2026-11-20")])
+    rows, calls = ov.list_contracts(fake, T, dt.date(2026, 10, 2), 50.0, dt.date(2026, 11, 15))
+    assert [p["expired"] for p in fake.params] == ["true", "false"]
+    assert calls == 4 and len(rows) == 1  # the same contract from both lists is kept once
 
 
 def test_params_from_ref_price_and_day():
@@ -61,8 +71,8 @@ def test_params_from_ref_price_and_day():
     assert p["as_of"] == "2026-03-02"
     assert p["expiration_date.gt"] == "2026-03-02"
     assert p["expiration_date.lte"] == "2026-05-01"
-    assert p["strike_price.gte"] == 40.0
-    assert p["strike_price.lte"] == 60.0
+    assert p["strike_price.gte"] == 45.0
+    assert p["strike_price.lte"] == 55.0
     assert p["limit"] == 1000
 
 

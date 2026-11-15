@@ -1,8 +1,9 @@
 """Options volume around signal days from Massive (Emil, 15 Nov 2026), fetched slowly.
 
 Input (private data repo): `data/research/options_targets.parquet` with ticker, day, ref_price.
-For each target, oldest day first: one contract list (the 3 nearest expirations within 60 days,
-strikes within 20 % of the reference price), then one daily-bars call per contract for the 30
+For each target, oldest day first: the contract list (expired and, while the window reaches today,
+live contracts; the 2 nearest expirations within 60 days, strikes within 10 % of the reference
+price), then one daily-bars call per contract for the 30
 days up to the target day. Output: `data/research/options_volume/{day}_{ticker}.parquet`; a
 target with nothing still gets an empty file so it is not retried. Resumable: existing files
 are skipped. This repo is public: logs carry counts only.
@@ -35,9 +36,9 @@ COLUMNS = [
     "vwap",
     "transactions",
 ]
-NEAREST_EXPIRATIONS = 3
-EXPIRY_WINDOW_DAYS = 60
-STRIKE_BAND = 0.2
+NEAREST_EXPIRATIONS = 2  # most volume sits in the front expirations near the money;
+EXPIRY_WINDOW_DAYS = 60  # at 5 calls a minute a wider net would take weeks
+STRIKE_BAND = 0.1
 BAR_LOOKBACK_DAYS = 30
 
 
@@ -90,10 +91,27 @@ def _write(path: Path, rows: list[dict]) -> None:
     tmp.replace(path)
 
 
-def fetch_target(client, day: str, ticker: str, ref_price: float) -> tuple[list[dict], int]:
+def list_contracts(
+    client, ticker: str, when: dt.date, ref_price: float, today: dt.date
+) -> tuple[list[dict], int]:
+    """The contract list leaves out expired contracts unless asked (`expired=true` returns only
+    expired ones), so ask for those, and also for live ones while the window reaches today."""
+    params = contract_params(ticker, when, ref_price)
+    contracts, calls = client.option_contracts({**params, "expired": "true"})
+    if when + dt.timedelta(days=EXPIRY_WINDOW_DAYS) >= today:
+        live, more = client.option_contracts({**params, "expired": "false"})
+        seen = {c["ticker"] for c in contracts}
+        contracts += [c for c in live if c["ticker"] not in seen]
+        calls += more
+    return contracts, calls
+
+
+def fetch_target(
+    client, day: str, ticker: str, ref_price: float, today: dt.date | None = None
+) -> tuple[list[dict], int]:
     """Rows and calls used for one target."""
     when = dt.date.fromisoformat(day)
-    contracts, calls = client.option_contracts(contract_params(ticker, when, ref_price))
+    contracts, calls = list_contracts(client, ticker, when, ref_price, today or dt.date.today())
     rows: list[dict] = []
     start = when - dt.timedelta(days=BAR_LOOKBACK_DAYS)
     for contract in nearest_expirations(contracts):
