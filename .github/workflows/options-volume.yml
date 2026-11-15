@@ -1,0 +1,86 @@
+# Options volume around signal days from Massive (Emil, 15 Nov 2026). 5 calls/min on the free
+# plan, so one run lasts hours; it resumes where it stopped and, while targets are left,
+# dispatches itself again. Own concurrency group: must not block the scan jobs. This repo is
+# public: the job prints counts only.
+
+name: Options volume
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Stop starting new targets after this many minutes"
+        default: "330"
+
+concurrency:
+  group: options-volume
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out data repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/trading-os-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      - run: uv sync --frozen --no-dev
+
+      - name: Collect
+        id: collect
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          MINUTES: ${{ inputs.minutes || '330' }}
+        run: uv run --frozen --no-dev python scripts/options_volume.py --data-dir data-repo --minutes "$MINUTES"
+
+      - name: Commit data
+        if: always()
+        working-directory: data-repo
+        run: |
+          git config user.name "trading-os-bot"
+          git config user.email "trading-os-bot@users.noreply.github.com"
+          git add data/research/options_volume
+          if git diff --cached --quiet; then
+            echo "Data: nothing new to commit"
+            exit 0
+          fi
+          git commit -q -m "options volume: data (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase && git push -q; then
+              echo "Data: committed and pushed"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "Data: push failed after 3 attempts"
+          exit 1
+
+      - name: Chain the next run
+        if: success() && steps.collect.outputs.remaining != '' && steps.collect.outputs.remaining != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run options-volume.yml --ref ${{ github.ref_name }}
+
+      - name: Notify failure
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN_URL" \
+            '{topic: $topic, title: "Trading OS · Options volume failed", message: "Options volume job failed. Tap to open the Actions run.", tags: ["warning"], priority: 4, click: $click}' \
+            | curl -sS -o /dev/null -w "Failure push: HTTP %{http_code}\n" -H "Content-Type: application/json" -d @- https://ntfy.sh/

@@ -21,6 +21,8 @@ MINUTE_AGGS = "/v2/aggs/ticker/{ticker}/range/1/minute/{start}/{end}"
 TICKERS = "/v3/reference/tickers"
 TICKER_DETAILS = "/v3/reference/tickers/{ticker}"
 SHORT_INTEREST = "/stocks/v1/short-interest"
+OPTION_CONTRACTS = "/v3/reference/options/contracts"
+DAILY_AGGS = "/v2/aggs/ticker/{ticker}/range/1/day/{start}/{end}"
 RATE_LIMIT_PAUSE_S = 60
 _FIELD_MAP = {
     "T": "ticker",
@@ -135,6 +137,24 @@ class MassiveClient:
         frame["ts"] = pd.to_datetime(frame["ts"], unit="ms", utc=True)
         frame.insert(0, "ticker", ticker)
         return frame
+
+    def option_contracts(self, params: dict, max_pages: int = 20) -> tuple[list[dict], int]:
+        """Option contracts matching `params` (1,000 a page) and the number of calls used."""
+        body, out, pages = self._get(OPTION_CONTRACTS, params), [], 1
+        out += body.get("results") or []
+        while body.get("next_url") and pages < max_pages:
+            body = self._get(body["next_url"])
+            out += body.get("results") or []
+            pages += 1
+        return out, pages
+
+    def daily_bars(self, symbol: str, start: dt.date, end: dt.date) -> list[dict]:
+        """Raw unadjusted daily aggregates (t, v, c, vw, n) for a stock or option symbol."""
+        body = self._get(
+            DAILY_AGGS.format(ticker=symbol, start=start.isoformat(), end=end.isoformat()),
+            {"adjusted": "false", "sort": "asc", "limit": 50_000},
+        )
+        return body.get("results") or []
 
     def tickers(self, *, active: bool, max_pages: int = 60) -> list[dict]:
         """The stock ticker list (1,000 a page), active or delisted: type, exchange, CIK."""
