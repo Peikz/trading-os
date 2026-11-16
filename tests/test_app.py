@@ -19,8 +19,8 @@ APP = Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py"
 PLACE_OF = {  # the top bar (Emil, 4 Nov 2026 redesign): place -> its pages as tabs
     "Today": "Today", "Screener": "Stocks", "Watchlists": "Stocks", "Chart": "Stocks",
     "Market": "Market", "Positions": "Journal", "Journal": "Journal",
-    "Live results": "Journal", "Research": "Lab", "Runs": "Lab", "System health": "Lab",
-    "Guide": "Lab",
+    "Live results": "Journal", "Practice": "Journal", "Research": "Lab", "Runs": "Lab",
+    "System health": "Lab", "Guide": "Lab",
 }  # fmt: skip
 
 
@@ -43,6 +43,7 @@ PAGES = [
     "Market",
     "Research",
     "Live results",
+    "Practice",
     "System health",
     "Guide",
 ]

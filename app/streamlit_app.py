@@ -20,6 +20,7 @@ from pathlib import Path
 import board  # app/board.py: Today's candidate board and Saxo ticket
 import lwchart  # app/lwchart.py: the focus view's fast chart
 import pandas as pd
+import practice as practice_page  # app/practice.py: the Practice page (blind signals)
 import streamlit as st
 from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
 
@@ -89,7 +90,7 @@ PLACES = {
     "Today": ["Today"],  # what do I do today?
     "Stocks": ["Screener", "Watchlists", "Chart"],  # find and study a stock
     "Market": ["Market"],  # what is the market doing?
-    "Journal": ["Positions", "Journal", "Live results"],  # how am I doing?
+    "Journal": ["Positions", "Journal", "Live results", "Practice"],  # how am I doing?
     "Lab": ["Research", "Runs", "System health", "Guide"],  # how does it work?
 }
 PLACE_OF = {page: place for place, pages in PLACES.items() for page in pages}
@@ -1829,6 +1830,9 @@ elif page == "Watchlists":
             hide_index=True,
             width="stretch",
         )
+
+elif page == "Practice":
+    practice_page.render(data_dir)
 
 elif page == "Journal":
     st.header("Journal")
