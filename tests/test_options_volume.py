@@ -55,14 +55,12 @@ def test_nearest_two_expirations():
     assert len(kept) == 3
 
 
-def test_expired_contracts_always_asked_live_ones_only_near_today():
+def test_one_list_call_as_of_the_day_without_expired():
     fake = Fake([contract(1, "2026-03-06")])
-    _, calls = ov.list_contracts(fake, T, dt.date(2026, 3, 2), 50.0, today=dt.date(2026, 11, 15))
-    assert [p["expired"] for p in fake.params] == ["true"] and calls == 2
-    fake = Fake([contract(1, "2026-11-20")])
-    rows, calls = ov.list_contracts(fake, T, dt.date(2026, 10, 2), 50.0, dt.date(2026, 11, 15))
-    assert [p["expired"] for p in fake.params] == ["true", "false"]
-    assert calls == 4 and len(rows) == 1  # the same contract from both lists is kept once
+    rows, calls = ov.list_contracts(fake, T, dt.date(2026, 3, 2), 50.0)
+    assert len(fake.params) == 1 and "expired" not in fake.params[0]
+    assert fake.params[0]["as_of"] == "2026-03-02"
+    assert calls == 2 and len(rows) == 1
 
 
 def test_params_from_ref_price_and_day():

@@ -1,11 +1,11 @@
 """Options volume around signal days from Massive (Emil, 15 Nov 2026), fetched slowly.
 
 Input (private data repo): `data/research/options_targets.parquet` with ticker, day, ref_price.
-For each target, oldest day first: the contract list (expired and, while the window reaches today,
-live contracts; the 2 nearest expirations within 60 days, strikes within 10 % of the reference
-price), then one daily-bars call per contract for the 30
-days up to the target day. Output: `data/research/options_volume/{day}_{ticker}.parquet`; a
-target with nothing still gets an empty file so it is not retried. Resumable: existing files
+For each target, oldest day first: the contracts listed on that day (`as_of`; the 2 nearest
+expirations within 60 days, strikes within 10 % of the reference price), then one daily-bars
+call per contract for the 30 days up to the target day.
+Output: `data/research/options_volume/{day}_{ticker}.parquet`; a target with nothing still
+gets an empty file so it is not retried. Resumable: existing files
 are skipped. This repo is public: logs carry counts only.
 """
 
@@ -91,27 +91,17 @@ def _write(path: Path, rows: list[dict]) -> None:
     tmp.replace(path)
 
 
-def list_contracts(
-    client, ticker: str, when: dt.date, ref_price: float, today: dt.date
-) -> tuple[list[dict], int]:
-    """The contract list leaves out expired contracts unless asked (`expired=true` returns only
-    expired ones), so ask for those, and also for live ones while the window reaches today."""
-    params = contract_params(ticker, when, ref_price)
-    contracts, calls = client.option_contracts({**params, "expired": "true"})
-    if when + dt.timedelta(days=EXPIRY_WINDOW_DAYS) >= today:
-        live, more = client.option_contracts({**params, "expired": "false"})
-        seen = {c["ticker"] for c in contracts}
-        contracts += [c for c in live if c["ticker"] not in seen]
-        calls += more
-    return contracts, calls
+def list_contracts(client, ticker: str, when: dt.date, ref_price: float) -> tuple[list[dict], int]:
+    """The contracts that were listed on `when` (`as_of`), whether or not they have expired
+    since. No `expired` parameter: with `as_of` it filters on the state at that date, so
+    `expired=true` returns nothing (checked 16 Nov 2026: 0 vs 780 contracts)."""
+    return client.option_contracts(contract_params(ticker, when, ref_price))
 
 
-def fetch_target(
-    client, day: str, ticker: str, ref_price: float, today: dt.date | None = None
-) -> tuple[list[dict], int]:
+def fetch_target(client, day: str, ticker: str, ref_price: float) -> tuple[list[dict], int]:
     """Rows and calls used for one target."""
     when = dt.date.fromisoformat(day)
-    contracts, calls = list_contracts(client, ticker, when, ref_price, today or dt.date.today())
+    contracts, calls = list_contracts(client, ticker, when, ref_price)
     rows: list[dict] = []
     start = when - dt.timedelta(days=BAR_LOOKBACK_DAYS)
     for contract in nearest_expirations(contracts):
