@@ -72,6 +72,7 @@ def test_a_level_is_a_flat_line_that_persists_and_draws(tmp_path):
     import pandas as pd
     import pytest
 
+    pytest.importorskip("plotly")  # the chart needs the app dependency group
     from trading_os import interactive_chart as ichart
 
     days = [d.date() for d in pd.bdate_range("2026-01-05", periods=30)]
