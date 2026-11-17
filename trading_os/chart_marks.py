@@ -156,3 +156,32 @@ def apply_drawn(data_dir, ticker: str, report: dict, saved: pd.DataFrame) -> dic
         old = known.loc[mark_id] if mark_id in known.index else {}
         move(data_dir, ticker, mark_id, s, old, bool(s["past_end"]))
     return {"added": len(new), "removed": len(erased), "moved": len(moved)}
+
+
+def add_level(data_dir, ticker, price: float, start, end, label: str = "") -> str:
+    """Save a horizontal line at `price` (a trend line with no slope, extended to today), from
+    day `start` to day `end`; a phone-sized way to mark a level. Returns its id."""
+    if not float(price) > 0:
+        raise ValueError("a level needs a price above 0")
+    if pd.Timestamp(start).date() == pd.Timestamp(end).date():
+        raise ValueError("a level needs two different days")
+    return add_line(data_dir, ticker, start, price, end, price, label or f"{float(price):g}", True)
+
+
+def is_level(mark) -> bool:
+    """A saved line with no slope (both ends at one price)."""
+    return mark["kind"] == "line" and abs(float(mark["y0"]) - float(mark["y1"])) < 1e-9
+
+
+def describe(mark) -> str:
+    """One line for a saved mark in a list: a level's price, a trend line's two ends, or an
+    anchor's day, then its name."""
+    if mark["kind"] == "anchor":
+        text = f"AVWAP from {mark['anchor']}"
+    elif is_level(mark):
+        text = f"Level {float(mark['y0']):.2f}"
+    else:
+        text = f"Line {mark['x0']} {float(mark['y0']):.2f} → {mark['x1']} {float(mark['y1']):.2f}"
+    label = mark.get("label")
+    named = isinstance(label, str) and label and label != f"{float(mark['y0']):g}"
+    return f"{text} · {label}" if named else text

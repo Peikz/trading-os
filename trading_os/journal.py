@@ -30,11 +30,16 @@ import numpy as np
 import pandas as pd
 
 from trading_os import clock, outcomes
+from trading_os import conviction as conviction_of
 from trading_os.config import load_config
 from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
 FILL_COLUMNS = ["fill_id", "trade_date", "ticker", "side", "quantity", "price", "fees"]
-EXTRA_FILL_COLUMNS = ["source", "setup"]  # manual fills carry both; broker fills: source only
+EXTRA_FILL_COLUMNS = [
+    "source",
+    "setup",
+    "conviction",
+]  # manual fills carry all; broker fills: source
 TWIN_PRICE_TOLERANCE = 0.01
 EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "CBOE", "OTC"}
 
@@ -47,17 +52,79 @@ def normalize_ticker(raw: str) -> str:
     return parts[0].upper()
 
 
-def read_fills(csv_path: Path, rules: Mapping[str, Any]) -> pd.DataFrame:
-    """A broker export mapped to the standard fill columns (mapping in config)."""
-    raw = pd.read_csv(csv_path)
-    mapping = {source: target for target, source in rules["csv_columns"].items()}
-    missing = [s for s in mapping if s not in raw.columns]
+def squash_header(header: Any) -> str:
+    """A header compared without case, spaces or a byte-order mark."""
+    return str(header).replace("\ufeff", "").strip().casefold()
+
+
+def _number(column: pd.Series) -> pd.Series:
+    """Numbers as a broker writes them: 1234.5, "1,234.50", "1.234,50", "12,5", "1 234,5"."""
+    if pd.api.types.is_numeric_dtype(column):
+        return column.astype(float)
+
+    def one(raw: Any) -> float:
+        if raw is None or (isinstance(raw, float) and np.isnan(raw)):
+            return np.nan
+        text = str(raw).strip().replace("\u00a0", "").replace(" ", "").replace("'", "")
+        if not text:
+            return np.nan
+        if "," in text and "." in text:  # the later mark is the decimal one
+            decimal = "," if text.rfind(",") > text.rfind(".") else "."
+            text = text.replace("." if decimal == "," else ",", "").replace(decimal, ".")
+        elif "," in text:  # one comma is a decimal mark ("12,5"), several are thousands
+            text = text.replace(",", "." if text.count(",") == 1 else "")
+        return float(text)
+
+    try:
+        return column.map(one).astype(float)
+    except ValueError as exc:
+        raise ValueError(f"a number in '{column.name}' can't be read: {exc}") from None
+
+
+def _dates(column: pd.Series, date_format: str) -> pd.Series:
+    """Dates from a file: real dates (Excel) are kept, text is read with `date_format`."""
+
+    def one(value: Any) -> Any:
+        if isinstance(value, dt.datetime | pd.Timestamp):
+            return value.date()
+        if isinstance(value, dt.date):
+            return value
+        try:
+            return dt.datetime.strptime(str(value).strip(), date_format).date()
+        except ValueError:
+            raise ValueError(
+                f"a date in '{column.name}' does not match journal.date_format "
+                f"{date_format!r}; adjust it in the config"
+            ) from None
+
+    return column.map(one)
+
+
+def find_columns(raw: pd.DataFrame, rules: Mapping[str, Any]) -> tuple[dict[str, str], list[str]]:
+    """(found, missing): the export's own header for each mapped column (matched without case
+    or stray spaces), and the configured headers it doesn't have. `fees` is optional."""
+    have = {squash_header(c): c for c in raw.columns}
+    found, missing = {}, []
+    for target, source in rules["csv_columns"].items():
+        if squash_header(source) in have:
+            found[target] = have[squash_header(source)]
+        elif target != "fees":
+            missing.append(source)
+    return found, missing
+
+
+def fills_from_frame(raw: pd.DataFrame, rules: Mapping[str, Any]) -> pd.DataFrame:
+    """A broker export (already read into a table) mapped to the standard fill columns
+    (mapping in config). Headers match without case or stray spaces, numbers may use decimal
+    commas, and Excel dates arrive as dates."""
+    found, missing = find_columns(raw, rules)
     if missing:
         raise ValueError(f"export is missing columns {missing}; adjust journal.csv_columns")
-    df = raw.rename(columns=mapping)[list(mapping.values())]
+    df = raw[list(found.values())].rename(columns={v: k for k, v in found.items()})
+    df = df.dropna(how="all").reset_index(drop=True)
     if "fees" not in df:
         df["fees"] = 0.0
-    df["trade_date"] = pd.to_datetime(df["trade_date"], format=rules["date_format"]).dt.date
+    df["trade_date"] = _dates(df["trade_date"], rules["date_format"])
     df["ticker"] = df["ticker"].map(normalize_ticker)
     side = df["side"].astype(str).str.strip().str.lower()
     buys, sells = set(rules["buy_values"]), set(rules["sell_values"])
@@ -65,11 +132,16 @@ def read_fills(csv_path: Path, rules: Mapping[str, Any]) -> pd.DataFrame:
         bad = sorted(set(side) - buys - sells)
         raise ValueError(f"unknown side values {bad}; adjust journal.buy_values/sell_values")
     df["side"] = np.where(side.isin(buys), "buy", "sell")
-    df["quantity"] = df["quantity"].abs().astype(float)
-    df["price"] = df["price"].astype(float)
-    df["fees"] = df["fees"].fillna(0).abs().astype(float)
+    df["quantity"] = _number(df["quantity"]).abs()
+    df["price"] = _number(df["price"])
+    df["fees"] = _number(df["fees"]).fillna(0).abs()
     df["fill_id"] = _fill_ids(df)
     return df[FILL_COLUMNS]
+
+
+def read_fills(csv_path: Path, rules: Mapping[str, Any]) -> pd.DataFrame:
+    """A broker export (CSV file) mapped to the standard fill columns (mapping in config)."""
+    return fills_from_frame(pd.read_csv(csv_path), rules)
 
 
 def _fill_ids(df: pd.DataFrame) -> list[str]:
@@ -94,6 +166,9 @@ def load_fills(data_dir: Path) -> pd.DataFrame:
     fills["source"] = fills["source"].fillna("broker")
     if "setup" not in fills:
         fills["setup"] = None
+    if "conviction" not in fills:  # fills saved before the field existed
+        fills["conviction"] = None
+    fills["conviction"] = pd.to_numeric(fills["conviction"], errors="coerce").astype("Int64")
     return fills
 
 
@@ -106,9 +181,11 @@ def manual_fill(
     fees: float = 0.0,
     setup: str | None = None,
     stamp: dt.datetime | None = None,
+    conviction: int | None = None,
 ) -> pd.DataFrame:
     """One fill typed in by hand. Its id includes the time it was logged, so two identical
-    fills on one day stay two fills."""
+    fills on one day stay two fills. `conviction`: 1-3, how sure you were (optional)."""
+    conviction = conviction_of.normalize(conviction)
     stamp = stamp or unique_stamp()
     ticker = normalize_ticker(ticker)
     side = side.lower()
@@ -127,9 +204,10 @@ def manual_fill(
                 "fees": float(fees),
                 "source": "manual",
                 "setup": setup or None,
+                "conviction": conviction,
             }
         ]
-    )
+    ).astype({"conviction": "Int64"})
 
 
 def reconcile(fills: pd.DataFrame) -> pd.DataFrame:
@@ -221,6 +299,7 @@ def _trade(ticker: str, legs: list[dict[str, Any]]) -> dict[str, Any]:
     pnl = sign * (exit_avg - entry_avg) * exit_qty - fees if exit_qty else np.nan
     trade_id = hashlib.sha1("|".join(f["fill_id"] for f in legs).encode()).hexdigest()[:16]
     setups = [f.get("setup") for f in legs if f.get("setup") and not pd.isna(f.get("setup"))]
+    sure = [f["conviction"] for f in entries if pd.notna(f.get("conviction"))]
     return {
         "trade_id": trade_id,
         "ticker": ticker,
@@ -234,6 +313,7 @@ def _trade(ticker: str, legs: list[dict[str, Any]]) -> dict[str, Any]:
         "pnl": pnl,
         "fills": len(legs),
         "setup": setups[0] if setups else None,
+        "conviction": int(sure[0]) if sure else None,
         "manual": any(f.get("source") == "manual" for f in legs),
     }
 
@@ -316,11 +396,13 @@ def rebuild(data_dir: Path, cfg, stamp: dt.datetime, extra_stops=None) -> tuple:
     own = {(r["ticker"], r["entry_date"]): r["stop"] for r in logged.to_dict("records")}
     candidates = outcomes.load_candidates(data_dir)
     lookback = rules["signal_lookback_sessions"]
+    planned = _plan_convictions(data_dir, cfg, fills, stamp)
     built = []
     for frame in (trades, open_positions):
         if frame.empty:
             built.append(frame)
             continue
+        frame["conviction"] = _with_plan_conviction(frame, planned)
         windows = {
             day: clock.sessions_back(cfg.schedule, day, lookback)
             for day in set(frame["entry_date"])
@@ -341,6 +423,32 @@ def rebuild(data_dir: Path, cfg, stamp: dt.datetime, extra_stops=None) -> tuple:
     return trades, open_positions
 
 
+def _plan_convictions(data_dir: Path, cfg, fills: pd.DataFrame, stamp: dt.datetime) -> dict:
+    """(ticker, fill date) -> conviction of the plan that fill filled (plans with one only)."""
+    from trading_os import plans  # plans imports this module
+
+    events = plans.load(data_dir)
+    if events.empty or "conviction" not in events:
+        return {}
+    table = plans.status(
+        events, fills, cfg.schedule, cfg.journal["plan_valid_sessions"], stamp.date()
+    )
+    if table.empty or "fill_date" not in table:
+        return {}
+    done = table[(table["status"] == "filled") & table["conviction"].notna()]
+    return {(r["ticker"], r["fill_date"]): int(r["conviction"]) for r in done.to_dict("records")}
+
+
+def _with_plan_conviction(frame: pd.DataFrame, planned: dict) -> pd.Series:
+    """A trade's own conviction (from its fills), else its plan's, as a nullable integer."""
+    own = frame["conviction"] if "conviction" in frame else pd.Series(None, index=frame.index)
+    fallback = [
+        planned.get((t, d)) for t, d in zip(frame["ticker"], frame["entry_date"], strict=True)
+    ]
+    merged = [o if pd.notna(o) else f for o, f in zip(own, fallback, strict=True)]
+    return pd.array(merged, dtype="Int64")
+
+
 def log_manual(data_dir: Path, cfg, fill: pd.DataFrame, stop: float | None = None) -> tuple:
     """Save a hand-typed fill (and the trade's initial stop for an entry), then rebuild."""
     stamp = unique_stamp()
@@ -351,6 +459,23 @@ def log_manual(data_dir: Path, cfg, fill: pd.DataFrame, stop: float | None = Non
     return rebuild(data_dir, cfg, stamp)
 
 
+def import_fills(data_dir: Path, cfg, incoming: pd.DataFrame, stops=None) -> str:
+    """Append the fills not seen before (broker source), rebuild the journal and say what
+    changed. `incoming`: standard fill columns (`fills_from_frame`). Append-only; importing
+    the same export twice adds nothing."""
+    stamp = unique_stamp()
+    added = new_fills(load_fills(data_dir), incoming.assign(source="broker"))
+    write_fills(data_dir, added, stamp)
+    trades, open_positions = rebuild(data_dir, cfg, stamp, stops)
+    if trades.empty:
+        return f"Journal: {len(added)} new fills, no closed trades yet, {len(open_positions)} open"
+    with_r = trades["r_multiple"].dropna()
+    return (
+        f"Journal: {len(added)} new fills, {len(trades)} closed trades "
+        f"({len(with_r)} with R, mean R {with_r.mean():.2f}), {len(open_positions)} open"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Import broker fills into the trade journal")
     parser.add_argument("--csv", type=Path, required=True, help="broker fills export")
@@ -359,22 +484,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = load_config()
-    stamp = unique_stamp()
-    existing = load_fills(args.data_dir)
-    added = new_fills(existing, read_fills(args.csv, cfg.journal).assign(source="broker"))
-    write_fills(args.data_dir, added, stamp)
     stops = None
     if args.stops:
         stops = pd.read_csv(args.stops)
         stops["entry_date"] = pd.to_datetime(stops["entry_date"]).dt.date
         stops["ticker"] = stops["ticker"].map(normalize_ticker)
-    trades, open_positions = rebuild(args.data_dir, cfg, stamp, stops)
-    if trades.empty:
-        print(f"Journal: {len(added)} new fills, no closed trades yet, {len(open_positions)} open")
-        return 0
-    with_r = trades["r_multiple"].dropna()
-    print(
-        f"Journal: {len(added)} new fills, {len(trades)} closed trades "
-        f"({len(with_r)} with R, mean R {with_r.mean():.2f}), {len(open_positions)} open"
-    )
+    print(import_fills(args.data_dir, cfg, read_fills(args.csv, cfg.journal), stops))
     return 0

@@ -19,6 +19,7 @@ import pandas as pd
 from trading_os import (
     board_data,
     clock,
+    conviction,
     dashboard,
     intraday_study,
     journal,
@@ -32,16 +33,18 @@ from trading_os import (
 OPEN_COLUMNS = [
     "ticker", "direction", "entry_date", "entry_avg", "open_quantity", "order_stop",
     "last_close", "last_date", "open_pnl", "open_r", "at_risk_usd", "at_risk_pct", "setup",
+    "conviction",
 ]  # fmt: skip
 PLAN_CHECK_COLUMNS = ["ticker", "setup", "rule", "held", "hold", "r_now", "earnings", "action"]
 PLAN_COLUMNS = [
     "status", "session_date", "ticker", "direction", "setup", "entry", "stop", "shares",
-    "risk_usd", "fill_date", "fill_price", "slippage_pct", "slippage_r", "note", "plan_id",
+    "risk_usd", "fill_date", "fill_price", "slippage_pct", "slippage_r", "conviction", "note",
+    "plan_id",
 ]  # fmt: skip
 CLOSED_COLUMNS = [
     "ticker", "direction", "setup", "entry_date", "exit_date", "entry_avg", "exit_avg",
     "quantity", "pnl", "r_multiple", "mfe_r", "mae_r", "exit_efficiency", "sessions_held",
-    "signal_scan", "grade",
+    "signal_scan", "grade", "conviction",
 ]  # fmt: skip
 MFE_CAPTION = (
     "MFE/MAE: best and worst price from the session after entry to the exit, in R. "
@@ -137,9 +140,24 @@ def closed_trades(
     if trades.empty:
         return trades
     notes = dashboard.notes_state(data_dir)
-    graded = notes[notes["kind"] == "trade"].set_index("ref_id")["grade"].to_dict()
-    trades = trades.assign(grade=trades["trade_id"].map(graded).fillna(""))
+    mine = notes[notes["kind"] == "trade"].set_index("ref_id")
+    trades = trades.assign(grade=trades["trade_id"].map(mine["grade"].to_dict()).fillna(""))
+    trades["conviction"] = with_conviction(trades, mine["conviction"].to_dict())
     return review.excursions(trades, trade_bars(data_dir, trades, bars))
+
+
+def with_conviction(trades: pd.DataFrame, noted: dict) -> pd.Series:
+    """Each trade's conviction: the one on your note for it (the latest word), else the one
+    logged with its fills or plan. A nullable integer; none stays empty."""
+    own = trades["conviction"] if "conviction" in trades else pd.Series(None, index=trades.index)
+    note = trades["trade_id"].map(noted)
+    merged = note.where(note.notna(), own)
+    return pd.to_numeric(merged, errors="coerce").astype("Int64")
+
+
+def conviction_table(trades: pd.DataFrame) -> pd.DataFrame:
+    """Closed trades by conviction: count, win %, mean R, total R (`conviction.by_conviction`)."""
+    return conviction.by_conviction(trades)
 
 
 def closed_stats(trades: pd.DataFrame) -> dict[str, Any]:
@@ -199,7 +217,10 @@ def real_vs_study(data_dir: Path, trades: pd.DataFrame) -> pd.DataFrame:
 
 # --- Import broker fills (CSV) and Daily notes (phase 3; moved from app/streamlit_app.py)
 
-CSV_CAPTION = "Column names are mapped in config/scans.yaml → journal.csv_columns."
+CSV_CAPTION = (
+    "Upload a .csv or .xlsx export. Column names are mapped in config/scans.yaml → "
+    "journal.csv_columns. You see a preview first; nothing is written until you press Import."
+)
 DAILY_CAPTION = (
     "A note about the day. Tag the stocks it is about in the tag field, or write $TICKER in the "
     "text; each tagged stock's Chart page shows the note under its notes."

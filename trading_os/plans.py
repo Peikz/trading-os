@@ -20,6 +20,7 @@ from typing import Any
 import pandas as pd
 
 from trading_os import clock
+from trading_os import conviction as conviction_of
 from trading_os.journal import normalize_ticker
 from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
@@ -37,6 +38,7 @@ COLUMNS = [
     "risk_usd",
     "position_usd",
     "note",
+    "conviction",
 ]
 
 
@@ -70,7 +72,9 @@ def _write(data_dir: Path, row: dict[str, Any]) -> Path:
     out = folder(data_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{row['saved_ts']:%Y%m%dT%H%M%S%f}_{row['action']}.parquet"
-    pd.DataFrame([row], columns=COLUMNS).to_parquet(path, **PARQUET_OPTIONS)
+    frame = pd.DataFrame([row], columns=COLUMNS)
+    frame["conviction"] = pd.to_numeric(frame["conviction"], errors="coerce").astype("Int64")
+    frame.to_parquet(path, **PARQUET_OPTIONS)
     return path
 
 
@@ -84,8 +88,10 @@ def create(
     shares: int,
     setup: str | None = None,
     note: str = "",
+    conviction: int | None = None,
 ) -> str:
-    """Save a plan; returns its id."""
+    """Save a plan; returns its id. `conviction`: 1-3, how sure you are (optional)."""
+    conviction = conviction_of.normalize(conviction)
     if direction not in ("long", "short"):
         raise ValueError("direction is long or short")
     if (entry - stop) * (1 if direction == "long" else -1) <= 0:
@@ -110,6 +116,7 @@ def create(
             "risk_usd": abs(entry - stop) * shares,
             "position_usd": entry * shares,
             "note": note,
+            "conviction": conviction,
         },
     )
     return plan_id
@@ -125,6 +132,9 @@ def load(data_dir: Path) -> pd.DataFrame:
         return pd.DataFrame(columns=COLUMNS)
     events = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     events["session_date"] = pd.to_datetime(events["session_date"]).dt.date
+    if "conviction" not in events:  # plans saved before the field existed
+        events["conviction"] = None
+    events["conviction"] = pd.to_numeric(events["conviction"], errors="coerce").astype("Int64")
     return events
 
 

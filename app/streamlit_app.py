@@ -31,8 +31,10 @@ from trading_os import (
     chart_marks,
     chart_view,
     clock,
+    conviction,
     daily_notes,
     dashboard,
+    fills_import,
     health,
     heat,
     history,
@@ -174,6 +176,24 @@ h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
   flex:1 1 100%!important;order:4}
 .st-key-topbar div[role="group"]{flex-wrap:nowrap;overflow-x:auto}
 }
+.st-key-bottomnav{display:none}
+@media (max-width:640px){
+.block-container{padding-bottom:5.5rem!important}
+.st-key-bottomnav{display:block;position:fixed;left:0;right:0;bottom:0;z-index:1000;
+  background:#0B0D10;border-top:1px solid #23272F;
+  padding:.3rem .4rem calc(.3rem + env(safe-area-inset-bottom,0px))}
+.st-key-bottomnav [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:.25rem}
+.st-key-bottomnav [data-testid="stColumn"]{
+  min-width:0!important;flex:1 1 0!important;width:auto!important}
+.st-key-bottomnav button{min-height:3rem;padding:.2rem .1rem;font-size:.78rem;width:100%}
+.st-key-bottomnav button p{font-size:.78rem;white-space:nowrap}
+[data-testid="stMarkdownContainer"] table{display:block;overflow-x:auto;max-width:100%}
+[data-testid="stMarkdownContainer"] pre{white-space:pre-wrap;overflow-wrap:anywhere}
+[data-testid="stMain"] .stButton button,[data-testid="stMain"] [data-testid="stPopover"] button{
+  min-height:2.6rem}
+.st-key-linebar [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important}
+.st-key-linebar [data-testid="stColumn"]{min-width:0!important}
+}
 </style>"""
 st.markdown(NAV_CSS, unsafe_allow_html=True)
 
@@ -280,6 +300,22 @@ if len(tabs) > 1:
     page = st.session_state.get(f"tab_{place}") or tabs[0]
 else:
     page = tabs[0]
+
+
+# The phone's bottom bar (Emil, 17 Nov 2026: "Watchlist down at the bottom on mobile"): the most
+# used pages within a thumb's reach, shown only on narrow screens (NAV_CSS). A button opens its
+# page the way a stock on the Chart page does (`go`), so the top bar follows.
+BOTTOM_NAV = ["Today", "Watchlists", "Chart", "Positions", "Journal"]
+with st.container(key="bottomnav"):
+    for target, col in zip(BOTTOM_NAV, st.columns(len(BOTTOM_NAV), gap="small"), strict=True):
+        col.button(
+            target,
+            key=f"bn_{target}",
+            on_click=go,
+            args=(target,),
+            type="primary" if page == target else "secondary",
+            width="stretch",
+        )
 
 
 # ---------------------------------------------------------------- cached loaders
@@ -928,6 +964,21 @@ def history_tables(folder: str, filters: tuple, group: str):
     return research_view.history_tables(history_filtered(folder, *filters), CFG.exits, group)
 
 
+def conviction_pick(label: str = "Conviction", value=None, key: str | None = None) -> int | None:
+    """How sure you were: none, 1 (small), 2 (normal) or 3 (high). Optional; None = not set."""
+    start = conviction.normalize(value)
+    picked = st.radio(
+        label,
+        [None, *conviction.LEVELS],
+        index=([None, *conviction.LEVELS]).index(start),
+        horizontal=True,
+        format_func=lambda c: "none" if c is None else str(c),
+        help="1 = small, 2 = normal, 3 = high conviction. Optional; the Journal compares them.",
+        key=key,
+    )
+    return picked
+
+
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
     """Grade + notes + screenshots for a trade or a signal (append-only)."""
     current = dashboard.notes_state(data_dir)
@@ -943,6 +994,7 @@ def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
             horizontal=True,
             format_func=lambda g: g or "none",
         )
+        sure = conviction_pick(value=prev.get("conviction"), key=f"conv-{key}")
         notes = st.text_area("Notes", prev.get("notes", ""))
         tags = st.text_input("Tags (comma separated)", prev.get("tags", ""))
         shots = st.file_uploader(
@@ -954,7 +1006,7 @@ def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
                 saved.append(
                     dashboard.save_attachment(data_dir, ref_id, shot.name, shot.getvalue())
                 )
-            dashboard.save_note(data_dir, kind, ref_id, grade, notes, tags, saved)
+            dashboard.save_note(data_dir, kind, ref_id, grade, notes, tags, saved, conviction=sure)
             st.success("Saved locally. Use “Save & push” in the sidebar to send it to GitHub.")
     for rel in [a for a in str(prev.get("attachments", "")).split(";") if a]:
         if (data_dir / rel).exists():
@@ -1581,6 +1633,35 @@ elif page == "Chart":
         "drawn past the last bar keeps extending each day. Triangles: amber = a scan's hit, "
         "green/red = your buys/sells."
     )
+    with st.container(key="linebar", border=True):
+        st.markdown(f"**Lines on {ticker}** · saved for this stock, on every device")
+        if len(bars) > 1:
+            span_days = list(bars["session_date"])[-max(min(sessions, len(bars)), 2) :]
+            a, b = st.columns([3, 2], vertical_alignment="bottom")
+            level_price = a.number_input(
+                "Price",
+                min_value=0.0,
+                value=round(float(bars["close"].iloc[-1]), 2),
+                step=0.01,
+                format="%.2f",
+                key=f"ch_level_{ticker}",
+            )
+            if b.button("＋ Horizontal line", key="ch_level_add", width="stretch"):
+                try:
+                    chart_marks.add_level(
+                        data_dir, ticker, level_price, span_days[0], span_days[-1]
+                    )
+                    st.rerun()
+                except ValueError as exc:
+                    st.warning(str(exc))
+        if not len(marks):
+            st.caption("No lines yet. Add a level above, or draw with the line tool.")
+        for m in marks.to_dict("records"):
+            a, b = st.columns([5, 1], vertical_alignment="center")
+            a.markdown(chart_marks.describe(m))
+            if b.button("✕", key=f"lb-rm-{m['mark_id']}", help="Remove", width="stretch"):
+                chart_marks.remove(data_dir, m["mark_id"])
+                st.rerun()
     exchanges = {}
     eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
     if eod:
@@ -1659,13 +1740,8 @@ elif page == "Chart":
         if len(marks):
             st.markdown("**Saved for this stock**")
             for m in marks.to_dict("records"):
-                text = (
-                    f"Line {m['x0']} {m['y0']:.2f} → {m['x1']} {m['y1']:.2f}"
-                    if m["kind"] == "line"
-                    else f"AVWAP from {m['anchor']}"
-                )
                 a, b = st.columns([5, 1])
-                a.write(f"{text} {('· ' + m['label']) if m['label'] else ''}")
+                a.write(chart_marks.describe(m))
                 if b.button("Remove", key=f"rm-{m['mark_id']}"):
                     chart_marks.remove(data_dir, m["mark_id"])
                     st.rerun()
@@ -1841,14 +1917,48 @@ elif page == "Journal":
         "later replaces the matching hand-logged one). Private: stays in the data repo; "
         "use “Save & push” to send it to GitHub."
     )
-    with st.expander("Import broker fills (CSV)"):
-        st.caption(journal_view.CSV_CAPTION)
-        upload = st.file_uploader("Fills export", type=["csv"])
-        if upload is not None and st.button("Import"):
+    today_day = dt.date.today()
+    todays = daily_notes.for_day(data_dir, today_day)
+    with st.form("today-note", border=True):
+        st.markdown(f"**Today's note** · {today_day:%a %d %b}")
+        today_text = st.text_area(
+            "Today's note",
+            value=todays["text"] if todays else "",
+            height=110,
+            placeholder="How the day went, what you did and why. $TICKER tags a stock.",
+            label_visibility="collapsed",
+        )
+        if st.form_submit_button("Save today's note", width="stretch"):
             try:
-                st.success(journal_view.import_csv(data_dir, upload.name, upload.getvalue()))
+                daily_notes.save_for_day(data_dir, today_day, today_text)
+                st.rerun()
             except ValueError as exc:
-                st.error(str(exc))
+                st.warning(str(exc))
+    with st.expander("Import broker fills (.csv or .xlsx)"):
+        st.caption(journal_view.CSV_CAPTION)
+        upload = st.file_uploader(
+            "Fills export", type=list(fills_import.EXTENSIONS), key="fills_upload"
+        )
+        if upload is not None:
+            seen = fills_import.preview(data_dir, CFG.journal, upload.name, upload.getvalue())
+            if seen.error:
+                st.error(seen.error)
+            else:
+                lines = [f"- {line}" for line in fills_import.summary_lines(seen)]
+                st.markdown("\n".join(lines))
+                if st.button(
+                    f"Import {seen.new} new fills" if seen.new else "Nothing new to import",
+                    disabled=not seen.new,
+                    key="fills_import_go",
+                    width="stretch",
+                ):
+                    try:
+                        st.success(
+                            fills_import.run_import(data_dir, CFG, upload.name, upload.getvalue())
+                        )
+                        st.cache_data.clear()
+                    except ValueError as exc:
+                        st.error(str(exc))
 
     account = sizing.load_account(data_dir)
     usd_rate = fx_rate(str(data_dir), account.currency if account else "USD")
@@ -1953,9 +2063,12 @@ elif page == "Journal":
         a, b = st.columns(2)
         setup = a.selectbox("Setup", ["", *setups])
         stop = b.number_input("Initial stop (entries)", min_value=0.0, step=0.01, format="%.4f")
+        fill_sure = conviction_pick(key="conv-log")
         if st.form_submit_button("Save fill"):
             try:
-                fill = journal.manual_fill(day, ticker, side, qty, price, fees, setup or None)
+                fill = journal.manual_fill(
+                    day, ticker, side, qty, price, fees, setup or None, conviction=fill_sure
+                )
                 journal.log_manual(data_dir, CFG, fill, stop or None)
                 st.success(f"Saved: {side} {qty:g} {ticker} @ {price:g}.")
                 st.cache_data.clear()
@@ -1994,11 +2107,21 @@ elif page == "Journal":
                 value=int(suggestion["shares"]) if suggestion else 0,
                 step=1,
             )
+            plan_sure = conviction_pick(key="conv-plan")
             note = st.text_input("Note")
             if st.form_submit_button("Save plan"):
                 try:
                     plans.create(
-                        data_dir, pday, pticker, direction, entry, pstop, shares, psetup, note
+                        data_dir,
+                        pday,
+                        pticker,
+                        direction,
+                        entry,
+                        pstop,
+                        shares,
+                        psetup,
+                        note,
+                        conviction=plan_sure,
                     )
                     st.success("Plan saved.")
                     st.rerun()
@@ -2037,6 +2160,16 @@ elif page == "Journal":
             curve = journal_view.r_curve(trades)
             if len(curve):
                 st.line_chart(curve, height=200)
+            by_sure = journal_view.conviction_table(trades)
+            if len(by_sure):
+                st.markdown("**By conviction** (1 small · 2 normal · 3 high)")
+                st.dataframe(by_sure.round(2), hide_index=True, width="stretch")
+                st.caption(
+                    "Closed trades you tagged with a conviction. Win % = P&L above 0; R over "
+                    "the trades with a stop. A few trades per level say little: facts, not advice."
+                )
+            else:
+                st.caption("Tag trades with a conviction (1-3) and a table of them shows here.")
             cols = journal_view.CLOSED_COLUMNS
             st.dataframe(
                 trades[[c for c in cols if c in trades]].round(2),

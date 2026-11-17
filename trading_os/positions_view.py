@@ -17,7 +17,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_os import board_data, clock, manage, review
+from trading_os import board_data, clock, conviction, manage, review
 
 CLOSE_SOURCE = "the newest daily close in the data repo (not live)"
 LIVE_SOURCE = "live (Alpaca IEX, last trade) where it has one, else the last close"
@@ -140,6 +140,7 @@ def card(p: Mapping[str, Any], info: Mapping[str, Any], price: float | None) -> 
     return {
         "ticker": p["ticker"],
         "setup": p.get("setup") or "",
+        "conviction": conviction.normalize(p.get("conviction")),
         "direction": p.get("direction"),
         "shares": qty,
         "entry_date": p.get("entry_date"),

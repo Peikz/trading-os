@@ -113,3 +113,27 @@ def all_tags(data_dir) -> list[str]:
     """Every stock tagged in a live note, A to Z."""
     notes = current(data_dir)
     return sorted({t for tags in notes["tag_list"] for t in tags}) if len(notes) else []
+
+
+def for_day(data_dir, day: dt.date) -> dict | None:
+    """The newest live note written for `day` (the Journal's "Today's note" box edits it), or
+    None."""
+    notes = current(data_dir)
+    if not len(notes):
+        return None
+    same = notes[pd.to_datetime(notes["note_date"]).dt.date == day]
+    return same.iloc[0].to_dict() if len(same) else None
+
+
+def save_for_day(data_dir, day: dt.date, text: str) -> str:
+    """Save `text` as the note of `day`: edit the day's newest note (its tags follow the
+    text), or add one. A blank text removes nothing; use the note's own delete for that.
+    Returns the note id."""
+    text = text.strip()
+    if not text:
+        raise ValueError("write something first")
+    found = for_day(data_dir, day)
+    if found is None:
+        return add(data_dir, text, day)
+    edit(data_dir, found["note_id"], text, day, ", ".join(found["tag_list"]))
+    return found["note_id"]

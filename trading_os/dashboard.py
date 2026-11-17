@@ -19,12 +19,15 @@ from pathlib import Path
 import pandas as pd
 
 from trading_os import clock, gitlock, watchlists
+from trading_os import conviction as conviction_of
 from trading_os.store import PARQUET_OPTIONS
 
 # Latest in the day first.
 SLOT_ORDER = {"weekly": 0, "ah": 1, "eod": 2, "close": 3, "mid": 4, "am": 5, "pm": 6}
 GRADES = ("", "A", "B", "C")
-NOTE_COLUMNS = ["kind", "ref_id", "grade", "notes", "tags", "attachments", "saved_ts"]
+NOTE_COLUMNS = [
+    "kind", "ref_id", "grade", "notes", "tags", "attachments", "saved_ts", "conviction",
+]  # fmt: skip
 _SLOTS = "pm|am|mid|close|eod|ah|weekly"  # close and ah were missing until 21 Oct 2026
 _CANONICAL = re.compile(rf"^(\d{{4}}-\d{{2}}-\d{{2}})_({_SLOTS})$")
 _MANUAL = re.compile(rf"^(\d{{4}}-\d{{2}}-\d{{2}})_({_SLOTS})_(\d{{6}})$")
@@ -171,12 +174,15 @@ def save_note(
     tags: str,
     attachments: list[str],
     now: dt.datetime | None = None,
+    conviction: int | None = None,
 ) -> Path:
-    """Record a grade/notes event for a trade or a signal. Earlier events are kept."""
+    """Record a grade/notes event for a trade or a signal. Earlier events are kept.
+    `conviction` (1-3, optional) is how sure you were; notes saved before it existed have none."""
     if kind not in ("trade", "signal"):
         raise ValueError("kind must be trade or signal")
     if grade not in GRADES:
         raise ValueError(f"grade must be one of {GRADES}")
+    conviction = conviction_of.normalize(conviction)
     now = now or dt.datetime.now(dt.UTC)
     folder = Path(data_dir) / "data" / "journal" / "notes" / str(now.year)
     folder.mkdir(parents=True, exist_ok=True)
@@ -189,8 +195,11 @@ def save_note(
         "tags": tags,
         "attachments": ";".join(attachments),
         "saved_ts": pd.Timestamp(now),
+        "conviction": conviction,
     }
-    pd.DataFrame([event], columns=NOTE_COLUMNS).to_parquet(path, **PARQUET_OPTIONS)
+    frame = pd.DataFrame([event], columns=NOTE_COLUMNS)
+    frame["conviction"] = frame["conviction"].astype("Int64")
+    frame.to_parquet(path, **PARQUET_OPTIONS)
     return path
 
 
@@ -200,6 +209,9 @@ def notes_state(data_dir: Path) -> pd.DataFrame:
     if not files:
         return pd.DataFrame(columns=NOTE_COLUMNS)
     events = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    if "conviction" not in events:  # every note saved before the field existed
+        events["conviction"] = None
+    events["conviction"] = pd.to_numeric(events["conviction"], errors="coerce").astype("Int64")
     events = events.sort_values("saved_ts", kind="stable")
     return events.groupby(["kind", "ref_id"], as_index=False).tail(1).reset_index(drop=True)
 

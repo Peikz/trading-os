@@ -800,7 +800,12 @@ def position_cards(
             st.markdown(
                 f"<b style='font-size:1.15em'>{t}</b> &nbsp;·&nbsp; {c['setup']}"
                 f" &nbsp;<span style='opacity:.6'>{c['direction']} · {c['shares']:,.0f} sh"
-                f" · in {c['entry_date']}</span>",
+                f" · in {c['entry_date']}</span>"
+                + (
+                    f" &nbsp;<b title='conviction'>◆{c['conviction']}</b>"
+                    if c["conviction"]
+                    else ""
+                ),
                 unsafe_allow_html=True,
             )
             a, b, d = st.columns(3)

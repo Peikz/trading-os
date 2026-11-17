@@ -66,3 +66,30 @@ def test_apply_drawn_saves_once_per_change_and_keeps_name_and_extension(tmp_path
     drawn, moved = now.iloc[0], now.iloc[1]
     assert bool(drawn["extend"]) and drawn["label"] == ""
     assert moved["label"] == "base" and bool(moved["extend"]) and moved["y0"] == 10.5
+
+
+def test_a_level_is_a_flat_line_that_persists_and_draws(tmp_path):
+    import pandas as pd
+    import pytest
+
+    from trading_os import interactive_chart as ichart
+
+    days = [d.date() for d in pd.bdate_range("2026-01-05", periods=30)]
+    chart_marks.add_level(tmp_path, A, 12.5, days[5], days[20])
+    chart_marks.add_line(tmp_path, A, days[5], 10, days[20], 11)
+    marks = chart_marks.current(tmp_path, A)
+    flat = [chart_marks.is_level(m) for m in marks.to_dict("records")]
+    assert sorted(flat) == [False, True]
+    level = marks[[chart_marks.is_level(m) for m in marks.to_dict("records")]].iloc[0]
+    assert chart_marks.describe(level) == "Level 12.50"
+    assert level["extend"]  # extended to the last bar
+    labels = [d.isoformat() for d in days]
+    shapes = ichart.line_shapes(days, labels, [level.to_dict()])
+    assert len(shapes) == 1 and shapes[0]["y0"] == shapes[0]["y1"] == 12.5
+    assert shapes[0]["x1"] == labels[-1]  # reaches the newest bar
+    chart_marks.remove(tmp_path, level["mark_id"])  # and goes away like any line
+    assert len(chart_marks.current(tmp_path, A)) == 1
+    with pytest.raises(ValueError):
+        chart_marks.add_level(tmp_path, A, 0, days[0], days[1])
+    with pytest.raises(ValueError):
+        chart_marks.add_level(tmp_path, A, 5, days[0], days[0])

@@ -2,6 +2,8 @@
 
 import datetime as dt
 
+import pytest
+
 from trading_os import daily_notes
 
 A, B = "".join(["S", "R", "F"]), "".join(["K", "L", "M"])
@@ -30,3 +32,20 @@ def test_notes_by_day_and_by_tag_with_edits_kept(tmp_path):
     assert len(daily_notes.current(tmp_path)) == 2
     texts = daily_notes.events(tmp_path)["text"].dropna().tolist()
     assert f"Gap held on ${A}" in texts and "Gap held, sold half" in texts  # the log keeps both
+
+
+def test_todays_note_is_added_once_then_edited(tmp_path):
+    day = dt.date(2026, 11, 17)
+    assert daily_notes.for_day(tmp_path, day) is None
+    first = daily_notes.save_for_day(tmp_path, day, "choppy open, watching $AAAA")
+    again = daily_notes.save_for_day(tmp_path, day, "choppy open, sat out")
+    assert first == again  # an edit, not a second note
+    other = daily_notes.add(tmp_path, "yesterday", dt.date(2026, 11, 16))
+    found = daily_notes.for_day(tmp_path, day)
+    assert found["note_id"] == first and found["text"] == "choppy open, sat out"
+    assert found["tag_list"] == ["AAAA"]  # tags typed earlier are kept on an edit
+    assert daily_notes.for_day(tmp_path, dt.date(2026, 11, 16))["note_id"] == other
+    assert len(daily_notes.current(tmp_path)) == 2
+    assert len(daily_notes.events(tmp_path)) == 3  # add, edit, add: the log only grows
+    with pytest.raises(ValueError):
+        daily_notes.save_for_day(tmp_path, day, "   ")
