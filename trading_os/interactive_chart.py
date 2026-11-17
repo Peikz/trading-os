@@ -84,18 +84,24 @@ def daily_figure(
     levels: Mapping[str, float] | None = None,
     sessions: int | None = None,
     height: int = 640,
+    x_labels: list[str] | None = None,
 ) -> go.Figure:
-    """Candles + volume. `markers`: session_date, label, side (long/short): a scan's hit,
-    drawn under (long) or over (short) that day's bar. `fills`: session_date, price, side
-    (buy/sell). `levels`: label -> price lines. `sessions`: show only the last N bars (the
-    lines are computed on all of them first)."""
+    """Candles + volume. `x_labels`: the bars' own x labels, oldest first (the practice charts'
+    "day -3" instead of a date), one per bar. `markers`: session_date, label, side (long/short):
+    a scan's hit, drawn under (long) or over (short) that day's bar. `fills`: session_date,
+    price, side (buy/sell). `levels`: label -> price lines. `sessions`: show only the last N
+    bars (the lines are computed on all of them first)."""
     data = bars.sort_values("session_date").reset_index(drop=True)
     drawn = lines(data["close"], overlays or [])
+    names = list(x_labels) if x_labels is not None else _labels(data["session_date"])
+    if len(names) != len(data):
+        raise ValueError("x_labels needs one label per bar")
     if sessions:
         start = max(0, len(data) - sessions)
         data = data.iloc[start:].reset_index(drop=True)
         drawn = {k: v.iloc[start:].reset_index(drop=True) for k, v in drawn.items()}
-    x = _labels(data["session_date"])
+        names = names[start:]
+    x = names
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=0.02
     )
