@@ -29,6 +29,7 @@ from trading_os import (
     alerts,
     board_data,
     breadth,
+    chart_lists,
     chart_marks,
     chart_view,
     clock,
@@ -174,6 +175,11 @@ h3{font-size:1.25rem!important;margin:1.1rem 0 .35rem!important;padding:0!import
 .st-key-mtiles [data-testid="stMetricValue"]{font-size:1.5rem}
 .st-key-mtiles>div>[data-testid="stHorizontalBlock"]{gap:1rem}
 .st-key-bottomnav,.st-key-moresheet{display:none}
+.st-key-chart_list button{min-height:2.6rem;padding:.2rem .6rem;justify-content:flex-start;
+text-align:left}
+.st-key-chart_list button p{font-size:.85rem;line-height:1.25;margin:0}
+.st-key-chart_chips{overflow-x:auto;padding-bottom:.2rem}
+.st-key-chart_chips button{min-height:2.4rem;padding:.2rem .6rem;white-space:nowrap}
 @media (max-width:640px){
 html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"]{overflow-x:hidden}
 .block-container{padding-top:.8rem!important;padding-bottom:5.5rem!important;
@@ -277,6 +283,7 @@ with st.container(key="topbar"):
         key="search",
         placeholder="Search a stock, notes or the guide",
         label_visibility="collapsed",
+        on_change=lambda: search_enter(),
     )
     with gear.popover("⚙", help="Settings: data folder, test runs, pull and save"):
         st.text_input("Data repo folder", key="data_folder")
@@ -863,10 +870,75 @@ def market_overview() -> None:
 
 
 def open_chart(ticker: str) -> None:
-    """The search's button: the Chart page with this ticker."""
+    """Open the Chart page on this ticker (a button's callback: the search, Today, a position).
+    The page then picks the list the stock is in."""
     go("Chart")
     st.session_state["ch_ticker"] = ticker
+    st.session_state["ch_opened"] = ticker
     st.session_state["search"] = ""
+
+
+def search_enter() -> None:
+    """Enter in the top search box: a query that is exactly a known ticker opens on the Chart
+    page; anything else shows the search results as before."""
+    q = str(st.session_state.get("search", "")).strip()
+    if not search.looks_like_ticker(q):
+        return
+    ticker = q.lstrip("$").upper()
+    known = my_watchlists.known_checker(
+        runs_cached(str(st.session_state["data_folder"]), bool(st.session_state["manual_runs"])),
+        Path(st.session_state["data_folder"]),
+        read_parquet,
+    )
+    if known(ticker):
+        open_chart(ticker)
+
+
+def _chart_pick(ticker: str) -> None:
+    st.session_state["ch_ticker"] = ticker
+
+
+def _chart_step(tickers: list[str], current: str, by: int) -> None:
+    nxt = chart_lists.neighbour(tickers, current, by)
+    if nxt:
+        st.session_state["ch_ticker"] = nxt
+
+
+def chart_list_panel(rows: pd.DataFrame, current: str, phone: bool) -> None:
+    """The Chart page's list: one click on a row charts it, the current one is highlighted,
+    Prev/Next (and the arrow keys) step through. A phone gets a strip of chips under the toolbar."""
+    tickers = list(rows["ticker"])
+    step = {"on_click": _chart_step, "width": "content" if phone else "stretch"}
+    if phone:
+        box = st.container(key="chart_chips", horizontal=True, wrap=False)
+    else:
+        prev, nxt = st.columns(2)
+        box = None
+    prev_args = {"key": "ch_prev", "shortcut": "Left", "args": (tickers, current, -1), **step}
+    next_args = {"key": "ch_next", "shortcut": "Right", "args": (tickers, current, 1), **step}
+    if phone:
+        with box:
+            st.button("◀", **prev_args)
+            _chart_rows(rows, current, True)
+            st.button("▶", **next_args)
+        return
+    prev.button("◀ Prev", **prev_args)
+    nxt.button("Next ▶", **next_args)
+    with st.container(key="chart_list", height=620):
+        _chart_rows(rows, current, False)
+
+
+def _chart_rows(rows: pd.DataFrame, current: str, phone: bool) -> None:
+    for row in rows.to_dict("records"):
+        t = row["ticker"]
+        st.button(
+            chart_lists.row_label(row, chips=phone),
+            key=f"ch_row_{t}",
+            type="primary" if t == current else "secondary",
+            on_click=_chart_pick,
+            args=(t,),
+            width="content" if phone else "stretch",
+        )
 
 
 def search_view(query: str) -> None:
@@ -1420,6 +1492,7 @@ elif page == "Screener":
     except ValueError as exc:
         st.error(str(exc))
         end_page()
+    st.session_state["sc_last"] = list(result["ticker"].head(200))  # the Chart page's list
     every = "every hit" if hit_scan else "every stock"
     summary = " · ".join(screens.describe(f) for f in filters) or f"no filters: {every}"
     exchanges = dict(zip(data["ticker"], data.get("exchange", pd.Series(dtype=str)), strict=False))
@@ -1662,47 +1735,60 @@ elif page == "Runs":
             st.session_state.pop("sc_diff", None)
 
 elif page == "Chart":
-    # Every alert-tier hit of the newest session's runs, pushed ones first (most hits are C:
-    # counted in the push, not shown, so "pushed" alone was often empty), then your
-    # watchlists and open positions.
-    where = chart_view.picks(data_dir, runs, read_parquet)
-    picks = list(where)
     phone = ui.is_phone()
+    eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+    lists = chart_lists.build(
+        data_dir,
+        runs,
+        read_parquet,
+        screener=st.session_state.get("sc_last", []),
+        snapshot=read_parquet(str(eod_runs[0].universe)) if eod_runs else None,
+    )
+    names = list(lists)
+    # A stock opened from elsewhere (search, Today) brings its list; else the last used one
+    opened = st.session_state.pop("ch_opened", None)
+    if opened and names:
+        have = chart_lists.where_is(lists, opened, st.session_state.get("ch_list"))
+        if have:
+            st.session_state["ch_list"] = have
+    source = ui.choose("List", names, key="ch_list", visible_label=False) if names else None
+    rows = lists.get(source) if source else None
     # One toolbar row above the chart (a phone: the stock and the bars, the rest under Tools)
     with st.container(key="chart_bar"):
         if phone:
             c_pick, c_tf = st.columns([3, 2], vertical_alignment="bottom")
             tools = st.popover("Tools", width="stretch")
-            typed_box = ind_box = view_box = note_box = tools
-            watch_box = tools
+            ind_box = view_box = note_box = watch_box = tools
         else:
-            cols = st.columns([3, 2, 2.6, 1.5, 1.2, 1.2, 1.2], vertical_alignment="bottom")
-            c_pick, typed_box, c_tf = cols[0], cols[1], cols[2]
-            ind_box = cols[3].popover("Indicators", width="stretch")
-            view_box = cols[4].popover("View", width="stretch")
-            watch_box = cols[5]
-            note_box = cols[6].popover("Note", width="stretch")
-    # Opens on the first stock of the list instead of an empty page
-    quick = c_pick.selectbox(
-        "Today's hits (pushed first), watchlists, open positions",
-        picks,
-        format_func=lambda t: f"{t}  ({where[t]})",
-        key="ch_pick",
-        label_visibility="collapsed",
-        placeholder="Pick a stock",
-    )
-    typed = typed_box.text_input(
-        "…or type any ticker (wins over the list)",
+            cols = st.columns([2.4, 2.6, 1.5, 1.2, 1.2, 1.2], vertical_alignment="bottom")
+            c_pick, c_tf = cols[0], cols[1]
+            ind_box = cols[2].popover("Indicators", width="stretch")
+            view_box = cols[3].popover("View", width="stretch")
+            watch_box = cols[4]
+            note_box = cols[5].popover("Note", width="stretch")
+    typed = c_pick.text_input(
+        "Ticker",
         key="ch_ticker",
-        placeholder="…or type a ticker",
+        placeholder="Type a ticker",
         label_visibility="visible" if phone else "collapsed",
     )
-    ticker = (typed.strip() or (quick or "")).upper()
+    ticker = typed.strip().upper()
+    if not ticker and rows is not None:
+        ticker = str(rows["ticker"].iloc[0])  # opens on the first stock of the list
     if not ticker:
         ui.empty_state(
             "Pick or type a ticker.", "Today's hits and your watchlists show up in the list."
         )
         end_page()
+    if rows is not None and phone:
+        chart_list_panel(rows, ticker, True)
+        main = st.container()
+    elif rows is not None:
+        main, side = st.columns([3, 1])
+        with side:
+            chart_list_panel(rows, ticker, False)
+    else:
+        main = st.container()
     with c_tf:
         timeframe = ui.choose("Bars", ["Daily", "Weekly", "Monthly"], key="ch_tf")
     with view_box:
@@ -1740,20 +1826,21 @@ elif page == "Chart":
             st.rerun()
     anchors = {name: quick_anchor[name] for name in chosen} | choices["saved"]
     lines = marks[marks["kind"] == "line"].to_dict("records")
-    drawn = stock_chart(
-        ticker,
-        period=period,
-        timeframe=timeframe,
-        overlays=overlays,
-        sessions=sessions,
-        show_hits=show_hits,
-        show_fills=show_fills,
-        show_levels=show_levels,
-        anchors=anchors,
-        lines=lines,
-        drawable=True,
-        key="ch_main",
-    )
+    with main:
+        drawn = stock_chart(
+            ticker,
+            period=period,
+            timeframe=timeframe,
+            overlays=overlays,
+            sessions=sessions,
+            show_hits=show_hits,
+            show_fills=show_fills,
+            show_levels=show_levels,
+            anchors=anchors,
+            lines=lines,
+            drawable=True,
+            key="ch_main",
+        )
     if drawn and drawn.get("seq") != st.session_state.get("ch_drawn_seq"):
         st.session_state["ch_drawn_seq"] = drawn["seq"]  # each report is saved once
         if any(chart_marks.apply_drawn(data_dir, ticker, drawn, marks).values()):
