@@ -7,6 +7,12 @@ price is 100, `rel_day` 0 is the entry session). Your answers are append-only Pa
 under `data/practice/answers/`, one per answer, like the journal. A signal is answered at most
 once per pool: "practice" (the earlier years) is for training, "exam" (the later years) counts
 once. Nothing here holds data; every function takes frames or a data folder.
+
+v2 (17 Nov 2026): each answer also records `note` (your words on the signal) and `shown`
+(whether the stock and date were on screen when you answered, so blind and shown results can
+be split). A note is edited after the answer by appending to `data/practice/notes/`; old answer
+files without these columns load as note "" and shown False. The dates and prices of a signal
+are rebuilt from `entry_date`, the NYSE calendar and the signal's `price`.
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from trading_os.clock import _calendar
 from trading_os.store import PARQUET_OPTIONS, unique_stamp
 
 POOLS = ("practice", "exam")
@@ -24,7 +31,8 @@ CHOICES = ("skip", "1", "2", "3")
 # Size of the position as a share of a normal one: skip is no trade.
 MULTIPLIER = {"skip": 0.0, "1": 0.5, "2": 1.0, "3": 1.5}
 BIG_WINNER_R = 5.0
-ANSWER_COLUMNS = ["signal_id", "pool", "choice", "answered_at"]
+ANSWER_COLUMNS = ["signal_id", "pool", "choice", "answered_at", "note", "shown"]
+NOTE_COLUMNS = ["signal_id", "note", "saved_ts"]
 
 
 class AlreadyAnswered(ValueError):
@@ -37,6 +45,10 @@ def folder(data_dir: Path) -> Path:
 
 def answers_folder(data_dir: Path) -> Path:
     return Path(data_dir) / "data" / "practice" / "answers"
+
+
+def notes_folder(data_dir: Path) -> Path:
+    return Path(data_dir) / "data" / "practice" / "notes"
 
 
 def available(data_dir: Path) -> bool:
@@ -64,11 +76,75 @@ def visible_bars(bars: pd.DataFrame, answered: bool) -> pd.DataFrame:
     return shown.sort_values("rel_day").reset_index(drop=True)
 
 
+def _with_defaults(frame: pd.DataFrame) -> pd.DataFrame:
+    """Answers written before v2 have no note / shown: note "" and shown False."""
+    out = frame.copy()
+    if "note" not in out:
+        out["note"] = ""
+    if "shown" not in out:
+        out["shown"] = False
+    out["note"] = out["note"].fillna("").astype(str)
+    out["shown"] = out["shown"].fillna(False).astype(bool)
+    return out
+
+
 def load_answers(data_dir: Path) -> pd.DataFrame:
     files = sorted(answers_folder(data_dir).glob("*.parquet"))
     if not files:
         return pd.DataFrame({c: pd.Series(dtype="object") for c in ANSWER_COLUMNS})
-    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    frames = [_with_defaults(pd.read_parquet(f)) for f in files]
+    return pd.concat(frames, ignore_index=True)
+
+
+def current_notes(data_dir: Path, answers: pd.DataFrame | None = None) -> dict[str, str]:
+    """Signal id -> its note now: the latest edit, else the note saved with the answer."""
+    answers = load_answers(data_dir) if answers is None else answers
+    notes = dict(zip(answers["signal_id"], answers["note"], strict=True))
+    files = sorted(notes_folder(data_dir).glob("*.parquet"))
+    if files:
+        edits = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+        for sid, text in edits.sort_values("saved_ts").groupby("signal_id")["note"].last().items():
+            notes[sid] = text
+    return notes
+
+
+def save_note(data_dir: Path, signal_id: str, note: str) -> None:
+    """Edit the note of an answered signal. Append-only: each edit is its own file and the
+    latest wins; the earlier text stays on disk."""
+    answers = load_answers(data_dir)
+    if not (answers["signal_id"] == signal_id).any():
+        raise ValueError("only an answered signal has a note")
+    stamp = unique_stamp()
+    out = notes_folder(data_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame(
+        [{"signal_id": signal_id, "note": str(note), "saved_ts": stamp}], columns=NOTE_COLUMNS
+    )
+    frame.to_parquet(out / f"{stamp:%Y%m%dT%H%M%S%f}.parquet", **PARQUET_OPTIONS)
+
+
+def session_dates(entry_date, rel_days) -> list[pd.Timestamp]:
+    """The real date of each relative day: rel_day 0 is the entry session, and each step is
+    one NYSE session (weekends and holidays are skipped), before or after it."""
+    sessions = _calendar("XNYS").sessions
+    entry = pd.Timestamp(entry_date).normalize()
+    if entry not in sessions:
+        raise ValueError(f"{entry.date()} is not an NYSE session")
+    at = sessions.get_loc(entry)
+    rels = [int(r) for r in rel_days]
+    if rels and (at + min(rels) < 0 or at + max(rels) >= len(sessions)):
+        raise ValueError("the calendar does not reach that far")
+    return [sessions[at + r] for r in rels]
+
+
+def real_price(normalised, price: float):
+    """A normalised price (entry = 100) in dollars: the entry price is `price`."""
+    return normalised * float(price) / 100.0
+
+
+def normalised_price(real, price: float):
+    """The inverse of `real_price`: dollars back to the data's entry = 100."""
+    return real * 100.0 / float(price)
 
 
 def unseen(signals: pd.DataFrame, answers: pd.DataFrame, pool: str) -> pd.DataFrame:
@@ -90,9 +166,18 @@ def next_signal(
     return (rng or random).choice(left)
 
 
-def save_answer(data_dir: Path, signals: pd.DataFrame, signal_id: str, pool: str, choice: str):
-    """Append one answer as its own file. Refuses a repeat, an unknown signal, a signal of the
-    other pool and a choice outside skip / 1 / 2 / 3."""
+def save_answer(
+    data_dir: Path,
+    signals: pd.DataFrame,
+    signal_id: str,
+    pool: str,
+    choice: str,
+    note: str = "",
+    shown: bool = False,
+):
+    """Append one answer as its own file, with your note and whether the stock and date were
+    shown. Refuses a repeat, an unknown signal, a signal of the other pool and a choice outside
+    skip / 1 / 2 / 3."""
     if choice not in CHOICES:
         raise ValueError(f"choice must be one of {CHOICES}, got {choice!r}")
     row = signals[signals["signal_id"] == signal_id]
@@ -105,7 +190,16 @@ def save_answer(data_dir: Path, signals: pd.DataFrame, signal_id: str, pool: str
     out = answers_folder(data_dir)
     out.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(
-        [{"signal_id": signal_id, "pool": pool, "choice": choice, "answered_at": stamp}],
+        [
+            {
+                "signal_id": signal_id,
+                "pool": pool,
+                "choice": choice,
+                "answered_at": stamp,
+                "note": str(note),
+                "shown": bool(shown),
+            }
+        ],
         columns=ANSWER_COLUMNS,
     )
     frame.to_parquet(out / f"{stamp:%Y%m%dT%H%M%S%f}.parquet", **PARQUET_OPTIONS)
@@ -117,14 +211,28 @@ def _split(joined: pd.DataFrame, mask: pd.Series) -> dict:
     return {"total": len(sub), "taken": taken, "skipped": len(sub) - taken}
 
 
+def _totals(joined: pd.DataFrame) -> dict:
+    n = len(joined)
+    picks = float((joined["choice"].map(MULTIPLIER) * joined["net_r"]).sum()) if n else 0.0
+    equal = float(joined["net_r"].sum()) if n else 0.0
+    return {
+        "answered": n,
+        "picks_r": picks,
+        "equal_r": equal,
+        "picks_r_per_signal": picks / n if n else None,
+        "equal_r_per_signal": equal / n if n else None,
+    }
+
+
 def stats(signals: pd.DataFrame, answers: pd.DataFrame, pool: str) -> dict:
     """The numbers of one pool, from its answers only.
 
     `by_choice`: count and mean net R per choice. `picks_r`: total R of your picks (net R times
     the choice's multiplier); `equal_r`: total R of taking every answered signal once at the
     normal size; both also per signal shown. `big` / `losers`: how many >= 5R trades / losing
-    trades you took (choice 1-3) and skipped."""
-    mine = answers[answers["pool"] == pool].drop_duplicates("signal_id")
+    trades you took (choice 1-3) and skipped. `by_shown`: the same totals for answers given with
+    the stock and date hidden (`blind`) and shown (`shown`)."""
+    mine = _with_defaults(answers[answers["pool"] == pool].drop_duplicates("signal_id"))
     joined = mine.merge(signals[["signal_id", "net_r"]], on="signal_id", how="inner")
     n = len(joined)
     by_choice = {}
@@ -140,6 +248,10 @@ def stats(signals: pd.DataFrame, answers: pd.DataFrame, pool: str) -> dict:
         "pool": pool,
         "answered": n,
         "by_choice": by_choice,
+        "by_shown": {
+            "blind": _totals(joined[~joined["shown"]]),
+            "shown": _totals(joined[joined["shown"]]),
+        },
         "picks_r": picks,
         "equal_r": equal,
         "picks_r_per_signal": picks / n if n else None,
