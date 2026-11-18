@@ -36,3 +36,22 @@ def test_with_prices_and_labels():
     assert cl.row_label(second) == "**X2**"
     assert cl.row_label(first, chips=True).startswith("**X1**")
     assert cl.with_prices(rows, None)["close"].isna().all()
+
+
+def test_hit_rows_order_by_grade_then_pushed(tmp_path):
+    from types import SimpleNamespace
+
+    frames = {
+        "f": pd.DataFrame(
+            {
+                "ticker": ["U1", "B1", "A1", "P1", "NP", "AP"],
+                "scan": ["ep"] * 6,
+                "tier": ["alert"] * 6,
+                "grade": [None, "B", "A", "C", "C", "A+"],
+                "pushed": [False, False, False, True, False, False],
+            }
+        )
+    }
+    runs = [SimpleNamespace(session="d", candidates="f")]
+    out = cl.hit_rows(runs, lambda k: frames[k])
+    assert list(out["ticker"]) == ["AP", "A1", "B1", "P1", "NP", "U1"]

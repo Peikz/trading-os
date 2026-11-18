@@ -14,6 +14,7 @@ from trading_os import dashboard, my_watchlists, notify
 HITS = "Today's hits"
 POSITIONS = "Open positions"
 SCREENER = "Last screener result"
+GRADE_ORDER = ["A+++", "A++", "A+", "A", "B", "C"]  # then ungraded
 COLUMNS = ["ticker", "close", "chg_pct", "setup", "grade"]
 
 
@@ -22,8 +23,8 @@ def _frame(rows: list[dict]) -> pd.DataFrame:
 
 
 def hit_rows(runs, frames: Callable[[str], pd.DataFrame] = pd.read_parquet) -> pd.DataFrame:
-    """Every alert-tier hit of the newest session's runs, one row per ticker (its first, pushed
-    ones first): ticker, setup label and grade."""
+    """Every alert-tier hit of the newest session's runs, one row per ticker (its best grade, then
+    pushed first): ticker, setup label and grade."""
     if not runs:
         return _frame([])
     today = [r for r in runs if r.session == runs[0].session]
@@ -35,7 +36,11 @@ def hit_rows(runs, frames: Callable[[str], pd.DataFrame] = pd.read_parquet) -> p
         hits = hits[hits["tier"] == "alert"]
     pushed = hits["pushed"] if "pushed" in hits else pd.Series(False, index=hits.index)
     hits = hits.assign(_pushed=pushed.fillna(False).astype(bool))
-    hits = hits.sort_values("_pushed", ascending=False, kind="stable")
+    grade = hits["grade"] if "grade" in hits else pd.Series(None, index=hits.index, dtype=object)
+    rank = grade.map({g: i for i, g in enumerate(GRADE_ORDER)}).fillna(len(GRADE_ORDER))
+    hits = hits.assign(_rank=rank).sort_values(
+        ["_rank", "_pushed"], ascending=[True, False], kind="stable"
+    )
     rows: dict[str, dict] = {}
     for row in hits.to_dict("records"):
         grade = row.get("grade")
