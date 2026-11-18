@@ -668,7 +668,9 @@ def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
         height=520,
     )
     key = f"trade-{trade['ticker']}-{trade['entry_date']}-{open_trade}"
-    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
+    st.plotly_chart(
+        ui.plot_ready(fig), config=ui.plot_config(ichart.DRAW_CONFIG), key=key, width="stretch"
+    )
 
 
 EP_FLAGS = research_view.EP_FLAGS
@@ -783,7 +785,12 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
     )
     with contextlib.suppress(Exception):  # the 10:30 bar may not exist yet
         fig.add_vline(x="10:30", line_dash="dot", line_width=1, line_color="#9e9e9e")
-    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_live", width="stretch")
+    st.plotly_chart(
+        ui.plot_ready(fig),
+        config=ui.plot_config(ichart.DRAW_CONFIG),
+        key="ch_live",
+        width="stretch",
+    )
     ui.note(
         "Alpaca's IEX feed: real-time prices, but its volume is a small part of the market's. "
         "Dotted line: 10:30, the EP entry time. Lines: the pivot, stops and plan entry for this "
@@ -1027,8 +1034,12 @@ def stock_chart(
             uirevision=f"{ticker}|{period}|{sessions}",
             editrevision="|".join(sorted(str(m["mark_id"]) for m in lines or [])),
         )
-        return chart_draw(fig, ticker=ticker, config=ichart.SAVE_CONFIG, key=key)
-    st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key=key, width="stretch")
+        return chart_draw(
+            ui.plot_ready(fig), ticker=ticker, config=ui.plot_config(ichart.SAVE_CONFIG), key=key
+        )
+    st.plotly_chart(
+        ui.plot_ready(fig), config=ui.plot_config(ichart.DRAW_CONFIG), key=key, width="stretch"
+    )
     return None
 
 
@@ -1899,7 +1910,12 @@ elif page == "Chart":
                     prev_close=float(prior.iloc[-1]) if len(prior) else None,
                     every=every,
                 )
-                st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_intraday", width="stretch")
+                st.plotly_chart(
+                    ui.plot_ready(fig),
+                    config=ui.plot_config(ichart.DRAW_CONFIG),
+                    key="ch_intraday",
+                    width="stretch",
+                )
                 ui.note("VWAP from the 09:30 open; pre- and post-market shaded.")
 
 
@@ -2668,7 +2684,12 @@ elif page == "History":
             levels={"stop": float(stop)} if stop is not None else None,
             height=520,
         )
-        st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="hist-chart", width="stretch")
+        st.plotly_chart(
+            ui.plot_ready(fig),
+            config=ui.plot_config(ichart.DRAW_CONFIG),
+            key="hist-chart",
+            width="stretch",
+        )
 
 elif page == "Entries & exits":
     st.subheader("Entries & exits")

@@ -37,6 +37,60 @@ LINE_COLORS = {
 LEVEL_STYLES = {"pivot": "dash", "order stop": "dot", "stop": "dot", "plan entry": "dashdot"}
 
 
+LEVEL_STEP = 15  # pixels between two level labels that sit close together
+
+
+def add_levels(fig: go.Figure, levels: Mapping[str, float]) -> None:
+    """Horizontal level lines with their labels. Two levels close in price (a pivot and its
+    order stop) would print their labels on top of each other: the labels go left and right of
+    the plot in turn, and a label near the last one on its side is lifted a step."""
+    shown = sorted(
+        (float(p), label) for label, p in levels.items() if p is not None and np.isfinite(p)
+    )
+    last: dict[str, tuple[float, int]] = {}
+    for n, (price, label) in enumerate(shown):
+        side = "left" if n % 2 == 0 else "right"
+        near, lift = last.get(side, (None, 0))
+        lift = lift + 1 if near is not None and abs(price - near) <= 0.04 * price else 0
+        last[side] = (price, lift)
+        fig.add_hline(
+            y=price,
+            line_dash=LEVEL_STYLES.get(label, "dash"),
+            line_width=1,
+            line_color="#616161",
+            annotation_text=f"{label} {price:.2f}",
+            annotation_position=f"top {side}",
+            annotation_yshift=lift * LEVEL_STEP,
+            row=1,
+            col=1,
+        )
+
+
+def for_phone(fig: go.Figure) -> go.Figure:
+    """A phone: the legend as one row under the chart, about five horizontal month (or time)
+    ticks, the full width. The mode bar is left out by `phone_config`."""
+    x = list(fig.data[0].x)
+    if x:
+        picks = sorted({round(i * (len(x) - 1) / 4) for i in range(5)})
+        vals = [x[i] for i in picks]
+        text = [
+            pd.Timestamp(v).strftime("%b %y") if isinstance(v, str) and v[:2] == "20" else v
+            for v in vals
+        ]
+        fig.update_xaxes(tickmode="array", tickvals=vals, ticktext=text, tickangle=0)
+    fig.update_layout(
+        margin={"l": 4, "r": 4, "t": 36, "b": 64},
+        legend={"orientation": "h", "x": 0, "xanchor": "left", "y": -0.09, "yanchor": "top"},
+        title={"font": {"size": 14}},
+    )
+    return fig
+
+
+def phone_config(config: Mapping[str, object]) -> dict[str, object]:
+    """The chart's config for a phone: no mode bar (it covered the title)."""
+    return {**config, "displayModeBar": False}
+
+
 def weekly(bars: pd.DataFrame, freq: str = "W-FRI") -> pd.DataFrame:
     """Daily bars to weeks (Monday-Friday), or months with freq="M", labelled by the period's
     last session."""
@@ -207,19 +261,7 @@ def daily_figure(
                 row=1,
                 col=1,
             )
-    for label, price in (levels or {}).items():
-        if price is None or not np.isfinite(price):
-            continue
-        fig.add_hline(
-            y=price,
-            line_dash=LEVEL_STYLES.get(label, "dash"),
-            line_width=1,
-            line_color="#616161",
-            annotation_text=f"{label} {price:.2f}",
-            annotation_position="top left",
-            row=1,
-            col=1,
-        )
+    add_levels(fig, levels or {})
     fig.update_layout(
         title={"text": title, "x": 0.01},
         height=height,
@@ -287,19 +329,7 @@ def intraday_figure(
     all_levels = dict(levels or {})
     if prev_close is not None and np.isfinite(prev_close):
         all_levels["prior close"] = prev_close
-    for label, price in all_levels.items():
-        if price is None or not np.isfinite(price):
-            continue
-        fig.add_hline(
-            y=price,
-            line_dash=LEVEL_STYLES.get(label, "dash"),
-            line_width=1,
-            line_color="#616161",
-            annotation_text=f"{label} {price:.2f}",
-            annotation_position="top left",
-            row=1,
-            col=1,
-        )
+    add_levels(fig, all_levels)
     outside = data["minute"].lt(570) | data["minute"].ge(960)
     if outside.any() and not outside.all():
         first_regular = x[int(np.flatnonzero(~outside.to_numpy())[0])]

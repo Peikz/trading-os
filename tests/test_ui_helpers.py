@@ -48,3 +48,42 @@ def test_phone_column_order_puts_long_text_last():
 
 def test_not_a_phone_without_a_request():
     assert ui.is_phone() is False
+
+
+def test_close_level_labels_go_to_opposite_sides_and_stack_when_crowded():
+    from trading_os import interactive_chart as ichart
+
+    bars = pd.DataFrame(
+        {
+            "session_date": pd.date_range("2026-01-01", periods=30, freq="B"),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.0,
+            "volume": 1e6,
+        }
+    )
+    fig = ichart.daily_figure(
+        bars, title="t", levels={"pivot": 11.04, "order stop": 10.39, "entry": 10.40}
+    )
+    sides = {a.text.rsplit(" ", 1)[0]: a.xanchor for a in fig.layout.annotations if a.text}
+    assert sides["order stop"] != sides["entry"]  # two close levels: opposite sides
+
+
+def test_phone_figure_has_few_horizontal_month_ticks_and_no_mode_bar():
+    from trading_os import interactive_chart as ichart
+
+    bars = pd.DataFrame(
+        {
+            "session_date": pd.date_range("2025-06-01", periods=200, freq="B"),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.0,
+            "volume": 1e6,
+        }
+    )
+    fig = ichart.for_phone(ichart.daily_figure(bars, title="t"))
+    assert len(fig.layout.xaxis.tickvals) <= 5 and fig.layout.xaxis.tickangle == 0
+    assert fig.layout.legend.orientation == "h"
+    assert ichart.phone_config({"scrollZoom": True})["displayModeBar"] is False

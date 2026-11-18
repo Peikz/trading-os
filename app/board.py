@@ -499,7 +499,6 @@ def queue(rows: list[dict], i: int, c_count: int) -> None:
     stock one click; the C setups one click further."""
     with st.container(key="today_queue"):
         _queue_items(rows, i, c_count)
-        more_button(len(rows))
 
 
 def _queue_items(rows: list[dict], i: int, c_count: int) -> None:
@@ -523,6 +522,8 @@ def _queue_items(rows: list[dict], i: int, c_count: int) -> None:
                 width="stretch",
                 type="primary" if k == i else "secondary",
             )
+        if key == "act":
+            more_button(len(members))  # "+N more" sits right under the setups to act on
     if c_count:
         st.button(
             f"{c_count} C setups saved · show them",
@@ -758,7 +759,8 @@ def show(
         return
 
     # Focus: queue · chart · plan
-    st.markdown(TODAY_CSS + more_css(len(rows)), unsafe_allow_html=True)
+    n_chips = int((sections == "act").sum()) if scope == TODAY else len(rows)
+    st.markdown(TODAY_CSS + more_css(n_chips), unsafe_allow_html=True)
     n_rows = max(len(rows), 1)
     page_i = st.session_state.get("board_i", 0) % n_rows
     has_act = bool((sections == "act").any()) if scope == TODAY else bool(rows)

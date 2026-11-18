@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 
+from trading_os import interactive_chart as ichart
 from trading_os import screens
 
 MUTED = "#98A2B3"
@@ -29,6 +30,16 @@ def is_phone() -> bool:
     except Exception:  # noqa: BLE001 - no request context (bare mode)
         return False
     return any(w in agent for w in ("Mobi", "Android", "iPhone"))
+
+
+def plot_ready(fig: Any) -> Any:
+    """A Plotly figure as the device wants it (a phone: legend under the chart, few ticks)."""
+    return ichart.for_phone(fig) if is_phone() else fig
+
+
+def plot_config(config: dict) -> dict:
+    """A Plotly config as the device wants it (a phone: no mode bar)."""
+    return ichart.phone_config(config) if is_phone() else config
 
 
 # ---------------------------------------------------------------- headers

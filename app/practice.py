@@ -203,9 +203,9 @@ def trade_view(data_dir, row, *, answered, shown, picked, view, actions=None) ->
     fig, names = figure(row, bars, answered=answered, shown=shown, picked=picked, marks=marks)
     _, to_norm = price_maps(row, shown)
     report = chart_draw(
-        fig,
+        ui.plot_ready(fig),
         ticker=sid,
-        config=ichart.SAVE_CONFIG,
+        config=ui.plot_config(ichart.SAVE_CONFIG),
         key=f"pr_chart_{view}_{sid}",
         height=CHART_HEIGHT,
     )
