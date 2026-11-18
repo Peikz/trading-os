@@ -1,11 +1,11 @@
-// Stocks (the Screener's twin): All stocks with a filter chip, a saved screen flipped through on
+// The Screener: All stocks with a filter chip, a saved screen flipped through on
 // Today, the grid and the table, and a scan's hits with their grades and the grading form.
 import { expect, open, test, TICKERS } from "./fixtures";
 
 type Result = { count: number; tickers: string[]; rows: { ticker: string; grade?: string }[] };
 
 test("All stocks: a filter narrows the list, a saved screen flips through on Today", async ({ page, request }) => {
-  await open(page, "stocks?src=all");
+  await open(page, "screener?src=all");
   const count = page.locator(".stocks-main .toolbar .muted").first();
   await expect(count).toHaveText(new RegExp(`^${TICKERS.length} stocks · `)); // the whole synthetic universe
   await expect(page.getByRole("button", { name: /^Open / })).toHaveCount(TICKERS.length); // the grid
@@ -42,9 +42,9 @@ test("All stocks: a filter narrows the list, a saved screen flips through on Tod
   await page.waitForLoadState("networkidle");
 });
 
-test("Scan hits: a run's scan with its grades, a stock's chart and the grading form", async ({ page }) => {
+test("Scan hits: a run's scan with its grades, the stock on the Chart and the grading form", async ({ page }) => {
   const answer = page.waitForResponse((r) => r.url().endsWith("/api/screener/run") && r.request().method() === "POST");
-  await open(page, "stocks?src=scans");
+  await open(page, "screener?src=scans");
   const hits = (await (await answer).json()) as Result;
   expect(hits.rows.length).toBeGreaterThan(0);
   await page.getByRole("group", { name: "View" }).getByRole("button", { name: /Table/ }).click();
@@ -52,14 +52,16 @@ test("Scan hits: a run's scan with its grades, a stock's chart and the grading f
   await expect(table.locator("tbody tr")).toHaveCount(hits.rows.length);
   await expect(table.locator("tbody .badge").first()).toHaveText(hits.rows[0].grade ?? "");
   await table.locator("tbody tr").first().click();
-  await expect(page.getByLabel(`${hits.rows[0].ticker} full chart`)).toBeVisible();
+  await expect(page.locator(".ws-bar .ticker")).toHaveText(hits.rows[0].ticker);
+  await expect(page).toHaveURL(/list=scan%3A/); // the scan is the list beside the chart
+  await page.getByRole("tab", { name: "Journal", exact: true }).click();
   const form = page.getByLabel("Grading form");
   await expect(form).toBeVisible();
   await form.getByRole("radiogroup").locator("label", { hasText: /^B$/ }).click();
-  await form.getByLabel("Notes").fill("e2e: graded from Stocks");
+  await form.getByLabel("Notes").fill("e2e: graded from the Chart");
   await form.getByRole("button", { name: "Save" }).click();
   await expect(form.locator("p.ok")).toContainText("Saved");
-  // Back to the hits, the grid shows again
-  await page.getByRole("button", { name: /^Back to / }).click();
+  // Back to the hits, the table shows again
+  await page.goBack();
   await expect(table).toBeVisible();
 });

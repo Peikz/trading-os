@@ -18,7 +18,7 @@ export function MiniCandles({
   if (!candles.length) {
     return (
       <svg className="mini" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}: no bars`}>
-        <text x={width / 2} y={height / 2} textAnchor="middle" fill="#98a2b3" fontSize="12">
+        <text x={width / 2} y={height / 2} textAnchor="middle" fill="var(--text-2)" fontSize="12">
           No bars
         </text>
       </svg>
@@ -40,7 +40,7 @@ export function MiniCandles({
           x2={width}
           y1={y(p)}
           y2={y(p)}
-          stroke={name === "stop" ? "#f2a33a" : name === "entry" ? "#4c8dff" : "#98a2b3"}
+          stroke={name === "stop" ? "var(--warn)" : name === "entry" ? "var(--accent)" : "var(--text-2)"}
           strokeDasharray="4 3"
           strokeWidth={1.5}
           vectorEffect="non-scaling-stroke"
@@ -48,7 +48,7 @@ export function MiniCandles({
       ))}
       {candles.map((c, i) => {
         const up = c.close >= c.open;
-        const colour = up ? "#2bc48a" : "#f0616d";
+        const colour = up ? "var(--up)" : "var(--down)";
         const x = i * step + step / 2;
         const top = y(Math.max(c.open, c.close));
         return (

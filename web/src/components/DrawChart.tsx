@@ -24,11 +24,12 @@ export interface Point {
 
 interface Props {
   data: ChartData;
-  height?: number;
+  height?: number | "fill"; // "fill": the parent's whole height (the Chart workspace)
   tool: Tool;
   onDraw?: (a: Point, b: Point, extend: boolean) => void;
   onMove?: (line: TrendLine, a: Point, b: Point) => void;
   onErase?: (line: TrendLine) => void;
+  markerText?: boolean; // false: the scan-hit and trade markers as arrows only (a busy chart)
 }
 
 const NEAR_PX = 9;
@@ -54,7 +55,7 @@ export function toSegment(p: [number, number], a: [number, number], b: [number, 
   return Math.hypot(px - (ax + k * dx), py - (ay + k * dy));
 }
 
-export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }: Props) {
+export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase, markerText = true }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const candles = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -69,7 +70,7 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
   useEffect(() => {
     if (!box.current) return;
     const c = createChart(box.current, {
-      height,
+      height: height === "fill" ? 400 : height,
       autoSize: true,
       ...LAYOUT,
       crosshair: { mode: CrosshairMode.Normal },
@@ -135,14 +136,16 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
         title: lv.name,
       });
     }
-    price.setMarkers(data.markers.map((m) => ({ ...m, time: m.time as Time })) as SeriesMarker<Time>[]);
+    price.setMarkers(
+      data.markers.map((m) => ({ ...m, time: m.time as Time, text: markerText ? m.text : "" })) as SeriesMarker<Time>[],
+    );
     if (data.visible) c.timeScale().setVisibleRange({ from: data.visible.from as Time, to: data.visible.to as Time });
     else c.timeScale().fitContent();
     return () => {
       c.remove();
       chart.current = null;
     };
-  }, [data, height]);
+  }, [data, height, markerText]);
 
   // The tools
   useEffect(() => {
@@ -292,9 +295,14 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase }:
   }, [tool, data]);
 
   return (
-    <div>
-      <div ref={box} className={`chart tool-${tool}`} style={{ height }} aria-label="Chart" />
-      {hint && <p className="muted hint">{hint}</p>}
+    <div className={height === "fill" ? "draw-fill" : undefined}>
+      <div
+        ref={box}
+        className={`chart tool-${tool}`}
+        style={{ height: height === "fill" ? "100%" : height }}
+        aria-label="Chart"
+      />
+      {hint && <p className={`muted hint${height === "fill" ? " chart-hint" : ""}`}>{hint}</p>}
     </div>
   );
 }

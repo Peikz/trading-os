@@ -200,7 +200,7 @@ function Overview() {
 }
 
 // Index, sector, theme: three neutral hues (green and red are kept for price direction)
-const GROUP_COLOURS: Record<string, string> = { Index: "#8fb5ff", Sector: "#c9ced6", Theme: "#e2b04a" };
+const GROUP_COLOURS: Record<string, string> = { Index: "var(--accent)", Sector: "var(--text-2)", Theme: "var(--warn)" };
 
 /** The rotation chart: 1 month vs SPY across, 1 week vs SPY up, the four quadrants named. */
 export function Rotation({ points }: { points: { ticker: string; group: string; x: number; y: number }[] }) {
@@ -219,23 +219,23 @@ export function Rotation({ points }: { points: { ticker: string; group: string; 
   ] as const;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="rotation" role="img" aria-label="Rotation against SPY">
-      <line x1={sx(0)} y1={pad} x2={sx(0)} y2={h - pad} stroke="#23272f" />
-      <line x1={pad} y1={sy(0)} x2={w - pad} y2={sy(0)} stroke="#23272f" />
+      <line x1={sx(0)} y1={pad} x2={sx(0)} y2={h - pad} stroke="var(--border)" />
+      <line x1={pad} y1={sy(0)} x2={w - pad} y2={sy(0)} stroke="var(--border)" />
       {corner.map(([t, x, y, a]) => (
-        <text key={t} x={x} y={y} textAnchor={a} fill="#98a2b3" fontSize="12">
+        <text key={t} x={x} y={y} textAnchor={a} fill="var(--text-2)" fontSize="12">
           {t}
         </text>
       ))}
-      <text x={w / 2} y={h - 8} textAnchor="middle" fill="#98a2b3" fontSize="11">
+      <text x={w / 2} y={h - 8} textAnchor="middle" fill="var(--text-2)" fontSize="11">
         1 month vs SPY (%)
       </text>
-      <text x={12} y={h / 2} textAnchor="middle" fill="#98a2b3" fontSize="11" transform={`rotate(-90 12 ${h / 2})`}>
+      <text x={12} y={h / 2} textAnchor="middle" fill="var(--text-2)" fontSize="11" transform={`rotate(-90 12 ${h / 2})`}>
         1 week vs SPY (%)
       </text>
       {points.map((p) => (
         <g key={p.ticker}>
-          <circle cx={sx(p.x)} cy={sy(p.y)} r={4} fill={GROUP_COLOURS[p.group] ?? "#8b949e"} />
-          <text x={sx(p.x)} y={sy(p.y) - 7} textAnchor="middle" fill="#e8eaed" fontSize="10">
+          <circle cx={sx(p.x)} cy={sy(p.y)} r={4} fill={GROUP_COLOURS[p.group] ?? "var(--text-3)"} />
+          <text x={sx(p.x)} y={sy(p.y) - 7} textAnchor="middle" fill="var(--text-1)" fontSize="10">
             {p.ticker}
           </text>
         </g>
@@ -253,7 +253,7 @@ function Ratios({ points }: { points: { time: string; ratio_5d: number | null; r
       autoSize: true,
       ...LAYOUT,
     });
-    for (const [k, colour] of [["ratio_5d", "#8fb5ff"], ["ratio_10d", T.ma]] as const) {
+    for (const [k, colour] of [["ratio_5d", T.accent], ["ratio_10d", T.ma]] as const) {
       const s = c.addLineSeries({ color: colour, lineWidth: 2, title: k, priceLineVisible: false });
       s.setData(
         points.filter((p) => p[k] !== null).map((p) => ({ time: p.time as Time, value: p[k] as number })),

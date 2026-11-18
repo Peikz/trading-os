@@ -595,6 +595,31 @@ export interface DailyNotes {
   kept: string;
 }
 
+/** One list in the Chart's picker (`/api/chart-lists`). */
+export interface ChartListInfo {
+  id: string;
+  label: string;
+  group: string;
+  count: number;
+}
+
+/** One row of a Chart list (`/api/chart-lists/{id}`): numbers from the newest EOD snapshot. */
+export interface ChartListRow {
+  ticker: string;
+  grade: string;
+  setup: string;
+  last: number | null;
+  chg_pct: number | null;
+  rvol: number | null;
+  signal_id: string | null;
+}
+
+export interface ChartList {
+  id: string;
+  label: string;
+  rows: ChartListRow[];
+}
+
 export interface ChartQuery {
   period: string;
   timeframe: string;
@@ -714,6 +739,8 @@ export const api = {
   removeFromWatchlist: (name: string, tickers: string[]) =>
     post<WatchList>(`/api/watchlists/${enc(name)}/remove`, { tickers }),
   chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
+  chartLists: () => request<{ lists: ChartListInfo[] }>("/api/chart-lists"),
+  chartList: (id: string) => request<ChartList>(`/api/chart-lists/${enc(id)}`),
   chart: (ticker: string, q: ChartQuery) => {
     const p = new URLSearchParams({
       period: q.period,

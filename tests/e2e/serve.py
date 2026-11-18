@@ -69,7 +69,7 @@ def view_only_config(folder: Path) -> Path:
     for source, target in ((DEFAULT_PATH, path), (timer.RUNS_PATH, path.with_name("runs.yaml"))):
         shutil.copy(source, target)
         target.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-    if os.geteuid() == 0:  # root may write any file; the image runs as an unprivileged user
+    if hasattr(os, "geteuid") and os.geteuid() == 0:  # root writes any file; the image does not
         editable = scans_view.editable
 
         def as_app_user(p):

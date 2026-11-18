@@ -143,17 +143,25 @@ computer only. Never deploy it from this public repo with data in it.
 
 A React rebuild of the dashboard, meant for an always-on server: `api/` (FastAPI over the
 `trading_os` package) and `web/` (React + TypeScript, TradingView's Lightweight Charts). Since
-the design review of 4 Nov 2026 it has five places with tabs instead of twelve pages: **Today**
+the design review of 4 Nov 2026 it has places with tabs instead of twelve pages: **Today**
 (the queue to act on, your positions and your watchlist; a plan card that leads with the
-decision), **Stocks** (your lists, screens and each scan's hits as a grid of mini charts or a
-table, and any stock's full chart), **Market**, **Journal** and **Lab** (research, scans, health,
-the guide). Ctrl+K searches stocks, places and tabs; Pull latest and Save & push run by
-themselves (the buttons stay in Settings); on a phone the places move to a bottom tab bar.
+decision), **Chart**, **Screener** (your lists, screens and each scan's hits as a grid of mini
+charts or a table), **Market**, **Journal** and **Lab** (research, scans, health, the guide).
+Search finds stocks, places and tabs; Pull latest and Save & push run by themselves (the buttons
+stay in Settings); on a phone the places move to a bottom tab bar.
 
 ```bash
 TRADING_OS_DATA=../trading-os-data uv run --group api uvicorn api.main:app --port 8000
 cd web && npm ci && npm run dev    # http://localhost:5173, /api goes to port 8000
 ```
+
+On Windows, `powershell -ExecutionPolicy Bypass -File scripts\start_web.ps1` builds `web/` when
+`web/dist` is missing or older than `web/src` and serves the API and the built app on one port,
+**8600**, on this PC only (`python -m api.serve`); Streamlit stays on 8501. Since UX round 1
+(18 Nov 2026) there are six places: **Today**, **Chart** (one stock, a list panel beside it to
+step through with the arrow keys or J/K, a bottom panel with its plan, notes, position and
+journal), **Screener**, **Market**, **Journal** and **Lab**; `/`, Ctrl+K or typing a ticker opens
+search, and the active stock is in the address (`#/chart?s=TICKER&list=ID`).
 
 `npm run lint`, `npm test` and `npm run build` are what CI runs. The end-to-end tests click
 through every page of the built app in Chromium, against the real API over a synthetic data

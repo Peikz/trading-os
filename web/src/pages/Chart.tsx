@@ -1,203 +1,14 @@
-// Chart (trading_os/chart_view.py): any stock, interactive. Daily, weekly or monthly bars, 2 or 10 years,
-// MA 10/20/50/200 and EMA 9/21, the scans' past hits, your buys and sells, the pivot, stops and
-// plan entry, anchored VWAPs (quick ones or any day you save), trend lines you draw, move or
-// erase (or type in), the stock's notes, and minute bars (study days, or live from Alpaca when
-// the server has its keys). `#/chart?t=TICKER` opens a stock directly.
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  api,
-  type ChartData,
-  type ChartNotes,
-  type ChartQuery,
-  type Intraday,
-  type IntradayDays,
-  type TrendLine,
-} from "../api";
-import { DrawChart, type Point, type Tool } from "../components/DrawChart";
+// The Chart's lower panels (trading_os/chart_view.py): the stock's notes, typed-in trend lines
+// and anchored VWAPs with the saved marks, and minute bars (study days, or live from Alpaca
+// when the server has its keys). They sit in the Chart workspace's bottom panel
+// (places/ChartWorkspace.tsx), which owns the chart itself.
+import { useEffect, useMemo, useState } from "react";
+import { api, type ChartData, type ChartNotes, type Intraday, type IntradayDays } from "../api";
 import { IntradayChart } from "../components/IntradayChart";
-
-const LINES = ["MA10", "MA20", "MA50", "MA200", "EMA9", "EMA21"];
-const SPANS = ["3M", "6M", "1Y", "2Y", "All"];
-const TOOLS: [Tool, string, string][] = [
-  ["none", "Pan", "Pan and zoom"],
-  ["draw", "Draw", "Draw a trend line (two clicks)"],
-  ["move", "Move", "Move a line's end (drag)"],
-  ["erase", "Erase", "Delete the line you click"],
-];
-
-/** The ticker in `#/chart?t=XXX`. */
-export function hashTicker(hash: string): string {
-  const q = hash.split("?")[1] ?? "";
-  return (new URLSearchParams(q).get("t") ?? "").trim().toUpperCase();
-}
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function Chart({ ticker: given }: { ticker?: string } = {}) {
-  const [picks, setPicks] = useState<{ ticker: string; where: string }[]>([]);
-  const [quick, setQuick] = useState("");
-  const [typed, setTyped] = useState(() => hashTicker(window.location.hash));
-  const ticker = (given ?? (typed.trim() || quick)).toUpperCase();
-  const [q, setQ] = useState<ChartQuery>({
-    period: "2y",
-    timeframe: "Daily",
-    span: "1Y",
-    lines: ["MA10", "MA20", "MA50"],
-    hits: true,
-    fills: true,
-    levels: true,
-    anchors: [],
-  });
-  const [data, setData] = useState<ChartData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tool, setTool] = useState<Tool>("none");
-  const [flash, setFlash] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
-
-  useEffect(() => {
-    if (given) return;
-    api.chartPicks().then(setPicks, () => setPicks([]));
-  }, [given]);
-  useEffect(() => {
-    if (given) return;
-    const on = () => {
-      const t = hashTicker(window.location.hash);
-      if (t) setTyped(t);
-    };
-    window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
-  }, [given]);
-
-  useEffect(() => {
-    if (!ticker) return setData(null);
-    let live = true;
-    setError(null);
-    const timer = setTimeout(() => {
-      api.chart(ticker, q).then(
-        (d) => live && setData(d),
-        (e: Error) => live && setError(e.message),
-      );
-    }, 250);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [ticker, q, version]);
-
-  const reload = useCallback(() => setVersion((v) => v + 1), []);
-  const fail = (e: Error) => setFlash(`Error: ${e.message}`);
-  const set = <K extends keyof ChartQuery>(k: K, v: ChartQuery[K]) => setQ((x) => ({ ...x, [k]: v }));
-  const toggle = (k: "lines" | "anchors", v: string) =>
-    setQ((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
-
-  const draw = (a: Point, b: Point, extend: boolean) =>
-    api.addLine(ticker, { x0: a.time, y0: a.price, x1: b.time, y1: b.price, extend }).then(() => {
-      setFlash("Line saved.");
-      reload();
-    }, fail);
-  const move = (l: TrendLine, a: Point, b: Point) =>
-    api.moveLine(ticker, l.id, { x0: a.time, y0: a.price, x1: b.time, y1: b.price, extend: l.extend }).then(() => {
-      setFlash("Line moved.");
-      reload();
-    }, fail);
-  const erase = (l: TrendLine) =>
-    api.removeMark(ticker, l.id).then(() => {
-      setFlash("Line deleted.");
-      reload();
-    }, fail);
-
-  const daily = q.timeframe === "Daily";
-  return (
-    <div>
-      {!given && (
-      <div className="row">
-        <select aria-label="Today's hits, watchlists, open positions" value={quick} onChange={(e) => {
-          setQuick(e.target.value);
-          setTyped("");
-        }}>
-          <option value="">Today's hits (pushed first), watchlists, open positions</option>
-          {picks.map((p) => (
-            <option key={p.ticker} value={p.ticker}>
-              {p.ticker} ({p.where})
-            </option>
-          ))}
-        </select>
-        <input
-          aria-label="Any ticker"
-          placeholder="…or type any ticker"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value.toUpperCase())}
-        />
-      </div>
-      )}
-      {!ticker && <p className="muted">Pick or type a ticker.</p>}
-      {ticker && (
-        <>
-          <div className="row">
-            <Pills label="History" value={q.period} options={[["2y", "2 years"], ["10y", "10 years"]]} onPick={(v) => set("period", v)} />
-            <Pills label="Bars" value={q.timeframe} options={[["Daily", "Daily"], ["Weekly", "Weekly"], ["Monthly", "Monthly"]]} onPick={(v) => set("timeframe", v)} />
-            <Pills label="Show" value={q.span} options={SPANS.map((s) => [s, s])} onPick={(v) => set("span", v)} />
-          </div>
-          <div className="row">
-            <div className="pills" role="group" aria-label="Lines">
-              {LINES.map((l) => (
-                <button key={l} className={q.lines.includes(l) ? "on" : ""} onClick={() => toggle("lines", l)}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            {(["hits", "fills", "levels"] as const).map((k) => (
-              <label key={k} className="check">
-                <input type="checkbox" checked={q[k]} onChange={(e) => set(k, e.target.checked)} />
-                {{ hits: "Scan hits", fills: "My trades", levels: "Pivot and stops" }[k]}
-              </label>
-            ))}
-          </div>
-          {data && Object.keys(data.quick_anchors).length > 0 && (
-            <div className="pills" role="group" aria-label="Anchored VWAP from">
-              <span className="muted">AVWAP from</span>
-              {Object.entries(data.quick_anchors).map(([name, day]) => (
-                <button key={name} title={day} className={q.anchors.includes(name) ? "on" : ""} onClick={() => toggle("anchors", name)}>
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
-          {error && <p className="error">{error}</p>}
-          {data && data.ticker === ticker && (
-            <>
-              {daily && (
-                <div className="seg" role="group" aria-label="Tools">
-                  {TOOLS.map(([id, icon, title]) => (
-                    <button key={id} title={title} aria-label={title} className={tool === id ? "on" : ""} onClick={() => setTool(id)}>
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {data.candles.length ? (
-                <DrawChart data={data} tool={daily ? tool : "none"} onDraw={draw} onMove={move} onErase={erase} />
-              ) : (
-                <p className="muted">No daily bars for {ticker} in the data repo yet.</p>
-              )}
-              {/* Under the chart, so a message never moves the chart you are drawing on */}
-              {flash && <p className="flash" role="status">{flash}</p>}
-              <p className="muted">{data.note}</p>
-              <a href={data.tradingview} target="_blank" rel="noreferrer">
-                Open in TradingView
-              </a>
-              <Notes ticker={ticker} onMessage={setFlash} />
-              <TypeIn ticker={ticker} data={data} onSaved={reload} onMessage={setFlash} />
-              <IntradaySection ticker={ticker} />
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function Pills({
+export function Pills({
   label,
   value,
   options,
@@ -219,7 +30,7 @@ function Pills({
   );
 }
 
-function Notes({ ticker, onMessage }: { ticker: string; onMessage: (t: string) => void }) {
+export function Notes({ ticker, onMessage }: { ticker: string; onMessage: (t: string) => void }) {
   const [notes, setNotes] = useState<ChartNotes | null>(null);
   const [day, setDay] = useState(today());
   const [text, setText] = useState("");
@@ -309,7 +120,7 @@ function Notes({ ticker, onMessage }: { ticker: string; onMessage: (t: string) =
   );
 }
 
-function TypeIn({
+export function TypeIn({
   ticker,
   data,
   onSaved,
@@ -409,7 +220,7 @@ function TypeIn({
   );
 }
 
-function IntradaySection({ ticker }: { ticker: string }) {
+export function IntradaySection({ ticker }: { ticker: string }) {
   const [on, setOn] = useState(false);
   const [days, setDays] = useState<IntradayDays | null>(null);
   const [source, setSource] = useState<"live" | "study">("live");

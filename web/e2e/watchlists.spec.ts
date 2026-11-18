@@ -1,4 +1,4 @@
-// Your lists in Stocks: a new list with checked tickers (added / already there / not found),
+// Your lists in the Screener: a new list with checked tickers (added / already there / not found),
 // removing a stock, price alerts, the scan watchlists. And the Journal's position cards.
 import { expect, open, sym, test, TICKERS } from "./fixtures";
 
@@ -6,7 +6,7 @@ const UNKNOWN = sym("Q") + "Q"; // in no universe and no bars: "not found"
 
 test("a new list: each ticker is checked and the answer says what happened", async ({ page }) => {
   const name = `e2e list ${Date.now()}`;
-  await open(page, "stocks");
+  await open(page, "screener");
   await page.getByRole("navigation", { name: "Sources" }).getByRole("button", { name: "New list" }).click();
   await page.getByLabel("New list name").fill(name);
   await page.getByLabel("Add tickers").fill(`${TICKERS[0]}, ${UNKNOWN}`);
@@ -40,7 +40,7 @@ test("a new list: each ticker is checked and the answer says what happened", asy
 });
 
 test("remove a stock from a list", async ({ page }) => {
-  await open(page, "stocks?src=list:Leaders");
+  await open(page, "screener?src=list:Leaders");
   await page.getByRole("group", { name: "View" }).getByRole("button", { name: /Table/ }).click();
   const rows = page.getByRole("table", { name: "Watchlist Leaders" }).locator("tbody tr");
   await expect(rows.first()).toBeVisible();
@@ -52,7 +52,7 @@ test("remove a stock from a list", async ({ page }) => {
 });
 
 test("a price alert: add, list, remove; the scan watchlists", async ({ page }) => {
-  await open(page, "stocks?src=alerts");
+  await open(page, "screener?src=alerts");
   const t = TICKERS[2];
   await page.getByLabel("Ticker", { exact: true }).fill(t);
   await page.getByLabel("Price", { exact: true }).fill("42.5");
@@ -81,6 +81,6 @@ test("Positions: a card per open position with its stop", async ({ page, request
   const card = page.getByLabel(`${first.ticker} position`);
   await expect(card).toContainText(first.stop === null ? "no stop" : `stop ${first.stop.toFixed(2)}`);
   await card.getByRole("link", { name: "Full chart" }).click();
-  await expect(page.getByLabel(`${first.ticker} full chart`)).toBeVisible();
+  await expect(page.locator(".ws-bar .ticker")).toHaveText(first.ticker);
   await page.waitForLoadState("networkidle");
 });

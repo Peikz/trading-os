@@ -186,7 +186,7 @@ describe("Today", () => {
     expect(await screen.findByText("Nothing to buy today")).toBeInTheDocument();
     expect(screen.getByText("Nothing to act on · 1 position · 1 on watch")).toBeInTheDocument();
     expect(screen.getByText(/Next scan: the 10:15 check, Wed 04 Nov, 10:10 New York/)).toBeInTheDocument();
-    expect(screen.getByText("Every scan hit").closest("a")).toHaveAttribute("href", "#/stocks?src=scans");
+    expect(screen.getByText("Every scan hit").closest("a")).toHaveAttribute("href", "#/screener?src=scans");
     fireEvent.click(screen.getByRole("button", { name: "See the 3 C setups" }));
     await waitFor(() => expect(urls()).toContain("/api/today?scope=pushed"));
     expect(await screen.findByText("C setups · no tested edge")).toBeInTheDocument();
@@ -209,7 +209,7 @@ describe("Today", () => {
 
   it("shows one card per stock on a phone, flipped with next and the dots", async () => {
     vi.stubGlobal("matchMedia", (q: string) => ({
-      matches: q.includes("639"),
+      matches: q.includes("640"),
       addEventListener: () => {},
       removeEventListener: () => {},
     }));

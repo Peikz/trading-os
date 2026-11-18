@@ -106,6 +106,41 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M7.5 15h9" />
     </>
   ),
+  chart: (
+    <>
+      <path d="M7 4v16M17 6v13" />
+      <rect x="5" y="8" width="4" height="7" rx="0.5" />
+      <rect x="15" y="10" width="4" height="6" rx="0.5" />
+    </>
+  ),
+  pan: <path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />,
+  draw: (
+    <>
+      <path d="M5 18L19 6" />
+      <circle cx="5" cy="18" r="1.6" />
+      <circle cx="19" cy="6" r="1.6" />
+    </>
+  ),
+  move: (
+    <>
+      <path d="M5 18L19 6" />
+      <circle cx="5" cy="18" r="2.6" />
+    </>
+  ),
+  erase: (
+    <>
+      <path d="M8 20h11M5.5 14.5l7-8a1.5 1.5 0 0 1 2.1-.1l3 2.7a1.5 1.5 0 0 1 .1 2.1L12 19H9.5z" />
+      <path d="M9 11l5 4.5" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="19" cy="12" r="1.4" />
+    </>
+  ),
+  up: <path d="M6 15l6-6 6 6" />,
   moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />,
 };
 

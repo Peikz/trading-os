@@ -22,6 +22,7 @@ import { MiniCandles } from "../components/MiniCandles";
 import { signed, usd } from "../format";
 import { stripIcons } from "../plain";
 import { hrefFor, stockLink } from "../routes";
+import { setActive } from "../shell/active";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia } from "../ui/kit";
 import { FocusChart } from "./today/FocusChart";
@@ -141,6 +142,11 @@ export function Today() {
   const index = current ? items.indexOf(current) : -1;
   const watchSet = useMemo(() => new Set(d.watch.map((r) => r.ticker)), [d.watch]);
 
+  // The stock on screen is the active one: the Chart opens on it
+  const currentTicker = current?.ticker;
+  useEffect(() => {
+    if (currentTicker) setActive(currentTicker);
+  }, [currentTicker]);
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(null), 4000);
@@ -487,11 +493,11 @@ function Quiet({
         {firstWatch ? (
           <button onClick={() => onPick(firstWatch.key)}>Your watchlist ({d.watch.length})</button>
         ) : (
-          <a className="muted" href={hrefFor("stocks", "", { src: "lists" })}>
+          <a className="muted" href={hrefFor("screener", "", { src: "lists" })}>
             Your watchlists
           </a>
         )}
-        <a href={hrefFor("stocks", "", { src: "scans" })}>Every scan hit</a>
+        <a href={hrefFor("screener", "", { src: "scans" })}>Every scan hit</a>
       </div>
     </section>
   );
