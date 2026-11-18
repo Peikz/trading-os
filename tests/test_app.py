@@ -33,6 +33,14 @@ def goto(at, page):
     return at
 
 
+def pick_section(at, key, section):
+    """A section picker: a segmented control up to six options, a select box beyond."""
+    if any(sb.key == key for sb in at.selectbox):
+        at.selectbox(key=key).set_value(section).run()
+    else:
+        at.button_group(key=key).set_value(section).run()
+
+
 PAGES = [
     "Today",
     "Screener",
@@ -93,9 +101,9 @@ def test_every_section_renders(data_repo, monkeypatch, page, key, section):
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     goto(at, page)
-    at.radio(key=key).set_value(section).run()
+    pick_section(at, key, section)
     assert not at.exception, [e.value for e in at.exception]
-    assert at.header[0].value == page
+    assert not at.header  # the tab shows the page's name: no H1
 
 
 @pytest.mark.parametrize("page", PAGES)
@@ -105,7 +113,7 @@ def test_every_page_renders(data_repo, monkeypatch, page):
     assert not at.exception, at.exception
     goto(at, page)
     assert not at.exception, [e.value for e in at.exception]
-    assert at.header[0].value  # each page has a header
+    assert not at.header  # the tab or the place shows the name: no H1
 
 
 def test_todays_view_and_list_switch(data_repo, monkeypatch):
@@ -206,7 +214,7 @@ def test_study_grades_show_in_the_tables_blocks_and_their_page(data_repo, monkey
     at.toggle(key="today_all_scans").set_value(True).run()
     assert any("Study A" in str(m.value) for m in at.markdown)  # Today's grade block
     goto(at, "Research")
-    at.radio(key="research_section").set_value("Grades").run()
+    pick_section(at, "research_section", "Grades")
     assert not at.exception, [e.value for e in at.exception]
     assert any("1234" in str(df.value) for df in at.dataframe)  # the history behind A
 

@@ -22,6 +22,7 @@ import lwchart  # app/lwchart.py: the focus view's fast chart
 import pandas as pd
 import practice as practice_page  # app/practice.py: the Practice page (blind signals)
 import streamlit as st
+import ui  # app/ui.py: the shared header, picker, empty state, table and footer
 from chart_draw import chart_draw  # app/chart_draw.py: the Chart page's drawable chart
 
 from trading_os import (
@@ -158,27 +159,45 @@ HEALTH = {"Jobs and data": "System health", "Validation against TradingView": "V
 NAV_CSS = """<style>
 .block-container{padding-top:1.2rem;padding-bottom:2rem;max-width:1640px}
 h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
+h3{font-size:1.25rem!important;margin:1.1rem 0 .35rem!important;padding:0!important}
 [data-testid="stAppViewContainer"]{font-feature-settings:'tnum' 1}
-.st-key-topbar{border-bottom:1px solid #1C2028;padding-bottom:.7rem;margin-bottom:.2rem}
+.st-key-topbar{border-bottom:1px solid #1C2028;padding-bottom:.7rem;margin-bottom:.1rem}
 .st-key-topbar [data-testid="stHorizontalBlock"]{align-items:center;gap:.75rem}
 .st-key-topbar [data-testid="stMarkdownContainer"] p{margin:0}
+.st-key-subnav{margin:.2rem 0 .5rem}
+[data-testid="stDataFrame"]{margin-top:.3rem}
+.st-key-subnav button{min-height:1.9rem;padding:.1rem .7rem}
+.st-key-subnav button p{font-size:.85rem}
+.wordtile{padding:.25rem 0}
+.wordtile .wt-label{color:#98A2B3;font-size:.85rem;margin-bottom:.15rem}
+.wordtile .wt-value{font-size:1.15rem;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.st-key-mtiles [data-testid="stMetricValue"]{font-size:1.5rem}
+.st-key-mtiles>div>[data-testid="stHorizontalBlock"]{gap:1rem}
+.st-key-bottomnav,.st-key-moresheet{display:none}
 @media (max-width:640px){
-.st-key-topbar>div>[data-testid="stHorizontalBlock"]{flex-wrap:wrap;flex-direction:row}
-.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{min-width:0!important}
-.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1){display:none}
+html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"]{overflow-x:hidden}
+.block-container{padding-top:.8rem!important;padding-bottom:5.5rem!important;
+  padding-left:.9rem!important;padding-right:.9rem!important}
+.st-key-topbar{padding-bottom:.5rem}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]{flex-wrap:nowrap;flex-direction:row;gap:.4rem}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{
+  min-width:0!important;width:auto!important}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1),
 .st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2){
-  flex:1 1 100%!important;order:1}
+  display:none}
 .st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3){
-  flex:1 1 0!important;order:2}
-.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5){
-  flex:0 0 64px!important;width:64px!important;order:3}
+  flex:0 0 auto!important}
 .st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4){
-  flex:1 1 100%!important;order:4}
-.st-key-topbar div[role="group"]{flex-wrap:nowrap;overflow-x:auto}
-}
-.st-key-bottomnav{display:none}
-@media (max-width:640px){
-.block-container{padding-bottom:5.5rem!important}
+  flex:1 1 0!important}
+.st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5){
+  flex:0 0 3.4rem!important}
+.st-key-subnav{overflow-x:auto;max-width:100%;scrollbar-width:none}
+.st-key-subnav::-webkit-scrollbar{display:none}
+.st-key-subnav div[role="group"]{flex-wrap:nowrap}
+.st-key-subnav button{white-space:nowrap}
+.st-key-mtiles>div>[data-testid="stHorizontalBlock"]{flex-wrap:wrap;flex-direction:row;gap:.4rem}
+.st-key-mtiles [data-testid="stColumn"]{flex:1 1 calc(50% - .4rem)!important;
+  min-width:calc(50% - .4rem)!important;width:auto!important}
 .st-key-bottomnav{display:block;position:fixed;left:0;right:0;bottom:0;z-index:1000;
   background:#0B0D10;border-top:1px solid #23272F;
   padding:.3rem .4rem calc(.3rem + env(safe-area-inset-bottom,0px))}
@@ -187,6 +206,14 @@ h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
   min-width:0!important;flex:1 1 0!important;width:auto!important}
 .st-key-bottomnav button{min-height:3rem;padding:.2rem .1rem;font-size:.78rem;width:100%}
 .st-key-bottomnav button p{font-size:.78rem;white-space:nowrap}
+.st-key-moresheet{display:flex;position:fixed;left:.5rem;right:.5rem;
+  bottom:calc(4.1rem + env(safe-area-inset-bottom,0px));z-index:999;background:#14171D;
+  border:1px solid #23272F;border-radius:.9rem;padding:.7rem .8rem;max-height:62vh;
+  overflow-y:auto;box-shadow:0 -6px 24px rgba(0,0,0,.5)}
+.st-key-moresheet [class*="st-key-mg_"]{flex-direction:row!important;
+  flex-wrap:wrap;gap:.35rem!important;  margin-bottom:.4rem}
+.st-key-moresheet [class*="st-key-mg_"]>div:first-child{flex:0 0 100%;width:100%}
+.st-key-moresheet button{min-height:2.4rem}
 [data-testid="stMarkdownContainer"] table{display:block;overflow-x:auto;max-width:100%}
 [data-testid="stMarkdownContainer"] pre{white-space:pre-wrap;overflow-wrap:anywhere}
 [data-testid="stMain"] .stButton button,[data-testid="stMain"] [data-testid="stPopover"] button{
@@ -194,15 +221,12 @@ h1,h2,h3{letter-spacing:-.015em}h1{margin-bottom:.2rem}
 .st-key-linebar [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important}
 .st-key-linebar [data-testid="stColumn"]{min-width:0!important}
 }
+@media (min-width:641px){.st-key-moresheet{display:none!important}}
 </style>"""
 st.markdown(NAV_CSS, unsafe_allow_html=True)
 
 
-def _keep(key: str, fallback: str) -> None:
-    """A segmented control can be clicked off; keep the last pick instead of nothing."""
-    if st.session_state.get(key) is None:
-        st.session_state[key] = st.session_state.get(f"_last_{key}", fallback)
-    st.session_state[f"_last_{key}"] = st.session_state[key]
+_keep = ui.keep
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -289,33 +313,76 @@ place = st.session_state.get("place") or "Today"
 tabs = PLACES[place]
 if len(tabs) > 1:
     st.session_state.setdefault(f"tab_{place}", tabs[0])
-    st.segmented_control(
-        "Page",
-        tabs,
-        key=f"tab_{place}",
-        label_visibility="collapsed",
-        on_change=_keep,
-        args=(f"tab_{place}", tabs[0]),
-    )
+    with st.container(key="subnav"):
+        st.segmented_control(
+            "Page",
+            tabs,
+            key=f"tab_{place}",
+            label_visibility="collapsed",
+            on_change=_keep,
+            args=(f"tab_{place}", tabs[0]),
+        )
     page = st.session_state.get(f"tab_{place}") or tabs[0]
 else:
     page = tabs[0]
 
 
-# The phone's bottom bar (Emil, 17 Nov 2026: "Watchlist down at the bottom on mobile"): the most
-# used pages within a thumb's reach, shown only on narrow screens (NAV_CSS). A button opens its
-# page the way a stock on the Chart page does (`go`), so the top bar follows.
-BOTTOM_NAV = ["Today", "Watchlists", "Chart", "Positions", "Journal"]
+# The phone's bottom bar (Emil, 17 Nov 2026: "Watchlist down at the bottom on mobile"): the four
+# most used pages and "More" within a thumb's reach, shown only on narrow screens (NAV_CSS). A
+# button opens its page the way a stock on the Chart page does (`go`), so the tabs follow.
+# "More" opens a sheet with every other page, grouped by place.
+BOTTOM_NAV = ["Today", "Watchlists", "Chart", "Journal"]
+MORE_GROUPS = {
+    "Stocks": ["Screener"],
+    "Market": ["Market"],
+    "Journal": ["Positions", "Live results", "Practice"],
+    "Lab": ["Research", "Runs", "System health", "Guide"],
+}
+
+
+def go_closing_more(target: str) -> None:
+    """Open a page from the bottom bar or the More sheet; the sheet closes."""
+    st.session_state["more_open"] = False
+    go(target)
+
+
+def toggle_more() -> None:
+    st.session_state["more_open"] = not st.session_state.get("more_open", False)
+
+
+st.session_state.setdefault("more_open", False)
+if st.session_state["more_open"]:
+    with st.container(key="moresheet"):
+        for n, (group, members) in enumerate(MORE_GROUPS.items()):
+            with st.container(key=f"mg_{n}"):
+                st.caption(group)
+                for target in members:
+                    st.button(
+                        target,
+                        key=f"more_{target}",
+                        on_click=go_closing_more,
+                        args=(target,),
+                        type="primary" if page == target else "secondary",
+                    )
 with st.container(key="bottomnav"):
-    for target, col in zip(BOTTOM_NAV, st.columns(len(BOTTOM_NAV), gap="small"), strict=True):
+    nav_cols = st.columns(len(BOTTOM_NAV) + 1, gap="small")
+    for target, col in zip(BOTTOM_NAV, nav_cols, strict=False):
         col.button(
             target,
             key=f"bn_{target}",
-            on_click=go,
+            on_click=go_closing_more,
             args=(target,),
             type="primary" if page == target else "secondary",
             width="stretch",
         )
+    in_more = page not in BOTTOM_NAV
+    nav_cols[-1].button(
+        "More",
+        key="bn_more",
+        on_click=toggle_more,
+        type="primary" if in_more or st.session_state["more_open"] else "secondary",
+        width="stretch",
+    )
 
 
 # ---------------------------------------------------------------- cached loaders
@@ -381,16 +448,16 @@ def show_history_graded() -> None:
     summary, by_grade = history_graded()
     with st.expander("Net of costs and graded: every strategy, 10 years", expanded=True):
         if summary.empty:
-            st.info("Not built yet (data repo release grading-10y).")
+            ui.empty_state("Not built yet (data repo release grading-10y).")
             return
         st.caption(research_view.GRADED_CAPTION)
         show = summary.rename(columns=research_view.GRADED_RENAME)
-        st.dataframe(show.round(3), hide_index=True, width="stretch")
+        ui.show_df(show.round(3), hide_index=True, width="stretch")
         pick = st.selectbox(
             "Grades out of sample (2019-2026) for", summary["strategy"].tolist(), key="hist_grade"
         )
         rows = by_grade[by_grade["strategy"] == pick].drop(columns=["strategy"])
-        st.dataframe(rows.round(3), hide_index=True, width="stretch")
+        ui.show_df(rows.round(3), hide_index=True, width="stretch")
         st.caption(
             "A+/A/B/C: predicted net R of at least +0.5 / +0.3 / +0.1, else C. daily_mean_r "
             "weighs every signal day the same: what an account with a few slots could reach."
@@ -498,7 +565,7 @@ def show_table(scan: str, hits: pd.DataFrame, exchanges: dict | None = None) -> 
                 header, format=FORMATS.get(fmt, f"%{fmt}")
             )
     view = view[[c for _, c, _ in present]].rename(columns={c: h for h, c, _ in present})
-    st.dataframe(view, hide_index=True, width="stretch", column_config=config)
+    ui.show_df(view, hide_index=True, width="stretch", column_config=config)
 
 
 # The grade rules in words, the strategy list and the History tables live in the package
@@ -685,14 +752,15 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
     recent = chart_view.live_sessions(CFG)
     a, b = st.columns(2)
     day = a.selectbox("Session", recent, key="ch_live_day")
-    every = b.radio(
-        "Candle",
-        [1, 5, 15],
-        index=1,
-        horizontal=True,
-        key="ch_live_every",
-        format_func=lambda m: f"{m} min",
-    )
+    with b:
+        every = ui.choose(
+            "Candle",
+            [1, 5, 15],
+            key="ch_live_every",
+            default=5,
+            format_func=lambda m: f"{m} min",
+            visible_label=True,
+        )
     try:
         minutes = live_minutes(ticker, day)
     except Exception as exc:  # noqa: BLE001 - shown, not raised
@@ -732,12 +800,17 @@ def market_overview() -> None:
     st.subheader("Indexes, sectors and themes")
     table, source = sector_table(str(data_dir))
     if table.empty:
-        st.info("No sector data yet: it comes from TradingView, and with each EOD run.")
+        ui.empty_state("No sector data yet: it comes from TradingView, and with each EOD run.")
         return
     a, b = st.columns([3, 2])
-    period = a.radio(
-        "Return over", list(market_view.PERIODS), index=2, horizontal=True, key="sec_period"
-    )
+    with a:
+        period = ui.choose(
+            "Return over",
+            list(market_view.PERIODS),
+            key="sec_period",
+            default="1 month",
+            visible_label=True,
+        )
     groups = b.multiselect("Show", list(market_view.GROUPS), list(market_view.GROUPS),
                            key="sec_groups")  # fmt: skip
     shown = market_view.sector_view(table, period, groups)
@@ -745,7 +818,7 @@ def market_overview() -> None:
     styled = shown.style.format(precision=1).background_gradient(
         cmap="RdYlGn", subset=[f"{period} %", "1M vs SPY", "1W vs SPY"]
     )
-    st.dataframe(styled, hide_index=True, width="stretch")
+    ui.show_df(styled, hide_index=True, width="stretch")
     st.caption(market_view.SECTOR_CAPTION.format(source=source))
     fig = px.scatter(
         view, x="vs_spy_1m", y="vs_spy_1w", text="ticker", color="group",
@@ -766,7 +839,7 @@ def market_overview() -> None:
     if not market_view.industry_files(data_dir):
         return
     st.subheader("Industries: who leads and who is moving")
-    back = st.radio("Rank move since", ["1 week", "1 month"], horizontal=True, key="ind_back")
+    back = ui.choose("Rank move since", ["1 week", "1 month"], key="ind_back", visible_label=True)
     found = market_view.industries(data_dir, back)
     if found:
         a, b = st.columns(2)
@@ -788,7 +861,7 @@ def search_view(query: str) -> None:
     """Search results in place of the page: a ticker everywhere, or words in notes and the
     guide (`search.py`)."""
     q = query.strip()
-    st.header(f"🔎 {q}")
+    ui.section(f"Search: {q}")
     if search.looks_like_ticker(q):
         ticker = q.lstrip("$").upper()
         st.button(f"Open {ticker} on the Chart page", on_click=open_chart, args=(ticker,))
@@ -801,7 +874,7 @@ def search_view(query: str) -> None:
         if found.empty:
             st.caption("None.")
         else:
-            st.dataframe(found, hide_index=True, width="stretch")
+            ui.show_df(found, hide_index=True, width="stretch")
         places = []
         mine = my_watchlists.current(my_watchlists.load(data_dir))
         places += [f"your list *{n}*" for n in mine.loc[mine["ticker"] == ticker, "list"]]
@@ -869,10 +942,10 @@ def strategy_rules_view() -> None:
     st.markdown(found["rules"])
     if found["settings"]:
         st.markdown("**The numbers** (config/scans.yaml; change live scans on the Scans page)")
-        st.dataframe(pd.DataFrame(found["settings"]), hide_index=True, width="stretch")
+        ui.show_df(pd.DataFrame(found["settings"]), hide_index=True, width="stretch")
     if found["heat"]:
         st.markdown("**How it did, per market heat** (net R a trade after costs, its study plan)")
-        st.dataframe(pd.DataFrame(found["heat"]).round(2), hide_index=True, width="stretch")
+        ui.show_df(pd.DataFrame(found["heat"]).round(2), hide_index=True, width="stretch")
     elif found["heat_note"]:
         st.caption(found["heat_note"])
 
@@ -967,16 +1040,16 @@ def history_tables(folder: str, filters: tuple, group: str):
 def conviction_pick(label: str = "Conviction", value=None, key: str | None = None) -> int | None:
     """How sure you were: none, 1 (small), 2 (normal) or 3 (high). Optional; None = not set."""
     start = conviction.normalize(value)
-    picked = st.radio(
+    picked = ui.choose(
         label,
-        [None, *conviction.LEVELS],
-        index=([None, *conviction.LEVELS]).index(start),
-        horizontal=True,
-        format_func=lambda c: "none" if c is None else str(c),
+        ["none", *conviction.LEVELS],
+        key=key or "conviction_pick",
+        default="none" if start is None else start,
+        format_func=str,
         help="1 = small, 2 = normal, 3 = high conviction. Optional; the Journal compares them.",
-        key=key,
+        visible_label=True,
     )
-    return picked
+    return None if picked == "none" else picked
 
 
 def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
@@ -987,12 +1060,13 @@ def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
     with st.form(f"form-{key}"):
         st.markdown(f"**{title}**")
         grade_index = dashboard.GRADES.index(prev.get("grade", "")) if prev else 0
-        grade = st.radio(
+        grade = ui.choose(
             "Grade (your call)",
             dashboard.GRADES,
-            index=grade_index,
-            horizontal=True,
+            key=f"grade-{key}",
+            default=dashboard.GRADES[grade_index],
             format_func=lambda g: g or "none",
+            visible_label=True,
         )
         sure = conviction_pick(value=prev.get("conviction"), key=f"conv-{key}")
         notes = st.text_area("Notes", prev.get("notes", ""))
@@ -1015,7 +1089,7 @@ def grade_form(kind: str, ref_id: str, title: str, key: str) -> None:
 
 def market_lines(run: dashboard.Run | None) -> None:
     if run is None or run.breadth is None:
-        st.info("No breadth row for this run yet.")
+        ui.empty_state("No breadth row for this run yet.")
         return
     row = read_parquet(str(run.breadth)).iloc[0].to_dict()
     for line in breadth.push_lines(row):
@@ -1026,33 +1100,35 @@ def market_lines(run: dashboard.Run | None) -> None:
 
 runs = runs_cached(str(data_dir), include_manual)
 
+
+def end_page(stop: bool = True) -> None:
+    """The one footer line at the bottom of every page, then (when a page ends early) stop."""
+    ui.footer(
+        len(runs),
+        str(clock.session_date(CFG.schedule, "eod", dt.datetime.now(dt.UTC))),
+        dt.date.today().isoformat(),
+    )
+    if stop:
+        st.stop()
+
+
 if query.strip():
     search_view(query)
-    st.stop()
+    end_page()
 
 if page == "Research":
-    st.header("Research")
-    section = st.radio(
-        "Section",
-        list(RESEARCH),
-        horizontal=True,
-        key="research_section",
-        label_visibility="collapsed",
-    )
+    section = ui.choose("Section", list(RESEARCH), key="research_section")
     page, what = RESEARCH[section]
-    st.caption(what)
+    ui.page_header("Research", what)
 elif page == "Live results":
-    st.header("Live results")
-    section = st.radio(
-        "Section", list(LIVE), horizontal=True, key="live_section", label_visibility="collapsed"
-    )
+    section = ui.choose("Section", list(LIVE), key="live_section")
     page = LIVE[section]
-    st.caption("The live signals since launch, with what happened 5, 10, 20 and 60 sessions after.")
-elif page == "System health":
-    st.header("System health")
-    section = st.radio(
-        "Section", list(HEALTH), horizontal=True, key="health_section", label_visibility="collapsed"
+    ui.page_header(
+        "Live results",
+        "The live signals since launch, with what happened 5, 10, 20 and 60 sessions after.",
     )
+elif page == "System health":
+    section = ui.choose("Section", list(HEALTH), key="health_section")
     page = HEALTH[section]
 
 
@@ -1068,7 +1144,7 @@ def focus_chart(
     levels. Drawing and the other tools are on the Chart page."""
     bars = bars_for(str(data_dir), ticker, "2y")
     if bars.empty:
-        st.caption(f"No daily bars for {ticker} in the data repo.")
+        ui.note(f"No daily bars for {ticker} in the data repo.")
         return
     row = row or {}
     picked = lwchart.DEFAULT if picked is None else picked
@@ -1097,9 +1173,8 @@ def focus_chart(
 
 if page == "Today":
     if not runs:
-        st.header("Today")
-        st.info("No runs yet. The first scheduled run writes here.")
-        st.stop()
+        ui.empty_state("No runs yet. The first scheduled run writes here.")
+        end_page()
     board.controls(data_dir)
     latest_eod = next((r for r in runs if r.slot == "eod"), None)
     latest_pm = next((r for r in runs if r.slot == "pm"), None)
@@ -1151,11 +1226,10 @@ elif page == "Positions":
     # The positions cockpit (Emil, 26 Oct 2026): each open position with its price, open R, the
     # distance to its stop and what its plan says today. Live prices when the Alpaca keys are
     # set on this PC (scripts/set_local_secrets.ps1), else the newest close in the data repo.
-    st.header("Positions")
     positions = dashboard.latest_positions(data_dir)
     if positions.empty:
-        st.info("No open positions. Your fills come in through the Journal (import or log).")
-        st.stop()
+        ui.empty_state("No open positions. Your fills come in through the Journal (import or log).")
+        end_page()
     account = sizing.load_account(data_dir)
     usd_rate = fx_rate(str(data_dir), account.currency if account else "USD")
     account_usd = account.size_usd(usd_rate) if account and usd_rate else None
@@ -1168,20 +1242,25 @@ elif page == "Positions":
     c.metric("At risk to stops", f"${view['at_risk_usd'].sum():,.0f}")
     plan_check, _ = positions_view.plan_check(positions, runs, CFG, read_parquet)
     board.position_cards(view, plan_check, prices, source, open_chart)
-    st.caption(positions_view.PLAN_CAPTION)
+    ui.note(positions_view.PLAN_CAPTION)
 
 elif page == "Screener":
     # Your own screens, TradingView style (Emil, 29 Oct 2026; `trading_os/screens.py`)
-    st.header("Screener")
-    st.caption(
+    ui.page_header(
+        "Screener",
+        "Filter every US stock in the universe (about 4,000), or one scan's hits, like "
+        "TradingView's screener. A list to look at, not a tested setup.",
+    )
+    ui.about(
         "Filter every US stock in the universe (about 4,000), or one scan's hits, on the fields "
         "below, like TradingView's screener. A screen of all stocks is a list to look at, not a "
-        "tested setup: no grade, no buy. Scan hits keep their study grade and your grading form."
+        "tested setup: no grade, no buy. Scan hits keep their study grade and your grading form.",
+        "About the Screener",
     )
     eod_runs = [r for r in runs if r.slot == "eod" and r.universe.exists()]
     if not eod_runs:
-        st.info("No EOD universe snapshot yet.")
-        st.stop()
+        ui.empty_state("No EOD universe snapshot yet.")
+        end_page()
     snapshot = read_parquet(str(eod_runs[0].universe))
     saved = screens.load(data_dir)
     choices = ["＋ New screen", *saved, *(f"Example: {n}" for n in screens.EXAMPLES)]
@@ -1203,8 +1282,8 @@ elif page == "Screener":
         run = c1.selectbox("Run", runs, format_func=lambda r: r.label, key="sc_run")
         frames = scan_frames(str(run.candidates))
         if not frames:
-            st.info("This run saved no hits.")
-            st.stop()
+            ui.empty_state("This run saved no hits.")
+            end_page()
         hit_scan = c2.selectbox(
             "Scan", list(frames), format_func=lambda s: report.SCAN_LABELS.get(s, s), key="sc_scan"
         )
@@ -1321,7 +1400,7 @@ elif page == "Screener":
         result = screens.run(data, filters, None if hit_scan else sort, descending)
     except ValueError as exc:
         st.error(str(exc))
-        st.stop()
+        end_page()
     every = "every hit" if hit_scan else "every stock"
     summary = " · ".join(screens.describe(f) for f in filters) or f"no filters: {every}"
     st.markdown(f"**{len(result)} stocks** from {when}  \n{summary}")
@@ -1343,16 +1422,14 @@ elif page == "Screener":
                 fmt = "compact" if col in ("volume", "avg_volume_20d", "float_shares",
                                            "pm_volume", "ah_volume") else fmt  # fmt: skip
                 config[name] = st.column_config.NumberColumn(name, format=fmt)
-        st.dataframe(
+        ui.show_df(
             view.rename(columns=lambda c: screens.label(c) if c in screens.FIELDS else c),
             hide_index=True,
             width="stretch",
             column_config=config,
         )
         if len(result) > 500:
-            st.caption(
-                f"Showing the first 500 of {len(result)}; narrow the filters to see the rest."
-            )
+            ui.note(f"Showing the first 500 of {len(result)}; narrow the filters to see the rest.")
 
     def _flip(tickers: list[str], name: str) -> None:
         st.query_params.clear()
@@ -1411,20 +1488,19 @@ elif page == "Screener":
 elif page == "Runs":
     # Runs and scans in one place (Emil, 4 Nov 2026: "see all the push and scan runs and edit
     # them", "an overview of it"): the day's runs on top, a run's times and on/off, then the scans.
-    st.header("Runs")
-    st.caption(runs_view.CAPTION)
+    ui.note(runs_view.CAPTION)
     try:
         run_jobs = timer.load()  # the file as it is now, edits included
     except timer.RunsError as exc:
         st.error(f"config/runs.yaml doesn't load: {exc}")
-        st.stop()
+        end_page()
     gh_runs = st.session_state.get("gh_runs")
     started = (
         timer.check(gh_runs, CFG.schedule.windows_et, dt.datetime.now(dt.UTC))
         if gh_runs is not None and not gh_runs.empty
         else None
     )
-    st.dataframe(
+    ui.show_df(
         pd.DataFrame(runs_view.overview(CFG, run_jobs, started=started)).drop(columns="key"),
         hide_index=True,
         width="stretch",
@@ -1450,11 +1526,11 @@ elif page == "Runs":
                 "Second start, in case the first failed", value=run_fields["second"]
             ).strip()
         if run_fields["window"]:
-            st.caption(
+            ui.note(
                 "Both starts must fall inside its New York window, "
                 f"{run_fields['window'][0]}-{run_fields['window'][1]}, or the run does nothing."
             )
-        st.caption(
+        ui.note(
             "Off: the timer stops starting it and GitHub's backup start exits at once. "
             "Started by hand on GitHub, it still runs."
         )
@@ -1463,7 +1539,7 @@ elif page == "Runs":
         try:
             shown = runs_view.save(run_pick, run_new, CFG.schedule.windows_et)
             if not shown:
-                st.info("Nothing changed.")
+                ui.empty_state("Nothing changed.")
             else:
                 st.session_state["rn_diff"] = (run_pick, shown)
                 timer.JOBS = timer.load()  # the rest of the dashboard sees the new times
@@ -1484,12 +1560,12 @@ elif page == "Runs":
             st.session_state.pop("rn_diff", None)
 
     st.subheader("Scans")
-    st.caption(scans_view.CAPTION)
+    ui.note(scans_view.CAPTION)
 
     def scan_label(name: str) -> str:
         return scans_view.label(CFG, name)
 
-    st.dataframe(
+    ui.show_df(
         pd.DataFrame(scans_view.table(CFG)),
         hide_index=True,
         width="stretch",
@@ -1504,17 +1580,19 @@ elif page == "Runs":
     with st.form(f"sc-edit-{pick}"):
         a, b = st.columns(2)
         new = {"enabled": a.toggle("On", value=fields["enabled"])}
-        new["action"] = b.radio(
-            "Hits",
-            ["push", "log"],
-            index=0 if fields["action"] == "push" else 1,
-            horizontal=True,
-            format_func={"push": "pushed", "log": "saved only"}.get,
-        )
+        with b:
+            new["action"] = ui.choose(
+                "Hits",
+                ["push", "log"],
+                key=f"sc-action-{pick}",
+                default=fields["action"],
+                format_func={"push": "pushed", "log": "saved only"}.get,
+                visible_label=True,
+            )
         if fields["push"] is not None:
             options = list(scans_view.PUSH_SLOTS)
-            new["push"] = st.radio(
-                "Pushed", options, index=options.index(fields["push"]), horizontal=True
+            new["push"] = ui.choose(
+                "Pushed", options, key=f"sc-push-{pick}", default=fields["push"], visible_label=True
             )
         cols = st.columns(3)
         for k, field in enumerate(fields["numbers"]):
@@ -1541,7 +1619,7 @@ elif page == "Runs":
     if submitted:
         changes = scans_view.changes(CFG, pick, new)
         if not changes:
-            st.info("Nothing changed.")
+            ui.empty_state("Nothing changed.")
         else:
             try:
                 shown = scan_editor.save(pick, changes)
@@ -1564,33 +1642,39 @@ elif page == "Runs":
             st.session_state.pop("sc_diff", None)
 
 elif page == "Chart":
-    st.header("Chart")
     # Every alert-tier hit of the newest session's runs, pushed ones first (most hits are C:
     # counted in the push, not shown, so "pushed" alone was often empty), then your
     # watchlists and open positions.
     where = chart_view.picks(data_dir, runs, read_parquet)
     picks = list(where)
     a, b = st.columns([2, 2])
+    # Opens on the first stock of the list instead of an empty page
     quick = a.selectbox(
         "Today's hits (pushed first), watchlists, open positions",
-        ["—", *picks],
-        format_func=lambda t: t if t == "—" else f"{t}  ({where[t]})",
+        picks,
+        format_func=lambda t: f"{t}  ({where[t]})",
         key="ch_pick",
     )
     typed = b.text_input("…or type any ticker (wins over the list)", key="ch_ticker")
-    ticker = (typed.strip() or ("" if quick == "—" else quick)).upper()
+    ticker = (typed.strip() or (quick or "")).upper()
     if not ticker:
-        st.info("Pick or type a ticker.")
-        st.stop()
+        ui.empty_state(
+            "Pick or type a ticker.", "Today's hits and your watchlists show up in the list."
+        )
+        end_page()
     a, b, c = st.columns(3)
-    period = a.radio(
-        "History",
-        ["2y", "10y"],
-        horizontal=True,
-        key="ch_period",
-        format_func=lambda p: "2 years" if p == "2y" else "10 years",
-    )
-    timeframe = b.radio("Bars", ["Daily", "Weekly", "Monthly"], horizontal=True, key="ch_tf")
+    with a:
+        period = ui.choose(
+            "History",
+            ["2y", "10y"],
+            key="ch_period",
+            format_func=lambda p: "2 years" if p == "2y" else "10 years",
+            visible_label=True,
+        )
+    with b:
+        timeframe = ui.choose(
+            "Bars", ["Daily", "Weekly", "Monthly"], key="ch_tf", visible_label=True
+        )
     span = c.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
     sessions = chart_view.SPANS[span]
     overlays = st.multiselect("Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines")
@@ -1626,7 +1710,7 @@ elif page == "Chart":
         st.session_state["ch_drawn_seq"] = drawn["seq"]  # each report is saved once
         if any(chart_marks.apply_drawn(data_dir, ticker, drawn, marks).values()):
             st.rerun()
-    st.caption(
+    ui.note(
         "Drag to pan, scroll or pinch to zoom, double-click to reset. On the daily bars, the "
         "line tool (top right) draws a trend line that is saved at once, for this stock; drag "
         "a line or its ends to move it, or click it and use the eraser to delete it. A line "
@@ -1655,7 +1739,7 @@ elif page == "Chart":
                 except ValueError as exc:
                     st.warning(str(exc))
         if not len(marks):
-            st.caption("No lines yet. Add a level above, or draw with the line tool.")
+            ui.note("No lines yet. Add a level above, or draw with the line tool.")
         for m in marks.to_dict("records"):
             a, b = st.columns([5, 1], vertical_alignment="center")
             a.markdown(chart_marks.describe(m))
@@ -1678,7 +1762,7 @@ elif page == "Chart":
             st.rerun()
     notes = stock_notes.current(data_dir, ticker)
     if not len(notes):
-        st.caption("No notes on this stock yet.")
+        ui.note("No notes on this stock yet.")
     for n in notes.to_dict("records"):
         edited = n["saved_ts"] != n["created_ts"]
         st.markdown(
@@ -1706,7 +1790,7 @@ elif page == "Chart":
             also = f" · also {' · '.join(others)}" if others else ""
             st.markdown(f"**{n['note_date']}** · daily note{also}")
             st.text(n["text"])
-    st.caption(
+    ui.note(
         "Notes are saved at once on this PC in the data repo (data/journal/stock_notes/) and "
         "kept for good: an edit or a delete adds a row and never erases the old text. Use "
         "“Save & push” to send them to GitHub."
@@ -1749,27 +1833,28 @@ elif page == "Chart":
     # A toggle, not an expander: Streamlit runs a collapsed expander's code too, and that
     # fetched a month of minute bars from GitHub for every stock you looked at.
     if st.toggle("Intraday (minute bars)", key="ch_intraday_on"):
-        source = st.radio(
-            "Minute bars", ["Live (Alpaca)", "Study days"], horizontal=True, key="ch_src"
+        source = ui.choose(
+            "Minute bars", ["Live (Alpaca)", "Study days"], key="ch_src", visible_label=True
         )
         days = [] if source.startswith("Live") else minute_days(str(data_dir), ticker)
         if source.startswith("Live"):
             live_intraday(ticker, levels_for(ticker), bars)
         elif not days:
-            st.caption(
+            ui.note(
                 "No minute bars for this stock on this PC. They exist for days a strategy could "
                 "have traded it (the minute study's data)."
             )
         else:
             a, b = st.columns(2)
             day = a.selectbox("Day", days, key="ch_day")
-            every = b.radio(
-                "Candle",
-                [1, 5, 15],
-                horizontal=True,
-                key="ch_every",
-                format_func=lambda m: f"{m} min",
-            )
+            with b:
+                every = ui.choose(
+                    "Candle",
+                    [1, 5, 15],
+                    key="ch_every",
+                    format_func=lambda m: f"{m} min",
+                    visible_label=True,
+                )
             minutes = minute_bars(str(data_dir), ticker, day)
             prior = bars[bars["session_date"] < day]["close"]
             fig = ichart.intraday_figure(
@@ -1779,20 +1864,20 @@ elif page == "Chart":
                 every=every,
             )
             st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_intraday", width="stretch")
-            st.caption("VWAP from the 09:30 open; pre- and post-market shaded.")
+            ui.note("VWAP from the 09:30 open; pre- and post-market shaded.")
 
 elif page == "Watchlists":
-    st.header("Watchlists")
-    st.subheader("My watchlists")
     events = my_watchlists.load(data_dir)
     names = my_watchlists.lists(events)
-    a, b = st.columns([2, 3])
-    choice = a.selectbox("List", [*names, "＋ New list"], key="wl_choice")
-    name = b.text_input("New list name") if choice == "＋ New list" else choice
-    with st.form("wl-add", clear_on_submit=True):
-        a, b = st.columns([3, 2])
-        typed = a.text_input("Add tickers (comma or space separated)")
-        note = b.text_input("Note (optional)")
+    pick_col, new_col, add_col = st.columns([3, 3, 2], vertical_alignment="bottom")
+    choice = pick_col.selectbox("List", [*names, "＋ New list"], key="wl_choice")
+    name = new_col.text_input("New list name") if choice == "＋ New list" else choice
+    with (
+        add_col.popover("Add tickers / import", width="stretch"),
+        st.form("wl-add", clear_on_submit=True),
+    ):
+        typed = st.text_input("Add tickers (comma or space separated)")
+        note = st.text_input("Note (optional)")
         export = st.file_uploader("…or import a TradingView watchlist export (.txt)", type=["txt"])
         if st.form_submit_button("Add to list"):
             tickers = my_watchlists.parse_tickers(typed)
@@ -1815,7 +1900,7 @@ elif page == "Watchlists":
     members = my_watchlists.current(my_watchlists.load(data_dir))
     members = members[members["list"] == name] if name else members.iloc[0:0]
     if members.empty:
-        st.caption("No tickers in this list yet.")
+        ui.empty_state("No tickers in this list yet.", "Use “Add tickers / import” above.")
     else:
         eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
         universe = read_parquet(str(eod[0].universe)) if eod else pd.DataFrame()
@@ -1823,96 +1908,101 @@ elif page == "Watchlists":
         view = my_watchlists.with_market(members, universe, hits)
         exchanges = exchanges_of(str(eod[0].universe)) if eod else {}
         view.insert(1, "chart", [tradingview_url(t, exchanges.get(t)) for t in view["ticker"]])
-        if eod:
-            st.caption(f"Market data from {eod[0].label}. in_scans = the scans it hit that run.")
         cols = ["ticker", "chart", "close", "chg_pct", "rvol50", "adr20_pct", "rs_pct"]
         cols += ["pct_from_52w_high", "ret_22", "ret_63", "above_ma50", "above_ma200"]
         cols += ["to_pivot_pct", "earnings_in_sessions", "in_scans", "industry", "note"]
-        st.dataframe(
-            view[[c for c in cols if c in view]].round(2),
-            hide_index=True,
-            width="stretch",
-            column_config={"chart": st.column_config.LinkColumn("chart", display_text="TV ↗")},
+        shown = view[[c for c in cols if c in view]].round(2).reset_index(drop=True)
+        chosen = ui.show_df(
+            shown,
+            on_select="rerun",
+            selection_mode="multi-row",
+            key="wl_table",
         )
-        st.download_button(
+        gone = [shown["ticker"].iloc[i] for i in chosen.selection.rows if i < len(shown)]
+        a, b, c = st.columns([2, 2, 5], vertical_alignment="center")
+        if a.button("Remove selected", key="wl_rm", disabled=not gone, width="stretch"):
+            my_watchlists.remove(data_dir, name, gone)
+            st.cache_data.clear()
+            st.rerun()
+        b.download_button(
             "TradingView list (.txt)",
             tradingview_list(view["ticker"], exchanges),
             file_name=f"{name or 'watchlist'}.txt",
             help="TradingView: Watchlist menu → Import list",
             key="wl_tv",
+            width="stretch",
         )
-        a, b = st.columns([3, 1])
-        gone = a.multiselect("Remove from the list", members["ticker"].tolist(), key="wl_rm")
-        if b.button("Remove") and gone:
-            my_watchlists.remove(data_dir, name, gone)
-            st.cache_data.clear()
-            st.rerun()
-    st.caption("Saved in the data repo; use “Save & push” to send them to GitHub.")
+        if eod:
+            c.caption(
+                f"Market data from {eod[0].label}. Scans hit = the scans it hit that run. "
+                "Select rows to remove them. Saved in the data repo; “Save & push” sends it.",
+            )
 
-    st.subheader("Price alerts")
-    st.caption(
-        "The alert watcher (scripts\\start_alerts.ps1) checks every minute of the New York "
+    ui.section(
+        "Price alerts",
+        help=r"The alert watcher (scripts\start_alerts.ps1) checks every minute of the New York "
         "session, 15:30–22:00 Copenhagen, and pushes once when a price is hit: your alerts "
         "below, last close's BO-Watch and MA-surf pivots, and your open positions' stops. "
-        "Prices: Alpaca's real-time IEX feed. Your alerts end after they fire."
+        "Prices: Alpaca's real-time IEX feed. Your alerts end after they fire.",
     )
-    with st.form("alert-add", clear_on_submit=True):
-        a, b, c, d = st.columns([2, 2, 2, 4])
-        al_ticker = a.text_input("Ticker")
-        al_level = b.number_input("Price", min_value=0.0, step=0.01, format="%.2f")
-        al_dir = c.selectbox("When it trades", alerts.DIRECTIONS)
-        al_note = d.text_input("Note (in the push)")
+    live_alerts = alerts.current(data_dir)
+    live_alerts = live_alerts.reset_index(drop=True)
+    drop: list = []
+    if live_alerts.empty:
+        ui.empty_state("No alerts of your own yet.")
+    else:
+        picked = ui.show_df(
+            live_alerts.drop(columns="alert_id"),
+            on_select="rerun",
+            selection_mode="multi-row",
+            key="al_table",
+        )
+        drop = [
+            live_alerts["alert_id"].iloc[i] for i in picked.selection.rows if i < len(live_alerts)
+        ]
+    a, b, _ = st.columns([2, 2, 5])
+    with a.popover("Add alert", width="stretch"), st.form("alert-add", clear_on_submit=True):
+        al_ticker = st.text_input("Ticker")
+        al_level = st.number_input("Price", min_value=0.0, step=0.01, format="%.2f")
+        al_dir = st.selectbox("When it trades", alerts.DIRECTIONS)
+        al_note = st.text_input("Note (in the push)")
         if st.form_submit_button("Add alert"):
             try:
                 alerts.add(data_dir, al_ticker, al_level, al_dir, al_note)
                 st.success(f"Alert set: {al_ticker.upper()} {al_dir} {al_level:.2f}.")
             except ValueError as exc:
                 st.error(str(exc))
-    live_alerts = alerts.current(data_dir)
-    if live_alerts.empty:
-        st.caption("No alerts of your own yet.")
-    else:
-        st.dataframe(live_alerts.drop(columns="alert_id"), hide_index=True, width="stretch")
-        labels = {
-            r["alert_id"]: f"{r['ticker']} {r['direction']} {r['level']:.2f}"
-            for r in live_alerts.to_dict("records")
-        }
-        a, b = st.columns([3, 1])
-        drop = a.multiselect("Remove alerts", list(labels), format_func=labels.get, key="al_rm")
-        if b.button("Remove", key="al_rm_btn") and drop:
-            for alert_id in drop:
-                alerts.end(data_dir, alert_id)
-            st.rerun()
+    if not live_alerts.empty and b.button(
+        "Remove selected", key="al_rm_btn", disabled=not drop, width="stretch"
+    ):
+        for alert_id in drop:
+            alerts.end(data_dir, alert_id)
+        st.rerun()
     ny_today = clock.ny_time(CFG.schedule, dt.datetime.now(dt.UTC)).date()
     today_fired = alerts.fired(data_dir, ny_today)
     if today_fired:
-        st.markdown(f"**Fired today** ({len(today_fired)})")
+        ui.section(f"Fired today ({len(today_fired)})")
         cols = ["fired_ts", "kind", "ticker", "level", "price", "note"]
-        st.dataframe(pd.DataFrame(today_fired)[cols], hide_index=True, width="stretch")
+        ui.show_df(pd.DataFrame(today_fired)[cols])
 
-    st.subheader("Scan watchlists")
+    ui.section("Scan watchlists")
     state = dashboard.watchlist_state(data_dir)
     if state.empty:
-        st.info("EP-Watch and BO-Watch fill up as EP and breakout alerts come in.")
-        st.stop()
+        ui.empty_state("EP-Watch and BO-Watch fill up as EP and breakout alerts come in.")
+        end_page()
     show_all = st.toggle("Include triggered / expired")
     for wl in ("bo_watch", "ep_watch"):
         rows = state[state["list"] == wl]
         if not show_all:
             rows = rows[rows["status"] == "active"]
         st.markdown(f"**{'BO-Watch' if wl == 'bo_watch' else 'EP-Watch'}** ({len(rows)})")
-        st.dataframe(
-            rows[["ticker", "status", "added_date", "status_date", "reason"]],
-            hide_index=True,
-            width="stretch",
-        )
+        ui.show_df(rows[["ticker", "status", "added_date", "status_date", "reason"]])
 
 elif page == "Practice":
     practice_page.render(data_dir)
 
 elif page == "Journal":
-    st.header("Journal")
-    st.caption(
+    ui.note(
         "Fills are the record: imported from the broker or logged here by hand (a broker fill "
         "later replaces the matching hand-logged one). Private: stays in the data repo; "
         "use “Save & push” to send it to GitHub."
@@ -1935,7 +2025,7 @@ elif page == "Journal":
             except ValueError as exc:
                 st.warning(str(exc))
     with st.expander("Import broker fills (.csv or .xlsx)"):
-        st.caption(journal_view.CSV_CAPTION)
+        ui.note(journal_view.CSV_CAPTION)
         upload = st.file_uploader(
             "Fills export", type=list(fills_import.EXTENSIONS), key="fills_upload"
         )
@@ -1971,7 +2061,7 @@ elif page == "Journal":
     )
 
     with tab_daily:
-        st.caption(
+        ui.note(
             "A note about the day. Tag the stocks it is about in the tag field, or write "
             "$TICKER in the text; each tagged stock's Chart page shows the note under its notes."
         )
@@ -1996,7 +2086,7 @@ elif page == "Journal":
             data_dir, None if only == "All notes" else only, days_back
         )
         if not len(notes):
-            st.caption("No daily notes here yet.")
+            ui.note("No daily notes here yet.")
         for n in notes.to_dict("records"):
             tags = " · ".join(n["tag_list"])
             st.markdown(f"**{n['note_date']}**" + (f" · {tags}" if tags else ""))
@@ -2014,14 +2104,14 @@ elif page == "Journal":
                 if b.form_submit_button("Delete"):
                     daily_notes.remove(data_dir, n["note_id"])
                     st.rerun()
-        st.caption(
+        ui.note(
             "Saved at once in the data repo (data/journal/daily_notes/) and kept for good: an "
             "edit or delete adds a row. Use “Save & push” to send them to GitHub."
         )
 
     with tab_open:
         if positions.empty:
-            st.info("No open positions. Log an entry under “Log a trade” or import fills.")
+            ui.empty_state("No open positions. Log an entry under “Log a trade” or import fills.")
         else:
             last = recent_bars(str(data_dir), tuple(sorted(positions["ticker"])))
             view = review.open_risk(positions, last, account_usd)
@@ -2035,16 +2125,16 @@ elif page == "Journal":
                 + (f" · {heat.sum():.1f}%" if heat is not None else ""),
             )
             cols = journal_view.OPEN_COLUMNS
-            st.dataframe(
+            ui.show_df(
                 view[[c for c in cols if c in view]].round(2), hide_index=True, width="stretch"
             )
-            st.caption("Valued at the newest daily close in the data repo, not live prices.")
+            ui.note("Valued at the newest daily close in the data repo, not live prices.")
             plan_check, plan_day = positions_view.plan_check(positions, runs, CFG, read_parquet)
             if plan_day is not None:
                 st.markdown(f"**What each plan says** (at the {plan_day} close)")
                 cols = journal_view.PLAN_CHECK_COLUMNS
-                st.dataframe(plan_check[cols].round(2), hide_index=True, width="stretch")
-                st.caption(journal_view.PLAN_CHECK_CAPTION)
+                ui.show_df(plan_check[cols].round(2), hide_index=True, width="stretch")
+                ui.note(journal_view.PLAN_CHECK_CAPTION)
             pick = st.selectbox("Chart", ["—", *view["ticker"]], key="open_chart")
             if pick != "—":
                 row = view[view["ticker"] == pick].iloc[0]
@@ -2055,7 +2145,8 @@ elif page == "Journal":
         a, b, c = st.columns(3)
         day = a.date_input("Date", dt.date.today())
         ticker = b.text_input("Ticker").strip().upper()
-        side = c.radio("Side", ["buy", "sell"], horizontal=True)
+        with c:
+            side = ui.choose("Side", ["buy", "sell"], key="log_side", visible_label=True)
         a, b, c = st.columns(3)
         qty = a.number_input("Shares", min_value=0.0, step=1.0)
         price = b.number_input("Price", min_value=0.0, step=0.01, format="%.4f")
@@ -2087,7 +2178,10 @@ elif page == "Journal":
             a, b, c = st.columns(3)
             pday = a.date_input("For session", today)
             pticker = b.text_input("Ticker", base.get("ticker", "")).strip().upper()
-            direction = c.radio("Direction", ["long", "short"], horizontal=True)
+            with c:
+                direction = ui.choose(
+                    "Direction", ["long", "short"], key="plan_direction", visible_label=True
+                )
             a, b, c = st.columns(3)
             entry = a.number_input(
                 "Entry", min_value=0.0, value=float(base.get("plan_entry") or 0.0), format="%.4f"
@@ -2128,12 +2222,12 @@ elif page == "Journal":
                 except ValueError as exc:
                     st.error(str(exc))
         if suggestion:
-            st.caption(journal_view.suggestion_text(suggestion))
+            ui.note(journal_view.suggestion_text(suggestion))
         if current.empty:
-            st.info("No plans yet.")
+            ui.empty_state("No plans yet.")
         else:
             cols = journal_view.PLAN_COLUMNS
-            st.dataframe(
+            ui.show_df(
                 current[[c for c in cols if c in current]].round(3),
                 hide_index=True,
                 width="stretch",
@@ -2148,7 +2242,7 @@ elif page == "Journal":
 
     with tab_closed:
         if trades.empty:
-            st.info("No closed trades yet.")
+            ui.empty_state("No closed trades yet.")
         else:
             trades = journal_view.closed_trades(data_dir, lambda t: ticker_bars(str(data_dir), t))
             summary = journal_view.closed_stats(trades)
@@ -2163,20 +2257,20 @@ elif page == "Journal":
             by_sure = journal_view.conviction_table(trades)
             if len(by_sure):
                 st.markdown("**By conviction** (1 small · 2 normal · 3 high)")
-                st.dataframe(by_sure.round(2), hide_index=True, width="stretch")
-                st.caption(
+                ui.show_df(by_sure.round(2), hide_index=True, width="stretch")
+                ui.note(
                     "Closed trades you tagged with a conviction. Win % = P&L above 0; R over "
                     "the trades with a stop. A few trades per level say little: facts, not advice."
                 )
             else:
-                st.caption("Tag trades with a conviction (1-3) and a table of them shows here.")
+                ui.note("Tag trades with a conviction (1-3) and a table of them shows here.")
             cols = journal_view.CLOSED_COLUMNS
-            st.dataframe(
+            ui.show_df(
                 trades[[c for c in cols if c in trades]].round(2),
                 hide_index=True,
                 width="stretch",
             )
-            st.caption(journal_view.MFE_CAPTION)
+            ui.note(journal_view.MFE_CAPTION)
             pick = st.selectbox(
                 "Review a trade",
                 trades.to_dict("records"),
@@ -2189,32 +2283,34 @@ elif page == "Journal":
 
     with tab_real:
         if trades.empty:
-            st.info("Your real R per setup shows here once trades are closed.")
+            ui.empty_state("Your real R per setup shows here once trades are closed.")
         else:
             with st.spinner("Fetching the minute study from GitHub…"):
                 best = journal_view.minute_best(data_dir)
             table = review.real_vs_study(trades, study_by_strategy(str(data_dir)), best)
-            st.dataframe(table.round(2), hide_index=True, width="stretch")
-            st.caption(journal_view.REAL_CAPTION)
+            ui.show_df(table.round(2), hide_index=True, width="stretch")
+            ui.note(journal_view.REAL_CAPTION)
 
 elif page == "Market regime":
     st.subheader("Market regime")
     with st.spinner("Fetching regime-10y from GitHub…"):
         folder = research_view.regime(data_dir)
     if folder is None:
-        st.info("The regime study hasn't been published yet (the data repo's regime-10y release).")
-        st.stop()
-    st.caption(research_view.REGIME_CAPTION)
+        ui.empty_state(
+            "The regime study hasn't been published yet (the data repo's regime-10y release)."
+        )
+        end_page()
+    ui.note(research_view.REGIME_CAPTION)
     st.subheader("Market Light per year (% of sessions)")
-    st.dataframe(research_view.light_mix(folder), hide_index=True, width="stretch")
-    source = st.radio(
+    ui.show_df(research_view.light_mix(folder), hide_index=True, width="stretch")
+    source = ui.choose(
         "Trades",
         ["minute", "daily"],
-        horizontal=True,
+        key="rg_source",
         format_func=lambda s: (
             "Minute study (entries and stops)" if s == "minute" else "Daily histories"
         ),
-        key="rg_source",
+        visible_label=True,
     )
     first = research_view.regime_view(folder, source, None, None)
     a, b = st.columns(2)
@@ -2229,12 +2325,11 @@ elif page == "Market regime":
         stop = b.selectbox("Stop", stops, key="rg_stop")
     rv = research_view.regime_view(folder, source, strategy, exit_name, entry, stop)
     st.subheader("Each filter, all years")
-    st.dataframe(rv["filters"], hide_index=True, width="stretch")
+    ui.show_df(rv["filters"], hide_index=True, width="stretch")
     st.subheader("Year by year (mean R)")
-    st.dataframe(rv["by_year"], hide_index=True, width="stretch")
+    ui.show_df(rv["by_year"], hide_index=True, width="stretch")
 
 elif page == "Guide":
-    st.header("Guide")
     guide = Path(__file__).resolve().parents[1] / "docs" / "GUIDE.md"
     text = guide.read_text(encoding="utf-8")
     body = text.splitlines()[1:]  # the file's own title is the page header
@@ -2242,19 +2337,17 @@ elif page == "Guide":
 
 elif page == "System health":
     now = dt.datetime.now(dt.UTC)
-    st.caption(
-        "From your local copy of the data repo: pull first (sidebar) to see the latest runs."
-    )
+    ui.note("From your local copy of the data repo: pull first (sidebar) to see the latest runs.")
     st.subheader("Runs per session")
-    st.dataframe(health.run_grid(data_dir, CFG.schedule, now, 15), hide_index=True, width="stretch")
-    st.caption(
+    ui.show_df(health.run_grid(data_dir, CFG.schedule, now, 15), hide_index=True, width="stretch")
+    ui.note(
         "✅ the scheduled run saved its output · 🟡 only a manual run · ❌ nothing · "
         "⏳ not due yet. pm 07:15-07:55, am 10:10-11:30, mid 11:55-13:30, eod 16:15-23:59 ET."
     )
     st.subheader("Data freshness")
     newest_bars = bars_date(str(data_dir))  # the bars live on GitHub; the file names say when
     extra = {"Daily bars (Massive)": newest_bars} if newest_bars else {}
-    st.dataframe(
+    ui.show_df(
         health.freshness(data_dir, CFG.schedule, now, extra), hide_index=True, width="stretch"
     )
     st.subheader("Failures (newest first)")
@@ -2262,11 +2355,11 @@ elif page == "System health":
     if failures.empty:
         st.success("No failure logs.")
     else:
-        st.dataframe(failures, hide_index=True, width="stretch")
+        ui.show_df(failures, hide_index=True, width="stretch")
     st.subheader("Data cache")
     used = remote_data.size() / 1024**3
     limit = remote_data.LIMIT_BYTES / 1024**3
-    st.caption(
+    ui.note(
         f"The study data lives on GitHub; this PC keeps only what you opened, in "
         f"{remote_data.CACHE} ({used:.2f} of {limit:.0f} GB; least used files go first)."
     )
@@ -2283,12 +2376,12 @@ elif page == "System health":
             st.warning("No answer from GitHub (is the gh CLI installed and signed in?).")
         else:
             st.markdown("**Did each timed job start on time?**")
-            st.dataframe(
+            ui.show_df(
                 timer.check(gh_runs, CFG.schedule.windows_et, now),
                 hide_index=True,
                 width="stretch",
             )
-            st.caption(
+            ui.note(
                 "The cron-job.org timer starts each job at its New York time; GitHub's own "
                 "schedule is the backup. Late: started after 10 minutes. Missed: no start "
                 "before the job's window closed (2 hours for the jobs without one). If every "
@@ -2296,8 +2389,8 @@ elif page == "System health":
                 "token that expired (see the Guide)."
             )
             st.markdown("**Latest runs**")
-            st.dataframe(health.github_runs(gh_runs), hide_index=True, width="stretch")
-            st.caption(
+            ui.show_df(health.github_runs(gh_runs), hide_index=True, width="stretch")
+            ui.note(
                 "minutes_late: how long after its cron GitHub started a scheduled run. A run "
                 "that starts after its window closes exits without scanning."
             )
@@ -2309,7 +2402,7 @@ elif page == "How it was tested":
     st.subheader("The grade rules in config now")
     tested = research_view.how_tested(CFG, data_dir)
     if not tested["setups"]:
-        st.caption("No quality grades in config.")
+        ui.note("No quality grades in config.")
     else:
         for row in tested["setups"]:
             lines = [
@@ -2320,11 +2413,11 @@ elif page == "How it was tested":
                 f"- **Exit:** {row['exit']}",
             ]
             st.markdown("\n".join(lines))
-        st.caption(tested["caption"])
+        ui.note(tested["caption"])
     if tested["write_up"]:
         st.markdown(tested["write_up"])
     else:
-        st.info(
+        ui.empty_state(
             "The write-up with the results lives in the private data repo "
             "(docs/research/how-we-test.md): Pull latest (sidebar) to get it."
         )
@@ -2333,14 +2426,14 @@ elif page == "Study notes":
     # Every write-up in the dashboard, not only on GitHub (Emil, 25 Oct 2026).
     notes = research_view.study_notes(data_dir)
     if not notes:
-        st.info("The write-ups live in the private data repo (docs/research): Pull latest.")
+        ui.empty_state("The write-ups live in the private data repo (docs/research): Pull latest.")
     else:
         pick = st.selectbox("Study", notes, format_func=lambda p: p.stem, key="study_note")
         st.markdown(pick.read_text(encoding="utf-8"))
 
 elif page == "Study grades":
     st.subheader("Study grades")
-    st.caption(
+    ui.note(
         "Each hit of a scan with a scorecard gets the grade its setup earned in the 10-year "
         "grading study (rules confirmed by you on 20 Oct 2026, SPEC §11.17): predicted net R = "
         "the strategy's base + the points of each feature - trading costs in R, and the bands "
@@ -2348,11 +2441,13 @@ elif page == "Study grades":
     )
     sg = research_view.study_grades(CFG, data_dir)
     if sg["period"] is not None or sg["source"]:
-        st.caption(f"History: {sg['period'] or ''}. Report: data repo {sg['source']}.")
+        ui.note(f"History: {sg['period'] or ''}. Report: data repo {sg['source']}.")
     else:
-        st.info("The history behind the grades isn't in your data copy yet: Pull latest (sidebar).")
-    st.dataframe(pd.DataFrame(sg["sizes"]), hide_index=True)
-    st.caption(f"Every other scan: {sg['ungraded']}.")
+        ui.empty_state(
+            "The history behind the grades isn't in your data copy yet: Pull latest (sidebar)."
+        )
+    ui.show_df(pd.DataFrame(sg["sizes"]), hide_index=True)
+    ui.note(f"Every other scan: {sg['ungraded']}.")
     for rule in sg["strategies"]:
         st.subheader(rule["title"])
         st.markdown(
@@ -2361,7 +2456,7 @@ elif page == "Study grades":
             f"- **Grades** (predicted net R): {rule['bands']}; below that C. Base {rule['base']}"
         )
         if rule["history"]:
-            st.dataframe(
+            ui.show_df(
                 pd.DataFrame(rule["history"]),
                 hide_index=True,
                 column_config={
@@ -2373,7 +2468,7 @@ elif page == "Study grades":
                 },
             )
         with st.expander("Points per feature"):
-            st.dataframe(pd.DataFrame(rule["features"]), hide_index=True, width="stretch")
+            ui.show_df(pd.DataFrame(rule["features"]), hide_index=True, width="stretch")
     with st.expander("Trading costs in the score"):
         st.markdown("\n".join(f"- {line}" for line in sg["costs"]))
     if sg["report"]:
@@ -2384,107 +2479,100 @@ elif page == "Live grades":
     st.subheader("Grades live vs study")
     lg = research_view.live_grades(data_dir, lambda t: bars_for(str(data_dir), t, "2y"))
     if lg["compare"] is None:
-        st.info(
+        ui.empty_state(
             "No live A+ / A / B signals yet. Each one shows here as it comes, with what its plan "
             "made, next to the history its grade carried."
         )
     else:
-        st.dataframe(lg["compare"], hide_index=True, width="stretch")
-        st.caption(research_view.LIVE_CAPTION.format(n=live_tracking.MIN_TRADES))
+        ui.show_df(lg["compare"], hide_index=True, width="stretch")
+        ui.note(research_view.LIVE_CAPTION.format(n=live_tracking.MIN_TRADES))
         st.markdown("**Your trades against the plan of the signal they came from**")
         if lg["gaps"].empty:
-            st.caption(
-                "None yet: a closed journal trade bought within two sessions of a live signal."
-            )
+            ui.note("None yet: a closed journal trade bought within two sessions of a live signal.")
         else:
-            st.dataframe(lg["gaps"], hide_index=True, width="stretch")
+            ui.show_df(lg["gaps"], hide_index=True, width="stretch")
         with st.expander("Every live signal"):
-            st.dataframe(lg["signals"], hide_index=True, width="stretch")
+            ui.show_df(lg["signals"], hide_index=True, width="stretch")
     if lg["monthly"]:
-        st.caption(f"Monthly reports: data repo docs/live-tracking/ (newest {lg['monthly']}).")
+        ui.note(f"Monthly reports: data repo docs/live-tracking/ (newest {lg['monthly']}).")
 
 elif page == "Graded signals":
     st.subheader("Signals you graded")
     view = research_view.graded_signals(data_dir)
     if view.empty:
-        st.info(
+        ui.empty_state(
             "Grade signals on the Screener (Stocks from: Scan hits); they show up here with "
             "their outcomes."
         )
-        st.stop()
-    st.dataframe(view, hide_index=True, width="stretch")
+        end_page()
+    ui.show_df(view, hide_index=True, width="stretch")
 
 elif page == "Market":
-    st.header("Market")
     history = market_view.history_of(data_dir)
     if history.empty:
-        st.info("Breadth rows start with the first scheduled EOD run.")
-        st.stop()
+        ui.empty_state("Breadth rows start with the first scheduled EOD run.")
+        end_page()
     tile_list, _ = market_view.tiles(data_dir, history)
-    cols = st.columns(3)
-    for i, (label, value, delta) in enumerate(tile_list):
-        cols[i % 3].metric(
-            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
-        )
+    ui.market_tiles(tile_list)
     with st.expander("The IBD market state (tracked, not a rule)", expanded=False):
         recent = market_view.ibd_recent(data_dir)
         if recent.empty:
-            st.caption("Needs SPY's daily bars (data/market/spy_daily_seed.parquet).")
+            ui.note("Needs SPY's daily bars (data/market/spy_daily_seed.parquet).")
         else:
-            st.dataframe(recent, hide_index=True, width="stretch")
-        st.caption(market_view.IBD_CAPTION)
+            ui.show_df(recent, hide_index=True, width="stretch")
+        ui.note(market_view.IBD_CAPTION)
     hv = market_view.heat_view(data_dir, history)
     if hv:
         labels = {b["band"]: b["label"] for b in hv["bands"]}
         st.subheader(f"{hv['now'].capitalize()} market: scan count {hv['count']} "
                      f"({labels[hv['now']]})")  # fmt: skip
-        pick = st.radio(
+        pick = ui.choose(
             "Setups at this heat",
             list(labels),
-            index=list(labels).index(hv["now"]),
-            horizontal=True,
-            format_func=lambda b: f"{b} ({labels[b]})",
             key="heat_band",
+            default=hv["now"],
+            format_func=lambda b: f"{b} ({labels[b]})",
+            visible_label=True,
         )
         hv = market_view.heat_view(data_dir, history, pick)
-        st.dataframe(hv["table"], hide_index=True, width="stretch")
-        st.caption(hv["caption"])
+        ui.show_df(hv["table"], hide_index=True, width="stretch")
+        ui.note(hv["caption"])
     market_overview()
     st.subheader("Breadth and the Market Light")
-    st.dataframe(market_view.breadth(history), hide_index=True, width="stretch")
+    ui.show_df(market_view.breadth(history), hide_index=True, width="stretch")
     st.line_chart(history.set_index("session_date")[["ratio_5d", "ratio_10d"]], height=220)
 
 elif page == "Stats":
     st.subheader("Outcome statistics")
     minimum = st.slider("Minimum signals per group", 1, 50, CFG.stats["min_signals"])
     table, total = research_view.outcome_stats(data_dir, minimum)
-    st.caption(f"{total} outcomes so far")
+    ui.note(f"{total} outcomes so far")
     if table.empty:
-        st.info("Not enough outcomes yet.")
+        ui.empty_state("Not enough outcomes yet.")
     else:
-        st.dataframe(table, hide_index=True, width="stretch")
+        ui.show_df(table, hide_index=True, width="stretch")
 
 elif page == "History":
     st.subheader("History")
-    period = st.radio(
+    period = ui.choose(
         "Period",
         ["2y", "10y"],
-        horizontal=True,
-        format_func=lambda p: "2 years (Massive)" if p == "2y" else "10 years (Alpaca, since 2016)",
-        index=1,
         key="hist_period",
+        default="10y",
+        format_func=lambda p: "2 years (Massive)" if p == "2y" else "10 years (Alpaca, since 2016)",
+        visible_label=True,
     )
     if period == "10y":
         from_github("history-10y", "*.parquet")
     hist = history_cached(str(data_dir), period)
     if hist.empty:
-        st.info(
+        ui.empty_state(
             "No history here yet. 10 years: the files come from GitHub (is the `gh` CLI signed "
             "in, and is there a connection?). 2 years: build it with "
             "`scripts/strategy_history.py` and `scripts/ep_history.py`."
         )
-        st.stop()
-    st.caption(research_view.HISTORY_CAPTION)
+        end_page()
+    ui.note(research_view.HISTORY_CAPTION)
     show_history_graded()
     names = sorted(hist["strategy"].unique())
     a, b, c = st.columns(3)
@@ -2510,13 +2598,13 @@ elif page == "History":
     group = st.selectbox("Split by", splits, key="hist_split")
     st.subheader(f"{len(view):,} events")
     table, compared = history_tables(str(data_dir), filters, group)
-    st.dataframe(table.round(2), hide_index=True, width="stretch")
-    st.caption(research_view.SUMMARY_CAPTION)
+    ui.show_df(table.round(2), hide_index=True, width="stretch")
+    ui.note(research_view.SUMMARY_CAPTION)
     st.markdown("**Exits compared** (mean R with the stop; Qullamaggie and Stockbee management)")
-    st.dataframe(compared.round(2), hide_index=True, width="stretch")
+    ui.show_df(compared.round(2), hide_index=True, width="stretch")
     one = st.selectbox("Events of", picked or names, key="hist_one")
     events = research_view.history_events(view, one)
-    st.dataframe(events, hide_index=True, width="stretch", height=300)
+    ui.show_df(events, hide_index=True, width="stretch", height=300)
     labels = [f"{r.session_date} · {r.ticker}" for r in events.head(500).itertuples()]
     pick = st.selectbox("Chart", ["—", *labels], key="hist_chart")
     if pick != "—":
@@ -2526,8 +2614,8 @@ elif page == "History":
         ].iloc[0]
         bars = bars_for(str(data_dir), ticker, period)  # 10 years: Alpaca's bars
         if bars.empty or row["session_date"] < bars["session_date"].min():
-            st.caption("No daily bars for that day on this PC (10 years: download them on Chart).")
-            st.stop()
+            ui.note("No daily bars for that day on this PC (10 years: download them on Chart).")
+            end_page()
         side = "short" if row.get("side") == "short" else "long"
         marker = pd.DataFrame(
             [{"session_date": row["session_date"], "label_text": one, "side": side}]
@@ -2545,24 +2633,26 @@ elif page == "History":
 
 elif page == "Entries & exits":
     st.subheader("Entries & exits")
-    ie_period = st.radio(
+    ie_period = ui.choose(
         "Period",
         ["2y", "10y"],
-        horizontal=True,
-        format_func=lambda p: "2 years (all trades)" if p == "2y" else "10 years (summaries)",
-        index=1,
         key="ie_period",
+        default="10y",
+        format_func=lambda p: "2 years (all trades)" if p == "2y" else "10 years (summaries)",
+        visible_label=True,
     )
     if ie_period == "10y":
         with st.spinner("Fetching intraday-10y from GitHub…"):
             found_10y = research_view.entries_10y(data_dir)
         if found_10y is None:
-            st.info("The 10-year minute study hasn't been published yet (release intraday-10y).")
-            st.stop()
+            ui.empty_state(
+                "The 10-year minute study hasn't been published yet (release intraday-10y)."
+            )
+            end_page()
         overall, by_year = found_10y
         min_trades = st.slider("Minimum trades", 50, 2000, 200, step=50, key="ie10_min")
         st.subheader("Best entry, stop and exit per strategy, 10 years")
-        st.dataframe(
+        ui.show_df(
             research_view.best(overall, min_trades).round(2), hide_index=True, width="stretch"
         )
         st.subheader("By year")
@@ -2575,18 +2665,18 @@ elif page == "Entries & exits":
         names = sorted(overall["strategy"].unique())
         one = st.selectbox("Strategy", names, key="ie10_strategy")
         table = research_view.by_year_table(by_year, one, exit_name)
-        st.dataframe(table.round(2), hide_index=True, width="stretch")
-        st.caption(
+        ui.show_df(table.round(2), hide_index=True, width="stretch")
+        ui.note(
             f"Mean R per year for exit {exit_name} (groups of 20+ trades). A setup that only "
             "works in some years shows it here. Facts, not advice."
         )
-        st.stop()
+        end_page()
     with st.spinner("Fetching intraday-2y from GitHub…"):
         splits = research_view.entries_2y_splits(data_dir)
     if not splits:
-        st.info("No minute study published yet (the data repo's intraday-2y release).")
-        st.stop()
-    st.caption(research_view.ENTRIES_CAPTION)
+        ui.empty_state("No minute study published yet (the data repo's intraday-2y release).")
+        end_page()
+    ui.note(research_view.ENTRIES_CAPTION)
     group = st.selectbox("Split by", splits, key="ie_split")
     table = research_view.entries_2y(data_dir, group)
     names = sorted(table["strategy"].unique())
@@ -2596,14 +2686,14 @@ elif page == "Entries & exits":
     st.subheader("Best entry, stop and exit per strategy")
     best_table = research_view.best(table, min_trades) if group == "none" else None
     if best_table is not None:
-        st.dataframe(best_table.round(2), hide_index=True, width="stretch")
+        ui.show_df(best_table.round(2), hide_index=True, width="stretch")
     else:
-        st.caption("Shown for “none” (no split); the table below has every split.")
+        ui.note("Shown for “none” (no split); the table below has every split.")
     exits_all = research_view.exits_of(table)
     default = [e for e in research_view.DEFAULT_EXITS if e in exits_all]
     shown = st.multiselect("Exits in the table", exits_all, default=default, key="ie_exits")
     st.subheader("Every entry and stop")
-    st.dataframe(
+    ui.show_df(
         research_view.entries_table(table, group, shown, min_trades).round(2),
         hide_index=True,
         width="stretch",
@@ -2612,13 +2702,13 @@ elif page == "Entries & exits":
     if one != "—":
         with st.spinner("Fetching the trades from GitHub…"):
             rows = research_view.strategy_trades(data_dir, one)
-        st.dataframe(rows, hide_index=True, width="stretch")
+        ui.show_df(rows, hide_index=True, width="stretch")
 
 elif page == "Validation":
     st.subheader("Validation against TradingView")
     if not runs:
-        st.info("No runs yet.")
-        st.stop()
+        ui.empty_state("No runs yet.")
+        end_page()
     with_universe = [r for r in runs if r.universe.exists()]  # intraday runs keep no snapshot
     run = st.selectbox("Run", with_universe, format_func=lambda r: r.label)
     scan = st.selectbox("Scan", ["ep_day", "qm_gainers"], format_func=report.SCAN_LABELS.get)
@@ -2628,7 +2718,7 @@ elif page == "Validation":
         result = validation.compare(
             candidates_of(run), read_parquet(str(run.universe)), screen, CFG.scans[scan]
         )
-        st.dataframe(result, hide_index=True, width="stretch")
+        ui.show_df(result, hide_index=True, width="stretch")
         text = validation.to_markdown(result, f"{scan} vs TradingView · {run.label}")
         if st.button("Append to docs/validation.md"):
             target = data_dir / "docs" / "validation.md"
@@ -2637,7 +2727,4 @@ elif page == "Validation":
                 fh.write("\n" + text)
             st.success("Appended. Use “Save & push” to send it to GitHub.")
 
-st.caption(
-    f"{len(runs)} runs · {dt.date.today().isoformat()} · session "
-    f"{clock.session_date(CFG.schedule, 'eod', dt.datetime.now(dt.UTC))}"
-)
+end_page(stop=False)

@@ -54,14 +54,24 @@ def test_every_page_and_section_renders(app):
     for page in _pages(app):
         seen.append(page)
         assert not app.exception, (page, [e.value for e in app.exception])
-        assert app.header, page
+        assert not app.header, page  # the tab shows the name: no H1
         key = SECTION_KEYS.get(page)
         if key is None:
             continue
-        sections = list(app.radio(key=key).options)
+        picker = (
+            app.selectbox(key=key)
+            if any(sb.key == key for sb in app.selectbox)
+            else app.button_group(key=key)
+        )
+        sections = list(picker.options)
         assert len(sections) > 1, page
         for section in sections:
-            app.radio(key=key).set_value(section).run()
+            picker = (
+                app.selectbox(key=key)
+                if any(sb.key == key for sb in app.selectbox)
+                else app.button_group(key=key)
+            )
+            picker.set_value(section).run()
             assert not app.exception, (page, section, [e.value for e in app.exception])
     assert {"Today", "Chart", "Journal", "Research", "Guide"} <= set(seen)
 

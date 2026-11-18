@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import pandas as pd
 import streamlit as st
+import ui
 
 from trading_os import board_data, dashboard, notify, positions_view, report, ticket
 
@@ -196,18 +197,18 @@ def card(row, n: int, cfg, data_dir, account, usd_rate, open_chart, inline: bool
         if facts:
             st.markdown("\n".join(f"- {f}" for f in facts))
         if inline:
-            st.markdown("**🎫 Saxo ticket**")
+            st.markdown("**Saxo ticket**")
             ticket_view(row, f"focus_{n}", cfg, data_dir, account, usd_rate)
             return
         a, b = st.columns(2)
         a.button(
-            "📈 Chart",
+            "Chart",
             key=f"board_{n}_chart",
             on_click=open_chart,
             args=(row["ticker"],),
             width="stretch",
         )
-        with b.popover("🎫 Saxo ticket", width="stretch"):
+        with b.popover("Saxo ticket", width="stretch"):
             ticket_view(row, f"board_{n}", cfg, data_dir, account, usd_rate)
 
 
@@ -293,7 +294,7 @@ def notes_and_alerts(row, data_dir) -> None:
             "Alert price", min_value=0.0, value=default, step=0.01, format="%.2f", key=f"al_lvl_{t}"
         )
         side = b.selectbox("When", alerts.DIRECTIONS, key=f"al_dir_{t}")
-        if st.form_submit_button("🔔 Add price alert") and level > 0:
+        if st.form_submit_button("Add price alert") and level > 0:
             alerts.add(data_dir, t, float(level), side, "from the focus view")
             st.toast(f"Alert: {t} {side} {level:.2f} (pushed to your phone when hit)")
     own = alerts.current(data_dir)
@@ -304,6 +305,11 @@ def notes_and_alerts(row, data_dir) -> None:
 
 def candidate_list(rows: list[dict], i: int) -> None:
     """The queue, TradingView watchlist style: click to jump."""
+    with st.container(key="today_queue"):
+        _candidate_buttons(rows, i)
+
+
+def _candidate_buttons(rows: list[dict], i: int) -> None:
     for k, r in enumerate(rows):
         label = report.SCAN_LABELS.get(r["scan"], r["scan"])
         chg = r.get("chg_pct")
@@ -366,13 +372,18 @@ def hotkeys(row, data_dir, n_rows: int = 1) -> None:
 
 # The board on a phone (Emil, 28 Oct 2026): ◀ count ▶ stays one row (Streamlit stacks columns
 # under 640 px), the toolbar scrolls sideways instead of wrapping, and the hotkey buttons
-# (keyboard only) are hidden; the ticket, flags and notes stay in the tabs.
+# (keyboard only) are hidden except Prev / Next, which stay as big thumb buttons; the ticket,
+# flags and notes stay in the tabs.
 BOARD_CSS = """<style>
 .st-key-board_nav [data-testid="stHorizontalBlock"]{flex-wrap:nowrap;gap:.5rem}
 .st-key-board_nav [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
 .st-key-board_nav [data-testid="stColumn"]:nth-child(2){flex:2 1 0!important}
 @media (max-width:640px){
-.st-key-board_hotkeys{display:none}
+.st-key-board_hotkeys [data-testid="stHorizontalBlock"]{flex-direction:row;
+  flex-wrap:nowrap;gap:.5rem}
+.st-key-board_hotkeys [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+.st-key-board_hotkeys [data-testid="stColumn"]:nth-child(n+3){display:none}
+.st-key-board_hotkeys button{min-height:3.2rem!important;font-size:1rem}
 .st-key-board_tools [data-testid="stHorizontalBlock"]{flex-wrap:nowrap;gap:.5rem}
 .st-key-board_tools [data-testid="stColumn"]{min-width:0!important;width:auto!important}
 .st-key-board_tools [data-testid="stColumn"]:last-child{overflow-x:auto;flex:1 1 0!important}
@@ -442,18 +453,24 @@ SECTIONS = [("act", "TO ACT ON"), ("own", "YOUR POSITIONS"), ("watch", "WATCHING
 EMPTY = {
     "act": "No A+, A or B setup today.",
     "own": "No open positions.",
-    "watch": "Watch a stock (F) to see it here.",
+    "watch": "Watch a stock to see it here.",
 }
 
 
 def queue(rows: list[dict], i: int, c_count: int) -> None:
     """The left column: TO ACT ON, YOUR POSITIONS, WATCHING (Emil, 4 Nov 2026 redesign), each
     stock one click; the C setups one click further."""
+    with st.container(key="today_queue"):
+        _queue_items(rows, i, c_count)
+
+
+def _queue_items(rows: list[dict], i: int, c_count: int) -> None:
     for key, title in SECTIONS:
         members = [(k, r) for k, r in enumerate(rows) if r.get("_section", "act") == key]
         st.caption(f"**{title}** · {len(members)}")
         if not members:
-            st.caption(EMPTY[key])
+            with st.container(key=f"q_empty_{key}"):
+                st.caption(EMPTY[key])
         for k, r in members:
             chg = r.get("chg_pct")
             move = f" · {chg:+.1f}%" if chg is not None and chg == chg else ""
@@ -516,9 +533,17 @@ TODAY_CSS = """<style>
 .st-key-today_cols [data-testid="stMetricValue"]{font-size:1.35rem}
 @media (max-width:640px){
 .st-key-today_cols>div>[data-testid="stHorizontalBlock"]{flex-direction:column}
-.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1){order:3}
-.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2){order:1}
-.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3){order:2}
+.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1){order:1}
+.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2){order:2}
+.st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3){order:3}
+.st-key-today_queue{flex-direction:row!important;flex-wrap:nowrap;overflow-x:auto;gap:.4rem!important;
+  align-items:center;scrollbar-width:none;padding-bottom:.2rem}
+.st-key-today_queue::-webkit-scrollbar{display:none}
+.st-key-today_queue>div{flex:0 0 auto!important;width:auto!important;min-width:0}
+.st-key-today_queue [data-testid="stButton"]{width:auto!important}
+.st-key-today_queue button{width:auto!important;white-space:nowrap;min-height:2.4rem}
+.st-key-today_queue [data-testid="stCaptionContainer"]{white-space:nowrap}
+[class*="st-key-q_empty_"]{display:none}
 .st-key-today_cols [data-testid="stColumn"] [data-testid="stHorizontalBlock"]{flex-direction:row;
   flex-wrap:nowrap}
 .st-key-today_cols [data-testid="stColumn"] [data-testid="stColumn"]{min-width:0!important}
@@ -574,8 +599,7 @@ def controls(data_dir) -> None:
             st.session_state["board_scope"] = pinned
     if st.session_state.get("board_scope") not in scopes:
         st.session_state["board_scope"] = TODAY
-    title, view, more = st.columns([3, 2, 2], vertical_alignment="center")
-    title.header("Today")
+    view, more = st.columns([2, 3], vertical_alignment="center")
     view.segmented_control(
         "View",
         ["Focus", "Grid", "List"],
@@ -636,7 +660,7 @@ def show(
             unsafe_allow_html=True,
         )
     if hits.empty and scope != TODAY:
-        st.info(
+        ui.empty_state(
             "This watchlist is empty: flag a stock here (F, or 🟩 under Notes & alerts) "
             "or add to it on the Watchlists page (also from a TradingView export)."
             if scope.startswith(LIST_MARK)
@@ -652,7 +676,7 @@ def show(
     st.markdown(BOARD_CSS, unsafe_allow_html=True)
     if mode == "Grid":
         if not rows:
-            st.info("Nothing in this list.")
+            ui.empty_state("Nothing in this list.")
             return
         pages = (len(rows) + 3) // 4
         page_i = st.session_state.get("board_i", 0) % pages
@@ -734,7 +758,7 @@ def show(
     with right:
         plan_card(row, page_i, cfg, data_dir, account, usd_rate, open_chart)
         a, b = st.columns(2)
-        if a.button("☆ Watch (F)", key=f"watch_{row['ticker']}", width="stretch"):
+        if a.button("★ Watch", key=f"watch_{row['ticker']}", width="stretch", help="Watch (F)"):
             from trading_os import my_watchlists
 
             my_watchlists.add(data_dir, FLAGS["🟩"], [str(row["ticker"])])
@@ -755,14 +779,9 @@ def market_tiles(row: dict | None, ibd_info: dict | None, heat_text: str | None)
     """The market as tiles (Emil, 26 Oct 2026: tiles, not bullet text): the QQQ light, the heat,
     the IBD state, SPY, QQQ and VIX. The full lines stay in 'Market details' below."""
     if not row:
-        st.info("No market row yet.")
+        ui.empty_state("No market row yet.")
         return
-    tiles = _tiles(row, ibd_info, heat_text)
-    cols = st.columns(3)
-    for i, (label, value, delta) in enumerate(tiles):
-        cols[i % 3].metric(
-            label, value, delta, delta_color="off" if label == "IBD market" else "normal"
-        )
+    ui.market_tiles(_tiles(row, ibd_info, heat_text))
 
 
 def market_strip(row: dict | None, ibd_info: dict | None, heat_text: str | None) -> None:
@@ -820,4 +839,4 @@ def position_cards(
             facts = [f"**{f}**" if f.startswith("⚠️") else f for f in c["facts"]]
             if facts:
                 st.markdown("\n".join(f"- {f}" for f in facts))
-            st.button("📈 Chart", key=f"pos_{n}_chart", on_click=open_chart, args=(t,))
+            st.button("Chart", key=f"pos_{n}_chart", on_click=open_chart, args=(t,))

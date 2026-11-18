@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import ui
 from chart_draw import chart_draw
 
 from trading_os import interactive_chart as ichart
@@ -295,13 +296,13 @@ def stats_panel(signals: pd.DataFrame, answers: pd.DataFrame, pool: str) -> None
         }
         for c in practice.CHOICES
     ]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    ui.show_df(pd.DataFrame(rows), hide_index=True, width="stretch")
     a, b = st.columns(2)
     a.metric("Your picks, total", _r(s["picks_r"], 1), _r(s["picks_r_per_signal"]) + " / signal")
     b.metric("Take every signal", _r(s["equal_r"], 1), _r(s["equal_r_per_signal"]) + " / signal")
     st.caption("Picks: net R times your size (skip 0, 1 = 0.5x, 2 = 1x, 3 = 1.5x).")
     st.markdown("**Blind vs shown**")
-    st.dataframe(_split_table(s["by_shown"]), hide_index=True, width="stretch")
+    ui.show_df(_split_table(s["by_shown"]), hide_index=True, width="stretch")
     big, los = s["big"], s["losers"]
     st.write(
         f"Trades of 5R or more: {big['total']} shown, you took {big['taken']} and skipped "
@@ -332,7 +333,7 @@ def answered_list(data_dir, signals, answers, picked) -> None:
             "Note": joined["signal_id"].map(notes).fillna(""),
         }
     )
-    st.dataframe(table, hide_index=True, width="stretch")
+    ui.show_df(table, hide_index=True, width="stretch")
     label = {
         r.signal_id: f"{r.ticker} · {r.setup_name} · {r.answered_at:%Y-%m-%d}"
         for r in joined.itertuples()
@@ -358,14 +359,16 @@ def answered_list(data_dir, signals, answers, picked) -> None:
 
 
 def render(data_dir: Path) -> None:
-    st.header("Practice")
-    st.caption(
+    ui.page_header(
+        "Practice",
         "A past signal: the chart up to the entry and the facts known then. Pick a size "
-        "(Skip, 1, 2 or 3), see how it went, and check whether your picks beat taking all."
+        "(Skip, 1, 2 or 3), see how it went, and check whether your picks beat taking all.",
     )
     st.markdown(CSS, unsafe_allow_html=True)
     if not practice.available(data_dir):
-        st.info("No practice data yet: it is exported to the data repo (data/research/practice).")
+        ui.empty_state(
+            "No practice data yet.", "It is exported to the data repo (data/research/practice)."
+        )
         return
     signals = _signals(str(data_dir))
     pool = st.segmented_control(
