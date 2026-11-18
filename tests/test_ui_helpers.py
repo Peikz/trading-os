@@ -86,4 +86,7 @@ def test_phone_figure_has_few_horizontal_month_ticks_and_no_mode_bar():
     fig = ichart.for_phone(ichart.daily_figure(bars, title="t"))
     assert len(fig.layout.xaxis.tickvals) <= 5 and fig.layout.xaxis.tickangle == 0
     assert fig.layout.legend.orientation == "h"
-    assert ichart.phone_config({"scrollZoom": True})["displayModeBar"] is False
+    assert ichart.phone_config({"scrollZoom": True})["modeBarButtons"] == [
+        ["drawline", "eraseshape", "resetScale2d"]
+    ]
+    assert not fig.layout.title.text

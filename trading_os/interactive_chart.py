@@ -79,16 +79,18 @@ def for_phone(fig: go.Figure) -> go.Figure:
         ]
         fig.update_xaxes(tickmode="array", tickvals=vals, ticktext=text, tickangle=0)
     fig.update_layout(
-        margin={"l": 4, "r": 4, "t": 36, "b": 64},
+        margin={"l": 4, "r": 4, "t": 30, "b": 64},
         legend={"orientation": "h", "x": 0, "xanchor": "left", "y": -0.09, "yanchor": "top"},
-        title={"font": {"size": 14}},
+        title={"text": ""},  # the ticker is in the picker; nothing under the mode bar
     )
     return fig
 
 
 def phone_config(config: Mapping[str, object]) -> dict[str, object]:
-    """The chart's config for a phone: no mode bar (it covered the title)."""
-    return {**config, "displayModeBar": False}
+    """The chart's config for a phone: a minimal mode bar (draw a line, erase it, reset the
+    axes), so drawing still works and the bar stays small."""
+    keep = ["drawline", "eraseshape", "resetScale2d"]
+    return {**config, "modeBarButtons": [keep], "displaylogo": False}
 
 
 def weekly(bars: pd.DataFrame, freq: str = "W-FRI") -> pd.DataFrame:
