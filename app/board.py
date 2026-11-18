@@ -9,6 +9,7 @@ sent to Saxo.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 
 import pandas as pd
@@ -161,15 +162,22 @@ def order_block(row, key: str, cfg, data_dir, account, usd_rate) -> None:
         if not board_data.risk_mult(row, cfg)[1]:
             st.caption(board_data.UNGRADED_NOTE)
         if st.session_state.get("fc_ticket", True):
-            st.caption("Saxo order · copy each value")
-            pairs = t.lines()
-            for left, right in zip(pairs[0::2], pairs[1::2] + [None], strict=False):
-                c1, c2 = st.columns(2)
-                for col, pair in ((c1, left), (c2, right)):
-                    if pair:
-                        col.caption(pair[0])
-                        col.code(pair[1], language=None)
-            st.caption(board_data.ticket_caption(t, usd_rate, account.currency))
+            # On a phone the copy fields sit in one collapsed "Saxo order" expander
+            holder = (
+                st.expander("Saxo order", key=f"{key}_saxo")
+                if ui.is_phone()
+                else contextlib.nullcontext()
+            )
+            with holder:
+                st.caption("Saxo order · copy each value")
+                pairs = t.lines()
+                for left, right in zip(pairs[0::2], pairs[1::2] + [None], strict=False):
+                    c1, c2 = st.columns(2)
+                    for col, pair in ((c1, left), (c2, right)):
+                        if pair:
+                            col.caption(pair[0])
+                            col.code(pair[1], language=None)
+                st.caption(board_data.ticket_caption(t, usd_rate, account.currency))
         placed_help = "Saves it as a plan, so your fill matches it in the Journal"
         if st.button("I placed it in Saxo", key=f"{key}_placed", width="stretch", help=placed_help):
             try:
@@ -307,6 +315,7 @@ def candidate_list(rows: list[dict], i: int) -> None:
     """The queue, TradingView watchlist style: click to jump."""
     with st.container(key="today_queue"):
         _candidate_buttons(rows, i)
+        more_button(len(rows))
 
 
 def _candidate_buttons(rows: list[dict], i: int) -> None:
@@ -375,6 +384,7 @@ def hotkeys(row, data_dir, n_rows: int = 1) -> None:
 # (keyboard only) are hidden except Prev / Next, which stay as big thumb buttons; the ticket,
 # flags and notes stay in the tabs.
 BOARD_CSS = """<style>
+.st-key-q_more_btn{display:none}
 .st-key-board_nav [data-testid="stHorizontalBlock"]{flex-wrap:nowrap;gap:.5rem}
 .st-key-board_nav [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
 .st-key-board_nav [data-testid="stColumn"]:nth-child(2){flex:2 1 0!important}
@@ -449,6 +459,33 @@ def _scope(name: str) -> None:
     st.session_state[FULL_RERUN] = True
 
 
+PHONE_CHIPS = 6  # on a phone the list shows this many chips; "+N more" opens the rest
+
+
+def _toggle_more() -> None:
+    st.session_state["q_more"] = not st.session_state.get("q_more", False)
+
+
+def more_css(n_rows: int) -> str:
+    """Phone only: hide the chips past the sixth until "+N more" is pressed (CSS, so the
+    desktop list is whole)."""
+    if n_rows <= PHONE_CHIPS or st.session_state.get("q_more"):
+        return ""
+    hide = ",".join(f".st-key-q_{k}" for k in range(PHONE_CHIPS, n_rows))
+    return f"<style>@media (max-width:640px){{{hide}{{display:none!important}}}}</style>"
+
+
+def more_button(n_rows: int) -> None:
+    if n_rows > PHONE_CHIPS:
+        open_ = st.session_state.get("q_more")
+        st.button(
+            "Show fewer" if open_ else f"+{n_rows - PHONE_CHIPS} more",
+            key="q_more_btn",
+            type="tertiary",
+            on_click=_toggle_more,
+        )
+
+
 SECTIONS = [("act", "TO ACT ON"), ("own", "YOUR POSITIONS"), ("watch", "WATCHING")]
 EMPTY = {
     "act": "No A+, A or B setup today.",
@@ -462,6 +499,7 @@ def queue(rows: list[dict], i: int, c_count: int) -> None:
     stock one click; the C setups one click further."""
     with st.container(key="today_queue"):
         _queue_items(rows, i, c_count)
+        more_button(len(rows))
 
 
 def _queue_items(rows: list[dict], i: int, c_count: int) -> None:
@@ -536,13 +574,14 @@ TODAY_CSS = """<style>
 .st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1){order:1}
 .st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2){order:2}
 .st-key-today_cols>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3){order:3}
-.st-key-today_queue{flex-direction:row!important;flex-wrap:nowrap;overflow-x:auto;gap:.4rem!important;
-  align-items:center;scrollbar-width:none;padding-bottom:.2rem}
-.st-key-today_queue::-webkit-scrollbar{display:none}
-.st-key-today_queue>div{flex:0 0 auto!important;width:auto!important;min-width:0}
-.st-key-today_queue [data-testid="stButton"]{width:auto!important}
-.st-key-today_queue button{width:auto!important;white-space:nowrap;min-height:2.4rem}
-.st-key-today_queue [data-testid="stCaptionContainer"]{white-space:nowrap}
+.st-key-today_queue{display:grid!important;grid-template-columns:1fr 1fr;gap:.4rem!important}
+.st-key-today_queue>div{width:auto!important;min-width:0}
+.st-key-today_queue>div:has([data-testid="stCaptionContainer"]),.st-key-q_more_btn,.st-key-q_c{
+  grid-column:1/-1}
+.st-key-today_queue [data-testid="stButton"]{width:100%!important}
+.st-key-today_queue button{width:100%!important;min-height:2.4rem;padding:.25rem .4rem}
+.st-key-today_queue button p{white-space:normal;line-height:1.2;font-size:.85rem}
+.st-key-q_more_btn{display:block!important}
 [class*="st-key-q_empty_"]{display:none}
 .st-key-today_cols [data-testid="stColumn"] [data-testid="stHorizontalBlock"]{flex-direction:row;
   flex-wrap:nowrap}
@@ -599,7 +638,7 @@ def controls(data_dir) -> None:
             st.session_state["board_scope"] = pinned
     if st.session_state.get("board_scope") not in scopes:
         st.session_state["board_scope"] = TODAY
-    view, more = st.columns([2, 3], vertical_alignment="center")
+    view, more = st.container(key="board_controls").columns([2, 3], vertical_alignment="center")
     view.segmented_control(
         "View",
         ["Focus", "Grid", "List"],
@@ -719,7 +758,7 @@ def show(
         return
 
     # Focus: queue · chart · plan
-    st.markdown(TODAY_CSS, unsafe_allow_html=True)
+    st.markdown(TODAY_CSS + more_css(len(rows)), unsafe_allow_html=True)
     n_rows = max(len(rows), 1)
     page_i = st.session_state.get("board_i", 0) % n_rows
     has_act = bool((sections == "act").any()) if scope == TODAY else bool(rows)

@@ -191,6 +191,11 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"]{overflow-x:h
   flex:1 1 0!important}
 .st-key-topbar>div>[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5){
   flex:0 0 3.4rem!important}
+.st-key-board_controls>div>[data-testid="stHorizontalBlock"]{flex-wrap:nowrap;flex-direction:row;
+  gap:.4rem}
+.st-key-board_controls [data-testid="stColumn"]{min-width:0!important;width:auto!important}
+.st-key-board_controls [data-testid="stColumn"]:nth-child(1){flex:0 0 auto!important}
+.st-key-board_controls [data-testid="stColumn"]:nth-child(2){flex:1 1 0!important}
 .st-key-subnav{overflow-x:auto;max-width:100%;scrollbar-width:none}
 .st-key-subnav::-webkit-scrollbar{display:none}
 .st-key-subnav div[role="group"]{flex-wrap:nowrap}
@@ -450,7 +455,7 @@ def show_history_graded() -> None:
         if summary.empty:
             ui.empty_state("Not built yet (data repo release grading-10y).")
             return
-        st.caption(research_view.GRADED_CAPTION)
+        ui.note(research_view.GRADED_CAPTION)
         show = summary.rename(columns=research_view.GRADED_RENAME)
         ui.show_df(show.round(3), hide_index=True, width="stretch")
         pick = st.selectbox(
@@ -458,7 +463,7 @@ def show_history_graded() -> None:
         )
         rows = by_grade[by_grade["strategy"] == pick].drop(columns=["strategy"])
         ui.show_df(rows.round(3), hide_index=True, width="stretch")
-        st.caption(
+        ui.note(
             "A+/A/B/C: predicted net R of at least +0.5 / +0.3 / +0.1, else C. daily_mean_r "
             "weighs every signal day the same: what an account with a few slots could reach."
         )
@@ -638,7 +643,7 @@ def show_trade_chart(trade: dict, open_trade: bool = False) -> None:
     """Interactive daily chart around one trade: the entry and exit marked, the stop line."""
     bars = ticker_bars(str(data_dir), trade["ticker"])
     if bars.empty:
-        st.caption("No daily bars for this ticker in the data repo.")
+        ui.note("No daily bars for this ticker in the data repo.")
         return
     end = trade.get("exit_date") if not open_trade else None
     end = end if end is not None and end == end else bars["session_date"].max()
@@ -767,7 +772,7 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
         st.error(f"Alpaca didn't answer ({type(exc).__name__}).")
         return
     if minutes.empty:
-        st.caption(f"No trades for {ticker} on {day} in Alpaca's IEX feed yet.")
+        ui.note(f"No trades for {ticker} on {day} in Alpaca's IEX feed yet.")
         return
     fig = ichart.intraday_figure(
         minutes,
@@ -779,7 +784,7 @@ def live_intraday(ticker: str, levels: dict, daily: pd.DataFrame) -> None:
     with contextlib.suppress(Exception):  # the 10:30 bar may not exist yet
         fig.add_vline(x="10:30", line_dash="dot", line_width=1, line_color="#9e9e9e")
     st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_live", width="stretch")
-    st.caption(
+    ui.note(
         "Alpaca's IEX feed: real-time prices, but its volume is a small part of the market's. "
         "Dotted line: 10:30, the EP entry time. Lines: the pivot, stops and plan entry for this "
         "stock. Refreshes every minute."
@@ -819,7 +824,7 @@ def market_overview() -> None:
         cmap="RdYlGn", subset=[f"{period} %", "1M vs SPY", "1W vs SPY"]
     )
     ui.show_df(styled, hide_index=True, width="stretch")
-    st.caption(market_view.SECTOR_CAPTION.format(source=source))
+    ui.note(market_view.SECTOR_CAPTION.format(source=source))
     fig = px.scatter(
         view, x="vs_spy_1m", y="vs_spy_1w", text="ticker", color="group",
         hover_name="name", labels={"vs_spy_1m": "1 month vs SPY (%)",
@@ -847,7 +852,7 @@ def market_overview() -> None:
         a.dataframe(found["top"], hide_index=True)
         b.markdown(f"**Climbing most** ({back})")
         b.dataframe(found["climbing"], hide_index=True)
-        st.caption(found["caption"])
+        ui.note(found["caption"])
 
 
 def open_chart(ticker: str) -> None:
@@ -872,7 +877,7 @@ def search_view(query: str) -> None:
         )  # fmt: skip
         st.markdown(f"**Scan hits** (last {len(recent)} runs)")
         if found.empty:
-            st.caption("None.")
+            ui.note("None.")
         else:
             ui.show_df(found, hide_index=True, width="stretch")
         places = []
@@ -924,8 +929,8 @@ def search_view(query: str) -> None:
             st.markdown(f"- *{section}*: {line[:240]}")
             shown += 1
     if not shown and not search.looks_like_ticker(q):
-        st.caption("Nothing found in your notes or the guide.")
-    st.caption("Clear the search box to go back to the page.")
+        ui.note("Nothing found in your notes or the guide.")
+    ui.note("Clear the search box to go back to the page.")
 
 
 STRATEGY_RULES = research_view.STRATEGY_RULES
@@ -942,12 +947,15 @@ def strategy_rules_view() -> None:
     st.markdown(found["rules"])
     if found["settings"]:
         st.markdown("**The numbers** (config/scans.yaml; change live scans on the Scans page)")
-        ui.show_df(pd.DataFrame(found["settings"]), hide_index=True, width="stretch")
+        settings = pd.DataFrame(found["settings"])
+        if "setting" in settings:
+            settings["setting"] = settings["setting"].map(ui.words)  # push_tier -> Push tier
+        ui.show_df(settings)
     if found["heat"]:
         st.markdown("**How it did, per market heat** (net R a trade after costs, its study plan)")
         ui.show_df(pd.DataFrame(found["heat"]).round(2), hide_index=True, width="stretch")
     elif found["heat_note"]:
-        st.caption(found["heat_note"])
+        ui.note(found["heat_note"])
 
 
 def levels_for(ticker: str) -> dict:
@@ -982,7 +990,7 @@ def stock_chart(
     lines you draw, move or erase (returned; see chart_draw) so the page can save them."""
     bars = bars_for(str(data_dir), ticker, period)
     if bars.empty:
-        st.caption(f"No daily bars for {ticker} in the data repo.")
+        ui.note(f"No daily bars for {ticker} in the data repo.")
         return
     hits = hits_for(str(data_dir), ticker, period) if show_hits else None
     fills = fills_for(ticker) if show_fills else None
@@ -1289,15 +1297,6 @@ elif page == "Screener":
         )
         tiers = c3.multiselect("Tier", ["alert", "log"], default=["alert", "log"], key="sc_tier")
         hits = frames[hit_scan][frames[hit_scan]["tier"].isin(tiers)]
-    else:
-        source = st.segmented_control(
-            "Data",
-            ["Last close", "Live now"],
-            default="Last close",
-            key="sc_source",
-            help="Last close: the EOD snapshot, every field. Live now: one TradingView fetch for "
-            "price, change, volume and pre/after-hours; history fields stay from the last close.",
-        )
     # Load the picked screen into the editor when the pick changes
     if st.session_state.get("sc_loaded") != pick:
         if pick in saved:
@@ -1361,25 +1360,34 @@ elif page == "Screener":
         if c4.button("✕", key=f"sc_x{k}", help="Remove this filter"):
             filters.pop(i)
             st.rerun()
-    c1, c2, c3 = st.columns([2, 3, 2])
-    if c1.button("＋ Add filter", key="sc_add"):
+    t1, t2, t3, t4 = st.columns([2, 3, 2, 3], vertical_alignment="bottom")
+    if t1.button("＋ Add filter", key="sc_add"):
         k = st.session_state.get("sc_next", 0)
         st.session_state["sc_next"] = k + 1
         filters.append({"field": "adr20_pct", "op": ">=", "value": 4.0, "_id": k})
         st.rerun()
     sort, descending = st.session_state["sc_sort"], st.session_state["sc_desc"]
     if hit_scan:  # scan hits keep the scan's order: best study grade first
-        c2.caption("Sorted best study grade first, as in the push.")
+        t2.caption("Sorted best study grade first, as in the push.")
     else:
-        sort = c2.selectbox(
+        sort = t2.selectbox(
             "Sort by", fields, index=fields.index(sort),
             key=f"sc_sort_{st.session_state['sc_loaded']}",
             format_func=screens.label,
         )  # fmt: skip
-        descending = c3.toggle(
+        descending = t3.toggle(
             "Highest first", value=descending,
             key=f"sc_desc_{st.session_state['sc_loaded']}",
         )  # fmt: skip
+        source = t4.segmented_control(
+            "Data",
+            ["Last close", "Live now"],
+            default="Last close",
+            key="sc_source",
+            help="Last close: the EOD snapshot, every field. Live now: one TradingView fetch for "
+            "price, change, volume and pre/after-hours; history fields stay from the last close.",
+        )
+        source = source or "Last close"
 
     data = snapshot
     when = f"the {eod_runs[0].session:%d %b} close"
@@ -1403,9 +1411,53 @@ elif page == "Screener":
         end_page()
     every = "every hit" if hit_scan else "every stock"
     summary = " · ".join(screens.describe(f) for f in filters) or f"no filters: {every}"
-    st.markdown(f"**{len(result)} stocks** from {when}  \n{summary}")
     exchanges = dict(zip(data["ticker"], data.get("exchange", pd.Series(dtype=str)), strict=False))
     exchanges = {t: e for t, e in exchanges.items() if isinstance(e, str)}
+
+    def _flip(tickers: list[str], name: str) -> None:
+        st.query_params.clear()
+        st.query_params["screen"] = name
+        st.query_params["t"] = ",".join(tickers)
+        go("Today")
+        st.session_state["board_i"] = 0
+        st.session_state.pop("board_scope", None)
+
+    cnt, a, b, c = st.columns([4, 3, 3, 2], vertical_alignment="center")
+    cnt.markdown(f"**{len(result)} stocks** from {when}  \n{summary}")
+    name_now = pick if pick in saved else ""
+    a.button(
+        f"Flip through on Today ({min(len(result), 200)})",
+        key="sc_flip",
+        disabled=result.empty,
+        on_click=_flip,
+        args=(
+            list(result["ticker"].head(200)),
+            name_now or (report.SCAN_LABELS.get(hit_scan, hit_scan) if hit_scan else "unsaved"),
+        ),
+        width="stretch",
+    )
+    b.download_button(
+        "TradingView list (.txt)",
+        tradingview_list(result["ticker"].head(1000), exchanges),
+        file_name=f"{run.session}_{hit_scan}.txt" if hit_scan else "screen.txt",
+        help="TradingView: Watchlist menu → Import list",
+        width="stretch",
+    )
+    with c.popover("Save screen", width="stretch"):
+        new_name = st.text_input("Name", value=name_now, key="sc_name")
+        if st.button("Save", key="sc_save"):
+            try:
+                screens.save(data_dir, new_name, filters, sort, descending)
+                st.session_state["sc_loaded"] = new_name.strip()
+                st.toast(f"Saved '{new_name.strip()}'. Commit & push to keep it on GitHub.")
+            except ValueError as exc:
+                st.error(str(exc))
+        if name_now and st.button(f"Delete '{name_now}'", key="sc_delete"):
+            screens.delete(data_dir, name_now)
+            st.session_state["sc_loaded"] = None
+            st.toast(f"Deleted '{name_now}'")
+            st.rerun()
+
     if hit_scan:  # the scan's own table: study grade, why, the scan's columns
         result = notify.best_first(result).reset_index(drop=True)
         show_table(hit_scan, result, exchanges)
@@ -1430,49 +1482,6 @@ elif page == "Screener":
         )
         if len(result) > 500:
             ui.note(f"Showing the first 500 of {len(result)}; narrow the filters to see the rest.")
-
-    def _flip(tickers: list[str], name: str) -> None:
-        st.query_params.clear()
-        st.query_params["screen"] = name
-        st.query_params["t"] = ",".join(tickers)
-        go("Today")
-        st.session_state["board_i"] = 0
-        st.session_state.pop("board_scope", None)
-
-    a, b, c = st.columns(3)
-    name_now = pick if pick in saved else ""
-    a.button(
-        f"📈 Flip through on Today ({min(len(result), 200)})",
-        key="sc_flip",
-        disabled=result.empty,
-        on_click=_flip,
-        args=(
-            list(result["ticker"].head(200)),
-            name_now or (report.SCAN_LABELS.get(hit_scan, hit_scan) if hit_scan else "unsaved"),
-        ),
-        width="stretch",
-    )
-    b.download_button(
-        "TradingView list (.txt)",
-        tradingview_list(result["ticker"].head(1000), exchanges),
-        file_name=f"{run.session}_{hit_scan}.txt" if hit_scan else "screen.txt",
-        help="TradingView: Watchlist menu → Import list",
-        width="stretch",
-    )
-    with c.popover("💾 Save screen", width="stretch"):
-        new_name = st.text_input("Name", value=name_now, key="sc_name")
-        if st.button("Save", key="sc_save"):
-            try:
-                screens.save(data_dir, new_name, filters, sort, descending)
-                st.session_state["sc_loaded"] = new_name.strip()
-                st.toast(f"Saved '{new_name.strip()}'. Commit & push to keep it on GitHub.")
-            except ValueError as exc:
-                st.error(str(exc))
-        if name_now and st.button(f"🗑 Delete '{name_now}'", key="sc_delete"):
-            screens.delete(data_dir, name_now)
-            st.session_state["sc_loaded"] = None
-            st.toast(f"Deleted '{name_now}'")
-            st.rerun()
 
     if hit_scan and len(result):
         # The A+/A/B blocks as the push shows them, then one hit's chart and your grading form
@@ -1599,15 +1608,15 @@ elif page == "Runs":
             box, key = cols[k % 3], field["key"]
             if field["kind"] == "int":
                 new[key] = box.number_input(
-                    key, value=field["value"], step=1, key=f"sc-{pick}-{key}"
+                    ui.words(key), value=field["value"], step=1, key=f"sc-{pick}-{key}"
                 )
             else:
                 new[key] = box.number_input(
-                    key, value=field["value"], format="%.4g", key=f"sc-{pick}-{key}"
+                    ui.words(key), value=field["value"], format="%.4g", key=f"sc-{pick}-{key}"
                 )
         for field in fields["flags"]:
             new[field["key"]] = st.checkbox(
-                field["key"], value=field["value"], key=f"sc-{pick}-{field['key']}"
+                ui.words(field["key"]), value=field["value"], key=f"sc-{pick}-{field['key']}"
             )
         new["label"] = st.text_input(
             "Name in the push", value=fields["push_label"], placeholder=scan_label(pick)
@@ -1647,23 +1656,45 @@ elif page == "Chart":
     # watchlists and open positions.
     where = chart_view.picks(data_dir, runs, read_parquet)
     picks = list(where)
-    a, b = st.columns([2, 2])
+    phone = ui.is_phone()
+    # One toolbar row above the chart (a phone: the stock and the bars, the rest under Tools)
+    with st.container(key="chart_bar"):
+        if phone:
+            c_pick, c_tf = st.columns([3, 2], vertical_alignment="bottom")
+            tools = st.popover("Tools", width="stretch")
+            typed_box = ind_box = view_box = note_box = tools
+            watch_box = tools
+        else:
+            cols = st.columns([3, 2, 2.6, 1.5, 1.2, 1.2, 1.2], vertical_alignment="bottom")
+            c_pick, typed_box, c_tf = cols[0], cols[1], cols[2]
+            ind_box = cols[3].popover("Indicators", width="stretch")
+            view_box = cols[4].popover("View", width="stretch")
+            watch_box = cols[5]
+            note_box = cols[6].popover("Note", width="stretch")
     # Opens on the first stock of the list instead of an empty page
-    quick = a.selectbox(
+    quick = c_pick.selectbox(
         "Today's hits (pushed first), watchlists, open positions",
         picks,
         format_func=lambda t: f"{t}  ({where[t]})",
         key="ch_pick",
+        label_visibility="collapsed",
+        placeholder="Pick a stock",
     )
-    typed = b.text_input("…or type any ticker (wins over the list)", key="ch_ticker")
+    typed = typed_box.text_input(
+        "…or type any ticker (wins over the list)",
+        key="ch_ticker",
+        placeholder="…or type a ticker",
+        label_visibility="visible" if phone else "collapsed",
+    )
     ticker = (typed.strip() or (quick or "")).upper()
     if not ticker:
         ui.empty_state(
             "Pick or type a ticker.", "Today's hits and your watchlists show up in the list."
         )
         end_page()
-    a, b, c = st.columns(3)
-    with a:
+    with c_tf:
+        timeframe = ui.choose("Bars", ["Daily", "Weekly", "Monthly"], key="ch_tf")
+    with view_box:
         period = ui.choose(
             "History",
             ["2y", "10y"],
@@ -1671,25 +1702,31 @@ elif page == "Chart":
             format_func=lambda p: "2 years" if p == "2y" else "10 years",
             visible_label=True,
         )
-    with b:
-        timeframe = ui.choose(
-            "Bars", ["Daily", "Weekly", "Monthly"], key="ch_tf", visible_label=True
-        )
-    span = c.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
+        span = st.select_slider("Show", ["3M", "6M", "1Y", "2Y", "All"], value="1Y", key="ch_span")
+        show_hits = st.toggle("Scan hits", value=True, key="ch_hits")
+        show_fills = st.toggle("My trades", value=True, key="ch_fills")
+        show_levels = st.toggle("Pivot and stops", value=True, key="ch_levels")
     sessions = chart_view.SPANS[span]
-    overlays = st.multiselect("Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines")
-    a, b, c = st.columns(3)
-    show_hits = a.toggle("Scan hits", value=True, key="ch_hits")
-    show_fills = b.toggle("My trades", value=True, key="ch_fills")
-    show_levels = c.toggle("Pivot and stops", value=True, key="ch_levels")
-
     bars = bars_for(str(data_dir), ticker, period)
     marks = chart_marks.current(data_dir, ticker)
     choices = chart_view.anchors_for(bars, hits_for(str(data_dir), ticker, period), marks)
     quick_anchor = choices["quick"]
-    chosen = st.multiselect(
-        "Anchored VWAP from", list(quick_anchor), default=[], key="ch_anchor_quick"
-    )
+    with ind_box:
+        overlays = st.multiselect(
+            "Lines", OVERLAYS, default=["MA10", "MA20", "MA50"], key="ch_lines"
+        )
+        chosen = st.multiselect(
+            "Anchored VWAP from", list(quick_anchor), default=[], key="ch_anchor_quick"
+        )
+    if watch_box.button("Watch", key="ch_watch", help="Add to Flag green", width="stretch"):
+        my_watchlists.add(data_dir, board.FLAGS["🟩"], [ticker])
+        st.toast(f"{ticker} → {board.FLAGS['🟩']}")
+    with note_box, st.form("ch-note", clear_on_submit=True):
+        note_day = st.date_input("Day", value=dt.date.today(), key="ch_note_day")
+        text = st.text_area("New note", key="ch_note_text", height=90)
+        if st.form_submit_button("Save note") and text.strip():
+            stock_notes.add(data_dir, ticker, text, note_day)
+            st.rerun()
     anchors = {name: quick_anchor[name] for name in chosen} | choices["saved"]
     lines = marks[marks["kind"] == "line"].to_dict("records")
     drawn = stock_chart(
@@ -1717,86 +1754,84 @@ elif page == "Chart":
         "drawn past the last bar keeps extending each day. Triangles: amber = a scan's hit, "
         "green/red = your buys/sells."
     )
-    with st.container(key="linebar", border=True):
-        st.markdown(f"**Lines on {ticker}** · saved for this stock, on every device")
-        if len(bars) > 1:
-            span_days = list(bars["session_date"])[-max(min(sessions, len(bars)), 2) :]
-            a, b = st.columns([3, 2], vertical_alignment="bottom")
-            level_price = a.number_input(
-                "Price",
-                min_value=0.0,
-                value=round(float(bars["close"].iloc[-1]), 2),
-                step=0.01,
-                format="%.2f",
-                key=f"ch_level_{ticker}",
-            )
-            if b.button("＋ Horizontal line", key="ch_level_add", width="stretch"):
-                try:
-                    chart_marks.add_level(
-                        data_dir, ticker, level_price, span_days[0], span_days[-1]
-                    )
-                    st.rerun()
-                except ValueError as exc:
-                    st.warning(str(exc))
-        if not len(marks):
-            ui.note("No lines yet. Add a level above, or draw with the line tool.")
-        for m in marks.to_dict("records"):
-            a, b = st.columns([5, 1], vertical_alignment="center")
-            a.markdown(chart_marks.describe(m))
-            if b.button("✕", key=f"lb-rm-{m['mark_id']}", help="Remove", width="stretch"):
-                chart_marks.remove(data_dir, m["mark_id"])
-                st.rerun()
-    exchanges = {}
-    eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
-    if eod:
-        exchanges = exchanges_of(str(eod[0].universe))
-    st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
-
-    st.subheader(f"Notes on {ticker}")
-    with st.form("ch-note", clear_on_submit=True):
-        a, b = st.columns([1, 4])
-        note_day = a.date_input("Day", value=dt.date.today(), key="ch_note_day")
-        text = b.text_area("New note", key="ch_note_text", height=90)
-        if st.form_submit_button("Save note") and text.strip():
-            stock_notes.add(data_dir, ticker, text, note_day)
-            st.rerun()
-    notes = stock_notes.current(data_dir, ticker)
-    if not len(notes):
-        ui.note("No notes on this stock yet.")
-    for n in notes.to_dict("records"):
-        edited = n["saved_ts"] != n["created_ts"]
-        st.markdown(
-            f"**{n['note_date']}** · written {n['created_ts']:%Y-%m-%d}"
-            + (f" · edited {n['saved_ts']:%Y-%m-%d}" if edited else "")
-        )
-        st.text(n["text"])
-        with st.popover("Edit or delete"), st.form(f"ch-note-{n['note_id']}"):
-            new_day = st.date_input("Day", value=n["note_date"], key=f"nd-{n['note_id']}")
-            new_text = st.text_area("Note", value=n["text"], key=f"nt-{n['note_id']}")
-            a, b = st.columns(2)
-            if a.form_submit_button("Save") and new_text.strip():
-                stock_notes.edit(data_dir, n["note_id"], ticker, new_text, new_day)
-                st.rerun()
-            if b.form_submit_button("Delete"):
-                stock_notes.remove(data_dir, n["note_id"])
-                st.rerun()
-    tagged = daily_notes.current(data_dir, ticker)
-    if len(tagged):
-        st.markdown(
-            f"**From your daily notes** ({len(tagged)}; edit them in Journal → Daily notes)"
-        )
-        for n in tagged.to_dict("records"):
-            others = [t for t in n["tag_list"] if t != ticker]
-            also = f" · also {' · '.join(others)}" if others else ""
-            st.markdown(f"**{n['note_date']}** · daily note{also}")
-            st.text(n["text"])
-    ui.note(
-        "Notes are saved at once on this PC in the data repo (data/journal/stock_notes/) and "
-        "kept for good: an edit or a delete adds a row and never erases the old text. Use "
-        "“Save & push” to send them to GitHub."
+    # The secondary panels under the chart
+    tab_lines, tab_notes, tab_type, tab_intra = st.tabs(
+        ["Lines and levels", "Notes", "Type in a line", "Intraday"]
     )
+    with tab_lines:
+        with st.container(key="linebar", border=True):
+            st.markdown(f"**Lines on {ticker}** · saved for this stock, on every device")
+            if len(bars) > 1:
+                span_days = list(bars["session_date"])[-max(min(sessions, len(bars)), 2) :]
+                a, b = st.columns([3, 2], vertical_alignment="bottom")
+                level_price = a.number_input(
+                    "Price",
+                    min_value=0.0,
+                    value=round(float(bars["close"].iloc[-1]), 2),
+                    step=0.01,
+                    format="%.2f",
+                    key=f"ch_level_{ticker}",
+                )
+                if b.button("＋ Horizontal line", key="ch_level_add", width="stretch"):
+                    try:
+                        chart_marks.add_level(
+                            data_dir, ticker, level_price, span_days[0], span_days[-1]
+                        )
+                        st.rerun()
+                    except ValueError as exc:
+                        st.warning(str(exc))
+            if not len(marks):
+                ui.note("No lines yet. Add a level above, or draw with the line tool.")
+            for m in marks.to_dict("records"):
+                a, b = st.columns([5, 1], vertical_alignment="center")
+                a.markdown(chart_marks.describe(m))
+                if b.button("✕", key=f"lb-rm-{m['mark_id']}", help="Remove", width="stretch"):
+                    chart_marks.remove(data_dir, m["mark_id"])
+                    st.rerun()
+        exchanges = {}
+        eod = [r for r in runs if r.slot == "eod" and r.universe.exists()]
+        if eod:
+            exchanges = exchanges_of(str(eod[0].universe))
+        st.link_button("Open in TradingView", tradingview_url(ticker, exchanges.get(ticker)))
 
-    with st.expander("Type in a trend line or an anchor"):
+    with tab_notes:
+        notes = stock_notes.current(data_dir, ticker)
+        if not len(notes):
+            ui.note("No notes on this stock yet.")
+        for n in notes.to_dict("records"):
+            edited = n["saved_ts"] != n["created_ts"]
+            st.markdown(
+                f"**{n['note_date']}** · written {n['created_ts']:%Y-%m-%d}"
+                + (f" · edited {n['saved_ts']:%Y-%m-%d}" if edited else "")
+            )
+            st.text(n["text"])
+            with st.popover("Edit or delete"), st.form(f"ch-note-{n['note_id']}"):
+                new_day = st.date_input("Day", value=n["note_date"], key=f"nd-{n['note_id']}")
+                new_text = st.text_area("Note", value=n["text"], key=f"nt-{n['note_id']}")
+                a, b = st.columns(2)
+                if a.form_submit_button("Save") and new_text.strip():
+                    stock_notes.edit(data_dir, n["note_id"], ticker, new_text, new_day)
+                    st.rerun()
+                if b.form_submit_button("Delete"):
+                    stock_notes.remove(data_dir, n["note_id"])
+                    st.rerun()
+        tagged = daily_notes.current(data_dir, ticker)
+        if len(tagged):
+            st.markdown(
+                f"**From your daily notes** ({len(tagged)}; edit them in Journal → Daily notes)"
+            )
+            for n in tagged.to_dict("records"):
+                others = [t for t in n["tag_list"] if t != ticker]
+                also = f" · also {' · '.join(others)}" if others else ""
+                st.markdown(f"**{n['note_date']}** · daily note{also}")
+                st.text(n["text"])
+        ui.note(
+            "Notes are saved at once on this PC in the data repo (data/journal/stock_notes/) and "
+            "kept for good: an edit or a delete adds a row and never erases the old text. Use "
+            "“Save & push” to send them to GitHub."
+        )
+
+    with tab_type:
         recent = bars.tail(504) if len(bars) else bars
         dates = list(recent["session_date"])[::-1]
         with st.form("ch-line", clear_on_submit=True):
@@ -1830,41 +1865,43 @@ elif page == "Chart":
                     chart_marks.remove(data_dir, m["mark_id"])
                     st.rerun()
 
-    # A toggle, not an expander: Streamlit runs a collapsed expander's code too, and that
-    # fetched a month of minute bars from GitHub for every stock you looked at.
-    if st.toggle("Intraday (minute bars)", key="ch_intraday_on"):
-        source = ui.choose(
-            "Minute bars", ["Live (Alpaca)", "Study days"], key="ch_src", visible_label=True
-        )
-        days = [] if source.startswith("Live") else minute_days(str(data_dir), ticker)
-        if source.startswith("Live"):
-            live_intraday(ticker, levels_for(ticker), bars)
-        elif not days:
-            ui.note(
-                "No minute bars for this stock on this PC. They exist for days a strategy could "
-                "have traded it (the minute study's data)."
+    with tab_intra:
+        # A toggle, not an expander: Streamlit runs a collapsed expander's code too, and that
+        # fetched a month of minute bars from GitHub for every stock you looked at.
+        if st.toggle("Intraday (minute bars)", key="ch_intraday_on"):
+            source = ui.choose(
+                "Minute bars", ["Live (Alpaca)", "Study days"], key="ch_src", visible_label=True
             )
-        else:
-            a, b = st.columns(2)
-            day = a.selectbox("Day", days, key="ch_day")
-            with b:
-                every = ui.choose(
-                    "Candle",
-                    [1, 5, 15],
-                    key="ch_every",
-                    format_func=lambda m: f"{m} min",
-                    visible_label=True,
+            days = [] if source.startswith("Live") else minute_days(str(data_dir), ticker)
+            if source.startswith("Live"):
+                live_intraday(ticker, levels_for(ticker), bars)
+            elif not days:
+                ui.note(
+                    "No minute bars for this stock on this PC. They exist for days a strategy "
+                    "could have traded it (the minute study's data)."
                 )
-            minutes = minute_bars(str(data_dir), ticker, day)
-            prior = bars[bars["session_date"] < day]["close"]
-            fig = ichart.intraday_figure(
-                minutes,
-                title=f"{ticker} · {day}",
-                prev_close=float(prior.iloc[-1]) if len(prior) else None,
-                every=every,
-            )
-            st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_intraday", width="stretch")
-            ui.note("VWAP from the 09:30 open; pre- and post-market shaded.")
+            else:
+                a, b = st.columns(2)
+                day = a.selectbox("Day", days, key="ch_day")
+                with b:
+                    every = ui.choose(
+                        "Candle",
+                        [1, 5, 15],
+                        key="ch_every",
+                        format_func=lambda m: f"{m} min",
+                        visible_label=True,
+                    )
+                minutes = minute_bars(str(data_dir), ticker, day)
+                prior = bars[bars["session_date"] < day]["close"]
+                fig = ichart.intraday_figure(
+                    minutes,
+                    title=f"{ticker} · {day}",
+                    prev_close=float(prior.iloc[-1]) if len(prior) else None,
+                    every=every,
+                )
+                st.plotly_chart(fig, config=ichart.DRAW_CONFIG, key="ch_intraday", width="stretch")
+                ui.note("VWAP from the 09:30 open; pre- and post-market shaded.")
+
 
 elif page == "Watchlists":
     events = my_watchlists.load(data_dir)
@@ -2535,7 +2572,9 @@ elif page == "Market":
             visible_label=True,
         )
         hv = market_view.heat_view(data_dir, history, pick)
-        ui.show_df(hv["table"], hide_index=True, width="stretch")
+        table = hv["table"]
+        recent = [c for c in table.columns if "2022" in str(c)]
+        ui.show_df(table, phone_first=["setup", "kind", "Kind", *recent])
         ui.note(hv["caption"])
     market_overview()
     st.subheader("Breadth and the Market Light")

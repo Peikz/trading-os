@@ -4,9 +4,12 @@ reads or writes data."""
 
 from __future__ import annotations
 
+import datetime as dt
 import html
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -14,6 +17,19 @@ import streamlit as st
 from trading_os import screens
 
 MUTED = "#98A2B3"
+
+# ---------------------------------------------------------------- device
+
+
+def is_phone() -> bool:
+    """A phone browser (from its user agent): the pages lay a few things out differently there
+    (a collapsed Saxo block, one Tools popover). Desktop and tests are never a phone."""
+    try:
+        agent = str(st.context.headers.get("User-Agent", ""))
+    except Exception:  # noqa: BLE001 - no request context (bare mode)
+        return False
+    return any(w in agent for w in ("Mobi", "Android", "iPhone"))
+
 
 # ---------------------------------------------------------------- headers
 
@@ -165,6 +181,62 @@ _COMPACT = {"volume", "avg_volume_20d", "float_shares", "pm_volume", "ah_volume"
 _INTS = {"earnings_in_sessions", "rs_pct", "industry_rank", "hist_consec_up"}
 
 
+_NY = ZoneInfo("America/New_York")
+_CPH = ZoneInfo("Europe/Copenhagen")
+_ISO = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d")
+
+
+def fmt_ts(value: Any) -> str:
+    """A UTC timestamp as "HH:MM NY · HH:MM CPH" (with the date when it is not today in New
+    York), the two clocks the schedule talks in."""
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return ""
+    ts = pd.Timestamp(value)
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    ny, cph = ts.astimezone(_NY), ts.astimezone(_CPH)
+    text = f"{ny:%H:%M} NY · {cph:%H:%M} CPH"
+    if ny.date() != dt.datetime.now(_NY).date():
+        text = f"{ny:%m-%d} {text}"
+    return text
+
+
+def _is_text(series: pd.Series) -> bool:
+    return series.dtype == object or pd.api.types.is_string_dtype(series)
+
+
+def _is_timestamp_column(name: str, series: pd.Series) -> bool:
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return getattr(series.dt, "tz", None) is not None or name.endswith("_ts")
+    if not _is_text(series):
+        return False
+    first = next((v for v in series if isinstance(v, str) and v), None)
+    return bool(first and _ISO.match(first) and ("T" in first[:11] or name.endswith("_ts")))
+
+
+def readable_times(df: pd.DataFrame) -> pd.DataFrame:
+    """The frame with its raw timestamp columns (ISO strings, UTC datetimes) made readable."""
+    out = df
+    for col in df.columns:
+        if _is_timestamp_column(str(col), df[col]):
+            if out is df:
+                out = df.copy()
+            out[col] = [fmt_ts(v) for v in df[col]]
+    return out
+
+
+_ACRONYMS = {"r": "R", "adr": "ADR", "ma": "MA", "rs": "RS", "rvol": "RVOL", "pct": "%",
+             "ibd": "IBD", "eps": "EPS", "id": "ID", "pm": "PM", "ah": "AH", "tv": "TV",
+             "spy": "SPY", "qqq": "QQQ", "vix": "VIX", "ep": "EP", "ttm": "TTM"}  # fmt: skip
+_SNAKE = re.compile(r"[a-z0-9]+(_[a-z0-9]+)+")
+
+
+def words(name: str) -> str:
+    """A snake_case name in words: gap_min_pct -> "Gap min %", net_r -> "Net R"."""
+    parts = [_ACRONYMS.get(p, p) for p in name.split("_")]
+    text = " ".join(parts)
+    return text[:1].upper() + text[1:]
+
+
 def column_label(name: str) -> str:
     return COLUMN_LABELS.get(name) or screens.label(name)
 
@@ -175,6 +247,8 @@ def column_config(df: pd.DataFrame) -> dict[str, Any]:
     cfg = st.column_config
     for col in df.columns:
         if col not in COLUMN_LABELS and col not in screens.FIELDS:
+            if isinstance(col, str) and _SNAKE.fullmatch(col):  # any other snake_case name
+                out[col] = cfg.Column(words(col))
             continue
         label = column_label(col)
         series = df[col]
@@ -194,12 +268,35 @@ def column_config(df: pd.DataFrame) -> dict[str, Any]:
     return out
 
 
-def show_df(data: Any, **kwargs: Any) -> Any:
+def _text_last(df: pd.DataFrame, first: Sequence[str] = ()) -> pd.DataFrame:
+    """Phone column order: `first` columns on the left, long text columns (plan, reason, note)
+    at the end, the numbers between, so the numbers are visible without scrolling sideways."""
+    cols = list(df.columns)
+    head = [c for c in first if c in cols]
+    if not head and cols:
+        head = [cols[0]]
+
+    def long_text(c: Any) -> bool:
+        if c in head or not _is_text(df[c]):
+            return False
+        lengths = [len(v) for v in df[c].head(30) if isinstance(v, str)]
+        return bool(lengths) and sum(lengths) / len(lengths) > 28
+
+    tail = [c for c in cols if long_text(c)]
+    middle = [c for c in cols if c not in head and c not in tail]
+    return df[[*head, *middle, *tail]]
+
+
+def show_df(data: Any, *, phone_first: Sequence[str] = (), **kwargs: Any) -> Any:
     """`st.dataframe` the one way: no index, the screen's width (it scrolls inside itself), the
-    shared column labels and number formats. Own `column_config` entries win."""
+    shared column labels and number formats, readable times, and on a phone the long text
+    columns last. Own `column_config` entries win."""
     kwargs.setdefault("hide_index", True)
     kwargs.setdefault("width", "stretch")
     if isinstance(data, pd.DataFrame):
+        data = readable_times(data)
+        if is_phone():
+            data = _text_last(data, phone_first)
         kwargs["column_config"] = {**column_config(data), **(kwargs.get("column_config") or {})}
     return st.dataframe(data, **kwargs)
 
