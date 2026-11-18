@@ -33,7 +33,10 @@ def test_market_tiles_render():
         "board.market_tiles({'qqq_light': 'RED', 'spy_close': 700.0, 'spy_chg_pct': -0.5},"
         " {'state': 'correction', 'dist_count': 7}, 'Warm market')\n"
     )
-    assert {m.label for m in at.metric} == {"QQQ light", "Market heat", "IBD market", "SPY"}
+    # Numbers are metrics; words (light, heat, IBD state) are small labelled tiles, never cut off
+    assert {m.label for m in at.metric} == {"SPY"}
+    html = " ".join(h.proto.body for h in at.get("html"))
+    assert "QQQ light" in html and "Warm market" in html and "Correction" in html
 
 
 def test_lightweight_chart_page_has_the_data_and_levels():
