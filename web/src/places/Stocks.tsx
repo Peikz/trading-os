@@ -1,10 +1,10 @@
-// Stocks: "Find and study a stock" (design review 4 Nov 2026). Left, the sources: MY LISTS (your
-// watchlists, price alerts, EP-Watch and BO-Watch), SCREENS (all stocks, your saved screens and
-// the examples) and SCAN HITS · LAST CLOSE (each scan of the newest EOD run, or any other run).
-// Filters are removable chips with "+ Filter"; the count; Grid (mini candle charts with change,
-// daily range, RS and grade) or Table. Clicking a stock opens its full chart (drawing, AVWAPs,
-// minute bars, notes) in place, with a scan hit's grading form under it. Watchlist editing and
-// saving a screen live here. A screen is a list to look at: no grade, no buy.
+// The Screener (the Stocks place until UX round 1, 18 Nov 2026): find stocks. Left, the sources:
+// MY LISTS (your watchlists, price alerts, EP-Watch and BO-Watch), SCREENS (all stocks, your saved
+// screens and the examples) and SCAN HITS · LAST CLOSE (each scan of the newest EOD run, or any
+// other run). Filters are removable chips with "+ Filter"; the count; Grid (mini candle charts
+// with change, daily range, RS and grade) or Table. Clicking a stock opens it on the Chart, with
+// the list it came from beside it (a scan hit's grading form is in the Chart's Journal tab).
+// Watchlist editing and saving a screen live here. A screen is a list to look at: no grade, no buy.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
@@ -21,14 +21,13 @@ import {
 import { GradeBadge } from "../components/Card";
 import { MiniCandles } from "../components/MiniCandles";
 import { cell, download, formatValue } from "../format";
-import { Chart } from "../pages/Chart";
-import { describeFilter, FilterRow, flipLink, HitGrading } from "../pages/Screener";
+import { describeFilter, FilterRow, flipLink } from "../pages/Screener";
 import { AddToList, PriceAlerts, ScanLists } from "../pages/Watchlists";
 import { plain } from "../plain";
-import { go } from "../routes";
+import { go, listOfSource } from "../routes";
+import { openChart } from "../shell/active";
 import { Icon } from "../ui/Icon";
 import { Segmented, usePopover } from "../ui/kit";
-import { GREEN, WatchButton } from "./today/WatchNote";
 
 const BLANK: ScreenSpec = { filters: [], sort: "rs_pct", descending: true };
 const NEW_FILTER: Filter = { field: "adr20_pct", op: ">=", value: 4 };
@@ -50,8 +49,6 @@ export function Stocks({ params }: { params: URLSearchParams }) {
   const [run, setRun] = useState("");
   const [scans, setScans] = useState<{ id: string; label: string; count: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tickers, setTickers] = useState<string[]>([]);
-  const [signals, setSignals] = useState<Record<string, string>>({});
   const [newList, setNewList] = useState<string | null>(null);
 
   const loadLists = useCallback(
@@ -89,20 +86,16 @@ export function Stocks({ params }: { params: URLSearchParams }) {
           ? `scan:${scans[0].id}`
           : null
         : raw;
-  const open = params.get("t")?.toUpperCase() || null;
   const pick = (s: string) => {
     setNewList(null);
-    go("stocks", "", { src: s });
+    go("screener", "", { src: s });
   };
   const runLabel = runs.find((r) => r.id === run)?.label ?? "";
   const label = sourceLabel(src, scans);
 
   return (
     <div>
-      <div className="place-head">
-        <h1>Stocks</h1>
-        <span className="muted">Find and study a stock</span>
-      </div>
+      <h1 className="sr-only">Screener</h1>
       {error && <p className="error">{error}</p>}
       <div className="stocks">
         <nav className="sources" aria-label="Sources">
@@ -163,18 +156,7 @@ export function Stocks({ params }: { params: URLSearchParams }) {
             />
           ) : (
             <>
-              {open && (
-                <StockDetail
-                  ticker={open}
-                  tickers={tickers}
-                  back={label}
-                  onBack={() => go("stocks", "", src ? { src } : {})}
-                  onPick={(t) => go("stocks", "", { ...(src ? { src } : {}), t })}
-                  signalId={src?.startsWith("scan:") ? signals[open] : undefined}
-                  scanLabel={src?.startsWith("scan:") ? label : null}
-                />
-              )}
-              <div hidden={Boolean(open)}>
+              <div>
                 {src === "alerts" && <PriceAlerts />}
                 {src?.startsWith("scanlist:") && <ScanLists only={src.slice(9)} />}
                 {src && meta && isResults(src) && (
@@ -186,11 +168,7 @@ export function Stocks({ params }: { params: URLSearchParams }) {
                     runLabel={runLabel}
                     label={label}
                     onMeta={setMeta}
-                    onResult={(r) => {
-                      setTickers(r.tickers);
-                      setSignals(r.signal_ids);
-                    }}
-                    onOpen={(t) => go("stocks", "", { src, t })}
+                    onOpen={(t) => openChart(t, listOfSource(src))}
                     onListsChanged={loadLists}
                   />
                 )}
@@ -265,7 +243,6 @@ function Results({
   runLabel,
   label,
   onMeta,
-  onResult,
   onOpen,
   onListsChanged,
 }: {
@@ -275,7 +252,6 @@ function Results({
   runLabel: string;
   label: string;
   onMeta: (m: ScreenerMeta) => void;
-  onResult: (r: ScreenResult) => void;
   onOpen: (t: string) => void;
   onListsChanged: () => Promise<unknown>;
 }) {
@@ -320,7 +296,6 @@ function Results({
           (r) => {
             if (!on) return;
             setResult(r);
-            onResult(r);
           },
           (e: Error) => {
             if (!on) return;
@@ -334,7 +309,6 @@ function Results({
       on = false;
       clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onResult is the parent's setter
   }, [spec, live, tiers, kind, name, run, version]);
 
   useEffect(() => {
@@ -351,7 +325,7 @@ function Results({
     api.saveScreen(as, spec).then(
       (saved) => {
         onMeta({ ...meta, saved });
-        go("stocks", "", { src: `screen:${as.trim()}` });
+        go("screener", "", { src: `screen:${as.trim()}` });
       },
       (e: Error) => setError(e.message),
     );
@@ -359,7 +333,7 @@ function Results({
     api.deleteScreen(name).then(
       (saved) => {
         onMeta({ ...meta, saved });
-        go("stocks", "", { src: "all" });
+        go("screener", "", { src: "all" });
       },
       (e: Error) => setError(e.message),
     );
@@ -713,78 +687,5 @@ function ListTable({
         </tbody>
       </table>
     </div>
-  );
-}
-
-function StockDetail({
-  ticker,
-  tickers,
-  back,
-  onBack,
-  onPick,
-  signalId,
-  scanLabel,
-}: {
-  ticker: string;
-  tickers: string[];
-  back: string;
-  onBack: () => void;
-  onPick: (t: string) => void;
-  signalId: string | undefined;
-  scanLabel: string | null;
-}) {
-  const [watching, setWatching] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const load = useCallback(
-    () =>
-      api.watchlist(GREEN).then(
-        (l) => setWatching(l.rows.some((r) => String(r.ticker) === ticker)),
-        () => setWatching(false),
-      ),
-    [ticker],
-  );
-  useEffect(() => {
-    load();
-    setMessage(null);
-  }, [load]);
-  const k = tickers.indexOf(ticker);
-  const toggle = () =>
-    (watching ? api.removeFromWatchlist(GREEN, [ticker]) : api.flag(ticker, GREEN)).then(
-      () => {
-        setMessage(watching ? `${ticker} is off your watchlist` : `${ticker} is on your watchlist`);
-        load();
-      },
-      (e: Error) => setMessage(`Error: ${e.message}`),
-    );
-  return (
-    <section aria-label={`${ticker} full chart`}>
-      <div className="detail-head">
-        <button className="ghost" onClick={onBack} aria-label={`Back to ${back}`}>
-          <Icon name="back" size={16} />
-          {back}
-        </button>
-        <span className="grow" style={{ flex: 1 }} />
-        {k >= 0 && tickers.length > 1 && (
-          <>
-            <button className="icon-btn" aria-label="Previous stock" onClick={() => onPick(tickers[(k - 1 + tickers.length) % tickers.length])}>
-              <Icon name="left" />
-            </button>
-            <span className="muted num">
-              {k + 1} of {tickers.length}
-            </span>
-            <button className="icon-btn" aria-label="Next stock" onClick={() => onPick(tickers[(k + 1) % tickers.length])}>
-              <Icon name="right" />
-            </button>
-          </>
-        )}
-      </div>
-      <div className="chart-head">
-        <span className="ticker">{ticker}</span>
-        <WatchButton watching={watching} onToggle={toggle} />
-        {message && <span className={message.startsWith("Error") ? "error" : "muted"}>{message}</span>}
-      </div>
-      <Chart ticker={ticker} />
-      {scanLabel && <HitGrading ticker={ticker} signalId={signalId} scanLabel={scanLabel} />}
-    </section>
   );
 }

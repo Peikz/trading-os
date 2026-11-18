@@ -5,11 +5,6 @@ import { Stocks } from "./Stocks";
 // Synthetic tickers, built from letters so no real symbol appears here.
 const [A, B] = ["W", "X"].map((x) => [x, "Z", "Q", x].join(""));
 
-vi.mock("../components/DrawChart", async (orig) => ({
-  ...(await orig<typeof import("../components/DrawChart")>()),
-  DrawChart: ({ data }: { data: { ticker: string } }) => <div data-testid="full-chart">{data.ticker}</div>,
-}));
-
 const meta = {
   fields: {
     adr20_pct: { label: "ADR % (20d)", kind: "pct", group: "Volatility" },
@@ -60,10 +55,6 @@ beforeEach(() => {
     },
     "GET /api/sparks": { [A]: [{ time: "2026-11-03", open: 1, high: 2, low: 0.5, close: 1.5 }], [B]: [] },
     "PUT /api/screens/": { Mine: meta.examples["Momentum leaders"] },
-    "GET /api/chart/": { ticker: A, period: "2y", timeframe: "Daily", candles: [{ time: "2026-11-03", open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 }], lines: [], avwaps: [], trend: [], markers: [], levels: [], visible: null, quick_anchors: {}, marks: [], dates: [], tradingview: "#", note: "" },
-    [`GET /api/chart/${A}/notes`]: { notes: [], daily: [] },
-    [`GET /api/chart/${A}/intraday-days`]: { study_days: [], live: false, live_sessions: [], no_keys: "" },
-    "GET /api/grades/signal/": { kind: "signal", ref_id: `sig-${A}`, grades: ["", "A+"], grade: "", notes: "", tags: "", attachments: [] },
   });
 });
 const screens = () => sent.filter((c) => c.url === "/api/screener/run").map((c) => c.body as Record<string, unknown>);
@@ -97,28 +88,22 @@ describe("Stocks", () => {
     await waitFor(() => expect(sent.some((c) => c.method === "PUT" && c.url === "/api/screens/Mine")).toBe(true));
   });
 
-  it("switches to the table and opens a stock's full chart in place", async () => {
-    window.location.hash = "#/stocks";
-    const { rerender } = render(<Stocks params={new URLSearchParams({ src: "all" })} />);
+  it("switches to the table and opens a stock on the Chart, with the list it came from", async () => {
+    window.location.hash = "#/screener";
+    render(<Stocks params={new URLSearchParams({ src: "list:Leaders" })} />);
     await screen.findByText("2 stocks · the 03 Nov close");
     fireEvent.click(screen.getByRole("button", { name: /Table/ }));
-    const table = await screen.findByLabelText("Results");
-    expect(within(table).getByText("Daily range %")).toHaveAttribute("title", "ADR %: average daily range over 20 days");
+    const table = await screen.findByLabelText(`Watchlist Leaders`);
     fireEvent.click(within(table).getByText(A));
-    expect(window.location.hash).toBe(`#/stocks?src=all&t=${A}`);
-    rerender(<Stocks params={new URLSearchParams({ src: "all", t: A })} />);
-    expect(await screen.findByTestId("full-chart")).toHaveTextContent(A);
-    expect(screen.getByText("1 of 2")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Watch: add/ }));
-    await waitFor(() => expect(sent.find((c) => c.url === "/api/flags")?.body).toEqual({ ticker: A, name: "Flag green" }));
+    expect(window.location.hash).toBe(`#/chart?s=${A}&list=wl%3ALeaders`);
     window.localStorage.clear();
   });
 
-  it("grades a scan hit under its chart", async () => {
-    render(<Stocks params={new URLSearchParams({ src: "scan:ep_am", t: A })} />);
-    await waitFor(() => expect(screens().some((b) => b.source === "hits" && b.scan === "ep_am")).toBe(true));
-    expect(await screen.findByText("Grade this hit")).toBeInTheDocument();
-    expect(await screen.findByLabelText("Grading form")).toHaveTextContent(`Grade ${A} · EP 10:30`);
+  it("opens a scan hit on the Chart with the scan as its list", async () => {
+    window.location.hash = "#/screener";
+    render(<Stocks params={new URLSearchParams({ src: "scan:ep_am" })} />);
+    fireEvent.click(await screen.findByRole("button", { name: `Open ${A}` }));
+    expect(window.location.hash).toBe(`#/chart?s=${A}&list=scan%3Aep_am`);
   });
 
   it("adds to a list and removes from it", async () => {

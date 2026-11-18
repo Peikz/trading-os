@@ -71,7 +71,7 @@ export function usePopover<T extends HTMLElement = HTMLDivElement>() {
   return { open, setOpen, ref };
 }
 
-/** True while the media query matches (`(max-width: 639px)`: the phone layout). */
+/** True while the media query matches (`(max-width: 640px)`: the phone layout). */
 export function useMedia(query: string): boolean {
   const get = () => typeof window.matchMedia === "function" && window.matchMedia(query).matches;
   const [match, setMatch] = useState(get);
@@ -86,7 +86,7 @@ export function useMedia(query: string): boolean {
   return match;
 }
 
-export const PHONE = "(max-width: 639px)";
+export const PHONE = "(max-width: 640px)";
 
 /** True when a key press came from a text field (hotkeys stay out of the way there). */
 export function typing(e: KeyboardEvent): boolean {

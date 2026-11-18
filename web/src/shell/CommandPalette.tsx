@@ -1,8 +1,10 @@
-// Ctrl+K: jump to any stock (today's hits, your watchlists and positions first, or any ticker
-// you type), any place or tab, or run Pull latest / Save & push.
+// Ctrl+K, "/" or typing a letter outside a field: jump to any stock (today's hits, your
+// watchlists and positions first, or any ticker you type), any place or tab, or run Pull latest
+// / Save & push. Enter on an exact ticker opens it on the Chart.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { go, hrefFor, PLACES, stockLink, TABS } from "../routes";
+import { hrefFor, PLACES, TABS } from "../routes";
+import { openChart } from "./active";
 import { Icon } from "../ui/Icon";
 
 interface Item {
@@ -19,12 +21,14 @@ export function CommandPalette({
   onClose,
   onPull,
   onPush,
+  initial = "",
 }: {
+  initial?: string;
   onClose: () => void;
   onPull: () => void;
   onPush: () => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initial);
   const [picks, setPicks] = useState<{ ticker: string; where: string }[]>([]);
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -59,16 +63,22 @@ export function CommandPalette({
       label: p.ticker,
       kind: p.where,
       icon: "stocks",
-      run: open(stockLink(p.ticker)),
+      run: () => {
+        openChart(p.ticker);
+        onClose();
+      },
     }));
     const match = (i: Item) => !q || i.label.toLowerCase().includes(q) || i.kind.toLowerCase().includes(q);
-    const out = [...stocks.filter(match), ...pages.filter(match), ...actions.filter(match)];
+    // An exact ticker comes before the other stocks that merely contain the letters
+    const exact = (i: Item) => (i.label.toLowerCase() === q ? 0 : 1);
+    const found = stocks.filter(match).sort((a, b) => exact(a) - exact(b));
+    const out = [...found, ...pages.filter(match), ...actions.filter(match)];
     if (q && TICKERish.test(query.trim())) {
       const t = query.trim().replace(/^\$/, "").toUpperCase();
       if (!out.some((i) => i.id === `s-${t}`)) {
         // A typed ticker comes first, unless the words name a page or tab
         const named = pages.some(match);
-        out.splice(named ? out.length : 0, 0, { id: `s-${t}`, label: t, kind: "Open the chart", icon: "stocks", run: () => { go("stocks", "", { t }); onClose(); } });
+        out.splice(named ? out.length : 0, 0, { id: `s-${t}`, label: t, kind: "Open the chart", icon: "stocks", run: () => { openChart(t); onClose(); } });
       }
     }
     return q ? out : out.slice(0, 14);
@@ -91,6 +101,9 @@ export function CommandPalette({
             ref={input}
             aria-label="Search stocks, pages and tabs"
             placeholder="A ticker, a page or a tab…"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {

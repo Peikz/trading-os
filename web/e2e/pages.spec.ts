@@ -5,7 +5,8 @@ import { expect, open, sym, test, TICKERS } from "./fixtures";
 
 const PLACES: [string, string[]][] = [
   ["Today", []],
-  ["Stocks", []],
+  ["Chart", []],
+  ["Screener", []],
   ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"]],
   ["Journal", ["Positions", "Trades", "Plans", "Notes", "Live vs study"]],
   ["Lab", ["Research", "Runs", "Health", "Guide"]],
@@ -41,7 +42,10 @@ test("the old page addresses open their place and tab", async ({ page }) => {
     await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
   }
   await open(page, "watchlists");
-  await expect(page.getByRole("heading", { level: 1, name: "Stocks", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Screener", exact: true })).toBeVisible();
+  await open(page, "chart?t=wzqw");
+  await expect(page.getByRole("heading", { level: 1, name: "Chart", exact: true })).toBeVisible();
+  await expect(page.locator(".ws-bar .ticker")).toHaveText("WZQW");
 });
 
 test("the market in one word, with its reasons and SPY / QQQ / VIX", async ({ page }) => {
@@ -66,7 +70,7 @@ test("Ctrl+K jumps to a stock, a place or a tab", async ({ page }) => {
   await page.keyboard.press("Control+k");
   await search.getByRole("textbox").fill(TICKERS[0].toLowerCase());
   await page.keyboard.press("Enter");
-  await expect(page.getByLabel(`${TICKERS[0]} full chart`)).toBeVisible();
+  await expect(page.locator(".ws-bar .ticker")).toHaveText(TICKERS[0]);
   await page.waitForLoadState("networkidle");
 });
 

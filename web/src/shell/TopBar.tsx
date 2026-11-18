@@ -1,12 +1,14 @@
-// The top bar: logo, the five places, the market in one word, search (Ctrl+K), settings and a
+// The top bar: logo, the places, the market in one word, search (Ctrl+K or /), settings and a
 // status dot that replaces checking System health. Facts only: the market word sums up the
-// three things the push shows and nothing trades on it.
+// three things the push shows and nothing trades on it. On a phone the places are the bottom
+// bar (MobileNav) and this bar keeps the logo, the market word, search and settings.
 import { useEffect, useState } from "react";
 import { api, type Market, type Status } from "../api";
 import { deltaColour } from "../format";
 import { hrefFor, PLACES, type Place } from "../routes";
 import { Icon } from "../ui/Icon";
 import { usePopover } from "../ui/kit";
+import { chartHref, useActive } from "./active";
 import { ago, type Sync } from "./useSync";
 
 export function TopBar({
@@ -18,6 +20,7 @@ export function TopBar({
   sync: Sync;
   onSearch: () => void;
 }) {
+  const active = useActive();
   return (
     <header className="top">
       <a className="logo" href={hrefFor("today")} aria-label="Trading OS, Today">
@@ -30,7 +33,7 @@ export function TopBar({
         {PLACES.map((p) => (
           <a
             key={p.id}
-            href={hrefFor(p.id)}
+            href={p.id === "chart" ? chartHref(active) : hrefFor(p.id)}
             aria-current={p.id === place ? "page" : undefined}
             className={`seg-link${p.id === place ? " on" : ""}`}
           >
@@ -57,7 +60,7 @@ export function TopBar({
         <button className="search-btn" onClick={onSearch} aria-label="Search stocks, pages and tabs">
           <Icon name="search" size={16} />
           <span className="label">Search</span>
-          <kbd>Ctrl K</kbd>
+          <kbd>/</kbd>
         </button>
         <SettingsMenu sync={sync} />
         <StatusDot sync={sync} />
@@ -238,8 +241,8 @@ function SettingsMenu({ sync }: { sync: Sync }) {
           </div>
           <h4 style={{ marginTop: 16 }}>Keys</h4>
           <p className="hotkeys">
-            <kbd>Ctrl K</kbd> search · on Today <kbd>↑</kbd> <kbd>↓</kbd> flip, <kbd>W</kbd> watch,{" "}
-            <kbd>N</kbd> note
+            <kbd>/</kbd> or <kbd>Ctrl K</kbd> search, or just type a ticker · <kbd>↑</kbd> <kbd>↓</kbd>{" "}
+            or <kbd>J</kbd> <kbd>K</kbd> step through the list · on Today <kbd>W</kbd> watch, <kbd>N</kbd> note
           </p>
         </div>
       )}

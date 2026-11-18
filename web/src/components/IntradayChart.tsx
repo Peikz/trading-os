@@ -32,7 +32,7 @@ export function IntradayChart({ data, height = 460 }: { data: Intraday; height?:
         };
       }),
     );
-    const vwap = c.addLineSeries({ color: "#8fb5ff", lineWidth: 2, title: "VWAP", priceLineVisible: false });
+    const vwap = c.addLineSeries({ color: T.accent, lineWidth: 2, title: "VWAP", priceLineVisible: false });
     vwap.setData(data.vwap.map((p) => ({ time: p.time as Time, value: p.value })));
     const vol = c.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" } });
     c.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });

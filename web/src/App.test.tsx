@@ -41,11 +41,11 @@ beforeEach(() => {
 });
 
 describe("App", () => {
-  it("shows the five places, the market in one word and why, and the status dot", async () => {
+  it("shows the six places, the market in one word and why, and the status dot", async () => {
     render(<App />);
     const places = screen.getByRole("navigation", { name: "Places" });
     expect(within(places).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Today", "Stocks", "Market", "Journal", "Lab",
+      "Today", "Chart", "Screener", "Market", "Journal", "Lab",
     ]);
     expect(within(places).getByText("Today")).toHaveAttribute("aria-current", "page");
     const pill = await screen.findByRole("button", { name: "Market: Cautious market. Show why" });
@@ -77,7 +77,22 @@ describe("App", () => {
     expect(await screen.findByText("EP 10:30 · A+")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "vzqv" } });
     fireEvent.click(screen.getByText("VZQV"));
-    expect(window.location.hash).toBe("#/stocks?t=VZQV");
+    expect(window.location.hash).toBe("#/chart?s=VZQV");
+  });
+
+  it("opens the search on / and on a typed letter, and Enter on an exact ticker opens its chart", async () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "/" });
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "v" });
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("V");
+    fireEvent.change(input, { target: { value: A } });
+    expect(await screen.findByText("EP 10:30 · A+")).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(window.location.hash).toBe(`#/chart?s=${A}`);
   });
 
   it("pulls on open and keeps the manual buttons in settings", async () => {

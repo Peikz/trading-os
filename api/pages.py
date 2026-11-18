@@ -65,6 +65,7 @@ class Context:
     runs: Callable[..., list]
     table: Callable[[Path], pd.DataFrame]
     exchanges: Callable[[str], dict[str, str]]
+    scan_frames: Callable[[str], dict[str, pd.DataFrame]] = board_data.scan_frames
 
 
 class TicketRequest(BaseModel):

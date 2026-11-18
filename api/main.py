@@ -21,7 +21,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api import chart, pages, research
+from api import chart, lists, pages, research
 from api import market as market_page
 from api.serialize import records, scalar
 from trading_os import board_data, chart_series, dashboard, heat, notify, screens
@@ -433,9 +433,13 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         screens.delete(root(), name)
         return screens.load(root())
 
-    ctx = pages.Context(root=root, cfg=cfg, runs=runs, table=cache.table, exchanges=exchanges)
+    ctx = pages.Context(
+        root=root, cfg=cfg, runs=runs, table=cache.table, exchanges=exchanges,
+        scan_frames=cache.scan_frames,
+    )  # fmt: skip
     pages.register(app, ctx)
     chart.register(app, ctx)
+    lists.register(app, ctx)
     research.register(app, ctx, find_run, run_id, cfg_path)
     market_page.register(app, ctx)
     return app

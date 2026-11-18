@@ -1,15 +1,6 @@
 // Display formats for the Screener table (the same kinds as trading_os/screens.py FIELDS).
 import type { FieldKind, Value } from "./api";
 
-export const GRADE_COLOURS: Record<string, string> = {
-  "A+++": "#063d19",
-  "A++": "#0b5a26",
-  "A+": "#1a7f37",
-  A: "#2da44e",
-  B: "#bf8700",
-  C: "#6e7781",
-};
-
 export function compact(x: number): string {
   const a = Math.abs(x);
   if (a >= 1e9) return `${(x / 1e9).toFixed(1)}B`;
