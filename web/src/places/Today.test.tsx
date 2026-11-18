@@ -81,6 +81,8 @@ function routes(graded: BoardRow[], extra: Record<string, unknown> = {}) {
     "GET /api/stock-notes/": [],
     "POST /api/stock-notes/": [{ note_id: "n1", note_date: "2026-11-03", text: "tight flag" }],
     "GET /api/alerts": { directions: ["above", "below"], alerts: [], fired: [] },
+    "GET /api/journal/daily-notes/today": { day: "2026-11-18", text: "Held the gap", note_id: "n9" },
+    "PUT /api/journal/daily-notes/today": (_: string, b: unknown) => ({ day: "2026-11-18", note_id: "n9", ...(b as object) }),
     ...extra,
   });
 }
@@ -107,6 +109,20 @@ describe("Today", () => {
     expect(screen.getByLabelText("Key facts")).toHaveTextContent("Market cap$2.0B");
     expect(screen.getByLabelText("Key facts")).toHaveTextContent("Daily range5.0%");
     expect(await screen.findByTestId("chart")).toHaveTextContent(`${B} entry,stop`);
+  });
+
+  it("has today's note as a collapsible card that saves through the daily-note route", async () => {
+    routes([row(B, "A+")]);
+    render(<Today />);
+    const head = await screen.findByRole("button", { name: /Today's note/ });
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(await screen.findByText("Held the gap")).toBeInTheDocument(); // its first line shows when closed
+    fireEvent.click(head);
+    const box = await screen.findByLabelText("Today's note text");
+    fireEvent.change(box, { target: { value: "Held the gap, sold half" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save today's note" }));
+    await waitFor(() => expect(sent.some((c) => c.method === "PUT" && c.url === "/api/journal/daily-notes/today")).toBe(true));
+    expect(sent.find((c) => c.method === "PUT")!.body).toEqual({ text: "Held the gap, sold half" });
   });
 
   it("copies the order, edits its type and saves 'I placed it in Saxo' as a plan", async () => {

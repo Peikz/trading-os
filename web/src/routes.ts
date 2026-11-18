@@ -1,10 +1,10 @@
-// Six places (UX round 1, 18 Nov 2026): Today, Chart, Screener, Market, Journal and Lab. Hash
+// Seven places (UX rounds 1-2, 18 Nov 2026): Today, Chart, Screener, Market, Journal, Practice and Lab. Hash
 // routes keep working on a static server and keep a push link's query string (`?push=am&t=A,B`)
 // for Today. The Chart takes the active stock and list in its address: `#/chart?s=TICKER&list=ID`.
 // The old addresses (the twelve pages, and Stocks) still open the right place and tab, so
 // bookmarks and older links keep working.
 
-export type Place = "today" | "chart" | "screener" | "market" | "journal" | "lab";
+export type Place = "today" | "chart" | "screener" | "market" | "journal" | "practice" | "lab";
 
 export const PLACES: { id: Place; label: string; icon: string; question: string }[] = [
   { id: "today", label: "Today", icon: "today", question: "What do I do today?" },
@@ -12,6 +12,7 @@ export const PLACES: { id: Place; label: string; icon: string; question: string 
   { id: "screener", label: "Screener", icon: "stocks", question: "Find stocks: lists, screens, scan hits" },
   { id: "market", label: "Market", icon: "market", question: "How is the market?" },
   { id: "journal", label: "Journal", icon: "journal", question: "My trades and notes" },
+  { id: "practice", label: "Practice", icon: "draw", question: "Replay past signals and test your calls" },
   { id: "lab", label: "Lab", icon: "lab", question: "Research and the system" },
 ];
 
@@ -20,6 +21,7 @@ export const PHONE_TABS: Place[] = ["today", "chart", "screener", "market"];
 
 export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
   today: [],
+  practice: [],
   chart: [],
   screener: [],
   market: [
@@ -30,11 +32,11 @@ export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
     ["ibd", "IBD"],
   ],
   journal: [
-    ["positions", "Positions"],
     ["trades", "Trades"],
+    ["positions", "Positions"],
     ["plans", "Plans"],
     ["notes", "Notes"],
-    ["live", "Live vs study"],
+    ["live", "Live results"],
   ],
   lab: [
     ["research", "Research"],

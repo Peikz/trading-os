@@ -1,5 +1,5 @@
-// Trading OS: six places with tabs inside where they have them. Today ("What do I do today?"),
-// Chart (one stock with its list beside it), Screener, Market, Journal and Lab; every one of the
+// Trading OS: seven places with tabs inside where they have them. Today ("What do I do today?"),
+// Chart (one stock with its list beside it), Screener, Market, Journal, Practice and Lab; every one of the
 // twelve earlier pages lives in one of them. The top bar has the places, the market in one word,
 // search (Ctrl+K, "/", or just type a ticker), settings and a status dot; on a phone the places
 // move to a bottom tab bar (Today, Chart, Screener, Market, More). Pull latest and Save & push
@@ -12,6 +12,7 @@ import { Research } from "./pages/Research";
 import { Runs } from "./pages/Runs";
 import { SystemHealth } from "./pages/SystemHealth";
 import { ChartWorkspace } from "./places/ChartWorkspace";
+import { Practice } from "./places/Practice";
 import { Stocks as Screener } from "./places/Stocks";
 import { Today } from "./places/Today";
 import { hrefFor, parseHash, PLACES, type Place, type Route, TABS } from "./routes";
@@ -29,6 +30,7 @@ function PlaceView({ route }: { route: Route }) {
   if (place === "today") return <Today />;
   if (place === "chart") return <ChartWorkspace params={params} />;
   if (place === "screener") return <Screener params={params} />;
+  if (place === "practice") return <Practice />;
   const meta = PLACES.find((p) => p.id === place)!;
   return (
     <div>

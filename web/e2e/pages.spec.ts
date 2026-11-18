@@ -8,7 +8,8 @@ const PLACES: [string, string[]][] = [
   ["Chart", []],
   ["Screener", []],
   ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"]],
-  ["Journal", ["Positions", "Trades", "Plans", "Notes", "Live vs study"]],
+  ["Journal", ["Trades", "Positions", "Plans", "Notes", "Live results"]],
+  ["Practice", []],
   ["Lab", ["Research", "Runs", "Health", "Guide"]],
 ];
 
@@ -31,7 +32,7 @@ test("every place and tab opens from the top bar", async ({ page }) => {
 test("the old page addresses open their place and tab", async ({ page }) => {
   for (const [old, heading, tab] of [
     ["positions", "Journal", "Positions"],
-    ["live", "Journal", "Live vs study"],
+    ["live", "Journal", "Live results"],
     ["research", "Lab", "Research"],
     ["health", "Lab", "Health"],
     ["guide", "Lab", "Guide"],
@@ -55,6 +56,9 @@ test("the market in one word, with its reasons and SPY / QQQ / VIX", async ({ pa
   await pill.click();
   const why = page.getByRole("dialog", { name: "Market" });
   await expect(why).toContainText("QQQ light is green.");
+  await expect(why).toContainText("Strong: QQQ light green and a healthy IBD uptrend.");
+  // One word, the Streamlit pill's: Strong, Mixed or Weak
+  await expect(pill).toContainText(/^(Strong|Mixed|Weak) market$/);
   await expect(why.locator(".quote", { hasText: "SPY" })).toBeVisible();
   await why.getByRole("link", { name: "Open Market" }).click();
   await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");

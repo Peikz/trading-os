@@ -177,8 +177,8 @@ function Overview() {
           ))}
         </ul>
         <p className="muted hint">
-          Healthy when QQQ light, heat and IBD are all green, weak when two are red, cautious
-          otherwise. A summary of facts, not a rule.
+          Strong: QQQ light green and a healthy IBD uptrend. Weak: QQQ light red and an IBD
+          correction. Mixed: everything else. A summary of facts, not a rule.
         </p>
       </section>
       <section className="card">

@@ -16,15 +16,18 @@ export function GradeForm({
   kind,
   refId,
   title,
+  onSaved,
 }: {
   kind: "signal" | "trade";
   refId: string;
   title: string;
+  onSaved?: (note: GradeNote) => void;
 }) {
   const [note, setNote] = useState<GradeNote | null>(null);
   const [grade, setGrade] = useState("");
   const [notes, setNotes] = useState("");
   const [tags, setTags] = useState("");
+  const [sure, setSure] = useState<number | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -36,6 +39,7 @@ export function GradeForm({
         setGrade(n.grade);
         setNotes(n.notes);
         setTags(n.tags);
+        setSure(n.conviction);
       },
       (e: Error) => setMessage(`Error: ${e.message}`),
     );
@@ -46,8 +50,10 @@ export function GradeForm({
   const save = async () => {
     try {
       const screenshots = await Promise.all(files.map(asBase64));
-      const saved = await api.saveGrade(kind, refId, { grade, notes, tags, screenshots });
+      const saved = await api.saveGrade(kind, refId, { grade, notes, tags, conviction: sure, screenshots });
       setNote(saved);
+      setSure(saved.conviction);
+      onSaved?.(saved);
       setFiles([]);
       setMessage(saved.message ?? "Saved.");
     } catch (e) {
@@ -63,6 +69,15 @@ export function GradeForm({
           <label key={g || "none"} className="check">
             <input type="radio" name={`grade-${refId}`} checked={grade === g} onChange={() => setGrade(g)} />
             {g || "none"}
+          </label>
+        ))}
+      </div>
+      <div className="row" role="radiogroup" aria-label="Conviction" title="1 = small, 2 = normal, 3 = high conviction. Optional; the Journal compares them.">
+        <span className="muted">Conviction</span>
+        {[null, ...(note.convictions ?? [1, 2, 3])].map((c) => (
+          <label key={c ?? "none"} className="check">
+            <input type="radio" name={`conviction-${refId}`} checked={sure === c} onChange={() => setSure(c)} />
+            {c ?? "none"}
           </label>
         ))}
       </div>

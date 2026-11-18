@@ -18,6 +18,7 @@ import {
   type Timeframe,
 } from "../api";
 import { FactStrip, GradeBadge, KindBadge } from "../components/Card";
+import { DailyNote } from "../components/DailyNote";
 import { MiniCandles } from "../components/MiniCandles";
 import { signed, usd } from "../format";
 import { stripIcons } from "../plain";
@@ -214,6 +215,7 @@ export function Today() {
           <span className="muted">{loading ? "Loading…" : title}</span>
         </div>
         {d.error && <p className="error">{d.error}</p>}
+        <DailyNote />
         {quiet && !current && <Quiet d={d} onPick={setSel} items={items} />}
         {current && (
           <PhoneCards
@@ -237,6 +239,7 @@ export function Today() {
         <span className="muted">{loading ? "Loading…" : title}</span>
       </div>
       {d.error && <p className="error">{d.error}</p>}
+      <DailyNote />
       <div className="today">
         <nav className="queue-col" aria-label="Queue">
           {sections.map((s) => (

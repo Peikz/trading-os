@@ -74,8 +74,13 @@ export function DrawChart({ data, height = 560, tool, onDraw, onMove, onErase, m
       autoSize: true,
       ...LAYOUT,
       crosshair: { mode: CrosshairMode.Normal },
-      
-      timeScale: { borderColor: T.border, rightOffset: 8 },
+      timeScale: {
+        borderColor: T.border,
+        rightOffset: 8,
+        // Hidden dates (Practice): the bars are named "day -3", not by their made-up dates
+        ...(data.labels ? { tickMarkFormatter: (t: Time) => data.labels?.[dayOf(t) ?? ""] ?? "" } : {}),
+      },
+      ...(data.labels ? { localization: { timeFormatter: (t: Time) => data.labels?.[dayOf(t) ?? ""] ?? "" } } : {}),
     });
     chart.current = c;
     const price = c.addCandlestickSeries({

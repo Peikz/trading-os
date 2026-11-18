@@ -30,8 +30,10 @@ from api.serialize import records, scalar
 from trading_os import (
     alerts,
     board_data,
+    conviction,
     daily_notes,
     dashboard,
+    fills_import,
     journal,
     journal_view,
     my_watchlists,
@@ -99,6 +101,7 @@ class GradeIn(BaseModel):
     grade: str = ""
     notes: str = ""
     tags: str = ""
+    conviction: int | None = None  # 1 small, 2 normal, 3 high; None: not set
     screenshots: list[Shot] = Field(default_factory=list)
 
 
@@ -115,7 +118,12 @@ class FillIn(BaseModel):
 
 class CsvIn(BaseModel):
     name: str
-    content: str  # the export's text
+    content: str | None = None  # a .csv export's text
+    data: str | None = None  # or any export (.csv, .xlsx) as base64
+
+
+class TodayNote(BaseModel):
+    text: str
 
 
 class DailyIn(BaseModel):
@@ -298,6 +306,8 @@ def register(app: FastAPI, ctx: Context) -> None:
             "grade": prev.get("grade") or "",
             "notes": prev.get("notes") or "",
             "tags": prev.get("tags") or "",
+            "conviction": conviction.normalize(prev.get("conviction")),
+            "convictions": list(conviction.LEVELS),
             "attachments": shots,
         }
 
@@ -310,6 +320,10 @@ def register(app: FastAPI, ctx: Context) -> None:
         """Your grade, notes, tags and screenshots (append-only; earlier events are kept)."""
         if g.grade not in dashboard.GRADES:
             raise HTTPException(400, f"The grade is one of {dashboard.GRADES}.")
+        try:
+            sure = conviction.normalize(g.conviction)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         saved = note_of(kind, ref_id)["attachments"]
         blobs = []
         for shot in g.screenshots:
@@ -324,7 +338,9 @@ def register(app: FastAPI, ctx: Context) -> None:
             blobs.append((shot.name, blob))
         for name, blob in blobs:
             saved.append(dashboard.save_attachment(ctx.root(), ref_id, name, blob))
-        dashboard.save_note(ctx.root(), kind, ref_id, g.grade, g.notes, g.tags, saved)
+        dashboard.save_note(
+            ctx.root(), kind, ref_id, g.grade, g.notes, g.tags, saved, conviction=sure
+        )
         return note_of(kind, ref_id) | {"message": "Saved. Save & push sends it to GitHub."}
 
     @app.get("/api/attachments/{path:path}")
@@ -424,8 +440,10 @@ def register(app: FastAPI, ctx: Context) -> None:
         rows = _frame(trades, ["trade_id", *journal_view.CLOSED_COLUMNS], 2) if len(trades) else []
         for r, t in zip(rows, trades.to_dict("records"), strict=False):
             r["label"] = journal_view.trade_label(t)
+        by_sure = journal_view.conviction_table(trades) if len(trades) else pd.DataFrame()
         return {
             "stats": journal_view.closed_stats(trades),
+            "by_conviction": records(by_sure.round(2)) if len(by_sure) else [],
             "curve": [{"time": scalar(k), "value": float(v)} for k, v in curve.items()],
             "trades": rows,
             "caption": journal_view.MFE_CAPTION,
@@ -441,17 +459,64 @@ def register(app: FastAPI, ctx: Context) -> None:
             "caption": journal_view.REAL_CAPTION,
         }
 
+    def upload_of(f: CsvIn) -> bytes:
+        if f.data is not None:
+            try:
+                blob = base64.b64decode(f.data.split(",")[-1], validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise HTTPException(400, "The file didn't decode.") from exc
+        else:
+            blob = (f.content or "").encode("utf-8")
+        if len(blob) > MAX_SHOT_BYTES:
+            raise HTTPException(400, "The file is over 10 MB.")
+        return blob
+
+    @app.post("/api/journal/import/preview")
+    def journal_import_preview(f: CsvIn) -> dict:
+        """What a broker export holds, before anything is written (`fills_import.preview`):
+        rows, the columns found, new against already imported fills, the date range."""
+        seen = fills_import.preview(ctx.root(), ctx.cfg().journal, f.name, upload_of(f))
+        return {
+            "ok": seen.ok,
+            "error": seen.error,
+            "lines": fills_import.summary_lines(seen),
+            "rows": seen.rows,
+            "new": seen.new,
+            "existing": seen.existing,
+            "first_date": scalar(seen.first_date),
+            "last_date": scalar(seen.last_date),
+        }
+
     @app.post("/api/journal/import")
     def journal_import(f: CsvIn) -> dict:
-        """Import a broker's fills export (`journal.main --csv`; columns mapped in config)."""
-        data = f.content.encode("utf-8")
-        if len(data) > MAX_SHOT_BYTES:
-            raise HTTPException(400, "The file is over 10 MB.")
+        """Import a broker's fills export (`fills_import.run_import`, the same append-only import
+        as `journal.main --csv`; columns mapped in config). Fills already imported are skipped."""
         try:
-            out = journal_view.import_csv(ctx.root(), f.name, data)
+            out = fills_import.run_import(ctx.root(), ctx.cfg(), f.name, upload_of(f))
         except (ValueError, KeyError) as exc:
             raise HTTPException(400, f"Not imported: {exc}") from exc
         return {"message": out}
+
+    @app.get("/api/journal/daily-notes/today")
+    def daily_today() -> dict:
+        """Today's note (the day's newest note), as the Journal's 'Today's note' box shows it."""
+        day = dt.date.today()
+        found = daily_notes.for_day(ctx.root(), day)
+        return {
+            "day": day.isoformat(),
+            "text": found["text"] if found else "",
+            "note_id": found["note_id"] if found else None,
+        }
+
+    @app.put("/api/journal/daily-notes/today")
+    def daily_today_save(n: TodayNote) -> dict:
+        """Save the text as today's note (`daily_notes.save_for_day`: edits the day's note,
+        else adds one; its tags follow the text)."""
+        try:
+            note_id = daily_notes.save_for_day(ctx.root(), dt.date.today(), n.text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return daily_today() | {"note_id": note_id}
 
     @app.get("/api/journal/daily-notes")
     def daily_list(tag: str | None = None, days: int = 30) -> dict:

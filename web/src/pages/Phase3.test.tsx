@@ -115,17 +115,41 @@ describe("Journal, phase 3", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
   });
 
-  it("imports a broker CSV", async () => {
+  it("imports a broker export: the preview first, then the import", async () => {
     const calls = mockApi({
       "GET /api/journal/open": { totals: { positions: 0, open_pnl: 0, at_risk_usd: 0, at_risk_pct: null }, rows: [], plan: [], plan_day: null },
+      "POST /api/journal/import/preview": {
+        ok: true, error: null, lines: ["2 rows read", "2 new fills, 0 already imported"], rows: 2, new: 2, existing: 0,
+        first_date: "2026-06-01", last_date: "2026-06-10",
+      },
       "POST /api/journal/import": { message: "2 new fills, 1 trade" },
     });
     render(<Journal tab="trades" />);
-    fireEvent.click(screen.getByText("Import broker fills (CSV)"));
+    fireEvent.click(screen.getByRole("button", { name: "Import broker fills" }));
     const file = new File(["trade_date,ticker\n"], "fills.csv", { type: "text/csv" });
     fireEvent.change(screen.getByLabelText("Fills export"), { target: { files: [file] } });
-    fireEvent.click(screen.getByText("Import"));
+    // The preview first: nothing is imported until the button is pressed
+    expect(await screen.findByText("2 new fills, 0 already imported")).toBeInTheDocument();
+    expect(calls.some((c) => c.url === "/api/journal/import")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Import 2 new fills" }));
     expect(await screen.findByText("2 new fills, 1 trade")).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ name: "fills.csv", content: "trade_date,ticker\n" });
+    const sent = calls.find((c) => c.url === "/api/journal/import")!.body as { name: string; data: string };
+    expect(sent.name).toBe("fills.csv");
+    expect(atob(sent.data)).toBe("trade_date,ticker\n");
+  });
+
+  it("says what is wrong with an export before importing", async () => {
+    mockApi({
+      "GET /api/journal/open": { totals: { positions: 0, open_pnl: 0, at_risk_usd: 0, at_risk_pct: null }, rows: [], plan: [], plan_day: null },
+      "POST /api/journal/import/preview": {
+        ok: false, error: "the file is missing columns ['price']", lines: [], rows: 1, new: 0, existing: 0,
+        first_date: null, last_date: null,
+      },
+    });
+    render(<Journal tab="trades" />);
+    fireEvent.click(screen.getByRole("button", { name: "Import broker fills" }));
+    fireEvent.change(screen.getByLabelText("Fills export"), { target: { files: [new File(["a,b\n"], "bad.csv")] } });
+    expect(await screen.findByText("the file is missing columns ['price']")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Import \d+ new fills/ })).not.toBeInTheDocument();
   });
 });

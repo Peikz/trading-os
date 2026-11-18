@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from api import chart, lists, pages, research
 from api import market as market_page
+from api import practice as practice_page
 from api.serialize import records, scalar
 from trading_os import board_data, chart_series, dashboard, heat, notify, screens
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
@@ -252,9 +253,9 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             return {"tiles": [], "details": [], "mood": board_data.market_mood(None, None, None)}
         tiles = board_data.tiles(row, ibd_info, heat_text)
         try:
-            mood = board_data.market_mood(row, ibd_info, heat.load(root()))
+            mood = board_data.market_mood(row, ibd_info, heat.load(root()), heat_text)
         except (KeyError, TypeError, ValueError):  # an odd heat file: the word from the rest
-            mood = board_data.market_mood(row, ibd_info, None)
+            mood = board_data.market_mood(row, ibd_info, None, heat_text)
         return {
             "tiles": [{"label": k, "value": v, "delta": d} for k, v, d in tiles],
             "details": board_data.market_details(row),
@@ -442,6 +443,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     lists.register(app, ctx)
     research.register(app, ctx, find_run, run_id, cfg_path)
     market_page.register(app, ctx)
+    practice_page.register(app, ctx)
     return app
 
 

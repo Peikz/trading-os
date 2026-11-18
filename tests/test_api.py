@@ -195,7 +195,7 @@ def test_today_rows_carry_the_decision_and_why_and_the_next_scan(client):
 
 def test_market_carries_one_word_with_its_reasons(client):
     mood = client.get("/api/market").json()["mood"]
-    assert mood["level"] == "green" and mood["word"] == "Healthy market"
+    assert mood["level"] == "amber" and mood["word"] == "Mixed market"  # green light, no IBD state
     assert mood["reasons"] == [{"level": "green", "text": "QQQ light is green."}]
     assert [q["label"] for q in mood["quotes"]] == ["SPY", "VIX"]
 

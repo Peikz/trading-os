@@ -70,6 +70,16 @@ export function copy(text: string): Promise<void> {
   return navigator.clipboard?.writeText(text) ?? Promise.resolve();
 }
 
+/** A picked file as base64 (a data URL's payload): for exports that are not text, like .xlsx. */
+export function readBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? "").split(",").pop() ?? "");
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
 /** A picked file's text (FileReader: in every browser, and in the tests' jsdom). */
 export function readText(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

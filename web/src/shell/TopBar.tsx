@@ -54,7 +54,7 @@ export function TopBar({
             }}
           >
             <Icon name="refresh" size={16} />
-            New data
+            <span className="label">New data</span>
           </button>
         )}
         <button className="search-btn" onClick={onSearch} aria-label="Search stocks, pages and tabs">
@@ -123,8 +123,8 @@ export function MarketPill() {
             </div>
           )}
           <p className="muted hint">
-            Healthy when all three are green, weak when two are red, cautious otherwise. A
-            summary of facts, not a rule.
+            Strong: QQQ light green and a healthy IBD uptrend. Weak: QQQ light red and an IBD
+            correction. Mixed: everything else. A summary of facts, not a rule.
           </p>
           <a href={hrefFor("market", "overview")} onClick={() => setOpen(false)}>
             Open Market

@@ -1,22 +1,24 @@
 // The Journal place (trading_os/journal_view.py, positions_view.py, research_view.py), one tab at
-// a time: Positions (a card per open position, then the journal's open table and what each plan
-// says), Trades (log a fill, import the broker's, closed trades with stats, R curve, MFE/MAE and
-// your grading), Plans, Notes (daily notes) and Live vs study (your real R per setup and the live
-// signals against the study). Private: it stays in the data repo. Facts, not advice.
+// a time: Trades (the closed trades with the selected trade beside them: chart with your fills,
+// grade, conviction and notes; today's note; the broker export upload; log a fill), Positions (a
+// card per open position, then the journal's open table and what each plan says), Plans, Notes
+// (daily notes) and Live results (your real R per setup and the live signals against the study).
+// Private: it stays in the data repo. Facts, not advice.
 import { useEffect, useState } from "react";
 import {
   api,
   type DailyNotes,
-  type JournalClosed,
   type JournalOpen,
   type JournalPlans,
   type Suggestion,
   type Table as TableData,
 } from "../api";
-import { GradeForm } from "../components/GradeForm";
-import { RCurve } from "../components/RCurve";
+import { DailyNote } from "../components/DailyNote";
 import { Metric, Table } from "../components/Table";
-import { readText, usd } from "../format";
+import { usd } from "../format";
+import { Icon } from "../ui/Icon";
+import { ImportDialog } from "./journal/ImportDialog";
+import { Trades } from "./journal/Trades";
 import { LiveResults } from "./LiveResults";
 import { Positions } from "./Positions";
 
@@ -28,32 +30,42 @@ const PLAN_COLUMNS = [
   "status", "session_date", "ticker", "direction", "setup", "entry", "stop", "shares",
   "risk_usd", "fill_date", "fill_price", "slippage_pct", "slippage_r", "note", "plan_id",
 ];
-const CLOSED_COLUMNS = [
-  "ticker", "direction", "setup", "entry_date", "exit_date", "entry_avg", "exit_avg",
-  "quantity", "pnl", "r_multiple", "mfe_r", "mae_r", "exit_efficiency", "sessions_held",
-  "signal_scan", "grade",
-];
 
-export function Journal({ tab = "positions" }: { tab?: string }) {
+export function Journal({ tab = "trades" }: { tab?: string }) {
+  const [importing, setImporting] = useState(false);
   return (
     <div>
+      {tab === "trades" && (
+        <>
+          <div className="journal-bar">
+            <p className="muted">
+              Fills are the record: imported from the broker or logged here by hand (a broker fill
+              later replaces the matching hand-logged one). Private: stays in the data repo.
+            </p>
+            <button onClick={() => setImporting(true)}>
+              <Icon name="upload" size={16} />
+              Import broker fills
+            </button>
+          </div>
+          <DailyNote />
+          <details className="log-fill">
+            <summary>Log a fill by hand</summary>
+            <LogTab />
+          </details>
+          <Trades />
+          {importing && (
+            <ImportDialog
+              onClose={() => setImporting(false)}
+              onImported={() => window.dispatchEvent(new Event("trading-os:journal"))}
+            />
+          )}
+        </>
+      )}
       {tab === "positions" && (
         <>
           <Positions />
           <h3>Open positions in the journal</h3>
           <OpenTab />
-        </>
-      )}
-      {tab === "trades" && (
-        <>
-          <p className="muted">
-            Fills are the record: imported from the broker or logged here by hand (a broker fill
-            later replaces the matching hand-logged one). Private: stays in the data repo.
-          </p>
-          <LogTab />
-          <ImportFills />
-          <h3>Closed trades</h3>
-          <ClosedTab />
         </>
       )}
       {tab === "plans" && <PlansTab />}
@@ -319,40 +331,6 @@ function PlansTab() {
   );
 }
 
-function ClosedTab() {
-  const [data, error] = useLoad<JournalClosed>(api.journalClosed);
-  const [pick, setPick] = useState(0);
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return <p className="muted">Loading…</p>;
-  if (!data.trades.length) return <p className="muted">No closed trades yet.</p>;
-  const s = data.stats;
-  const trade = data.trades[Math.min(pick, data.trades.length - 1)];
-  return (
-    <section>
-      <div className="metrics">
-        <Metric label="Closed trades" value={String(s.trades)} />
-        <Metric label="Win rate" value={s.win_rate === null ? "n/a" : `${s.win_rate.toFixed(0)}%`} />
-        <Metric label="Avg R" value={s.avg_r === null ? "n/a" : s.avg_r.toFixed(2)} />
-        <Metric label="Total P&L" value={usd(s.pnl)} />
-      </div>
-      {data.curve.length > 0 && <RCurve points={data.curve} />}
-      <Table label="Closed trades" columns={CLOSED_COLUMNS} rows={data.trades} />
-      <p className="muted">{data.caption}</p>
-      <label>
-        Review a trade{" "}
-        <select aria-label="Review a trade" value={pick} onChange={(e) => setPick(Number(e.target.value))}>
-          {data.trades.map((t, i) => (
-            <option key={String(t.trade_id)} value={i}>
-              {String(t.label)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <GradeForm kind="trade" refId={String(trade.trade_id)} title={`${trade.ticker} trade`} />
-    </section>
-  );
-}
-
 function RealTab() {
   const [data, error] = useLoad<TableData>(api.realVsStudy);
   if (error) return <p className="error">{error}</p>;
@@ -363,34 +341,6 @@ function RealTab() {
       <Table label="Real vs study" columns={data.columns} rows={data.rows} />
       <p className="muted">{data.caption}</p>
     </section>
-  );
-}
-
-/** A broker's fills export (CSV), imported into the journal (columns mapped in config). */
-function ImportFills() {
-  const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const run = async () => {
-    if (!file) return;
-    try {
-      const r = await api.importFills(file.name, await readText(file));
-      setMessage(r.message);
-    } catch (e) {
-      setMessage(`Error: ${(e as Error).message}`);
-    }
-  };
-  return (
-    <details>
-      <summary>Import broker fills (CSV)</summary>
-      <p className="muted">Column names are mapped in config/scans.yaml → journal.csv_columns.</p>
-      <div className="row">
-        <input aria-label="Fills export" type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <button onClick={run} disabled={!file}>
-          Import
-        </button>
-      </div>
-      {message && <p className={message.startsWith("Error") ? "error" : "ok pre"}>{message}</p>}
-    </details>
   );
 }
 

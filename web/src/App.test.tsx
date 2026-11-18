@@ -13,7 +13,7 @@ const market = {
   details: ["Breadth: 58% over the 50-day line"],
   mood: {
     level: "amber",
-    word: "Cautious market",
+    word: "Mixed market",
     reasons: [
       { level: "amber", text: "QQQ light is yellow." },
       { level: "green", text: "Heat is warm: 64 stocks up 50 %+ in a quarter." },
@@ -41,17 +41,18 @@ beforeEach(() => {
 });
 
 describe("App", () => {
-  it("shows the six places, the market in one word and why, and the status dot", async () => {
+  it("shows the places, the market in one word and why, and the status dot", async () => {
     render(<App />);
     const places = screen.getByRole("navigation", { name: "Places" });
     expect(within(places).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Today", "Chart", "Screener", "Market", "Journal", "Lab",
+      "Today", "Chart", "Screener", "Market", "Journal", "Practice", "Lab",
     ]);
     expect(within(places).getByText("Today")).toHaveAttribute("aria-current", "page");
-    const pill = await screen.findByRole("button", { name: "Market: Cautious market. Show why" });
+    const pill = await screen.findByRole("button", { name: "Market: Mixed market. Show why" });
     fireEvent.click(pill);
     const why = screen.getByRole("dialog", { name: "Market" });
     expect(why).toHaveTextContent("QQQ light is yellow.");
+    expect(why).toHaveTextContent("Strong: QQQ light green and a healthy IBD uptrend.");
     expect(why).toHaveTextContent("IBD: uptrend under pressure (4 of 6 sell days).");
     expect(why).toHaveTextContent("SPY500.00");
     fireEvent.click(await screen.findByRole("button", { name: "System status: 1 run missing" }));

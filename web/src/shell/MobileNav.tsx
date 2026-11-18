@@ -61,6 +61,13 @@ export function MobileNav({ place }: { place: Place }) {
                     </a>
                   </div>
                   <ul>
+                    {TABS[id].length === 0 && (
+                      <li>
+                        <a href={hrefFor(id)} onClick={() => setMore(false)}>
+                          {p.question}
+                        </a>
+                      </li>
+                    )}
                     {TABS[id].map(([tab, text]) => (
                       <li key={tab}>
                         <a href={hrefFor(id, tab)} onClick={() => setMore(false)}>

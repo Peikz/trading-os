@@ -793,3 +793,85 @@ table.wl { table-layout: fixed; width: 100%; }
   .pl li button.active { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--accent); }
   .more-sheet li a { min-height: 48px; }
 }
+
+/* Journal trades: the table with the selected trade beside it; today's note; the import dialog */
+.journal-bar { display: flex; gap: var(--s2); align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.journal-bar p { margin: 0; flex: 1; min-width: 240px; }
+.daily-card { padding: 0; margin: var(--s1) 0 var(--s2); }
+.daily-card + .daily-card { margin-top: var(--s1); }
+.daily-head {
+  width: 100%; justify-content: flex-start; gap: var(--s1); min-height: 40px; padding: 0 var(--s1h);
+  border: 0; border-radius: var(--r); background: none; color: var(--text);
+}
+.daily-head .grow { flex: 1; }
+.daily-head .preview { overflow: hidden; text-overflow: ellipsis; max-width: 40ch; font-weight: 400; }
+.daily-body { padding: 0 var(--s1h) var(--s1h); }
+.log-fill { margin: 0 0 var(--s2); }
+.journal-split { display: grid; grid-template-columns: minmax(420px, 5fr) minmax(0, 7fr); gap: var(--s2); align-items: start; }
+.trade-list { min-width: 0; }
+.trade-list .table-wrap { max-height: 560px; overflow: auto; }
+.trade-list th, .trade-list td { padding: 4px 8px; }
+.trade-list td.tk { font-weight: 650; text-align: left; }
+.trade-list td.setup { color: var(--text-2); text-align: left; }
+.trade-list tr.clickable { cursor: pointer; }
+.trade-list tr.active td { background: var(--bg-2); }
+.trade-list tr.active td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.trade-list tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.conv { color: var(--accent-text); font-weight: 600; white-space: nowrap; }
+.trade-detail { position: sticky; top: calc(var(--top) + var(--s1)); max-height: calc(100dvh - var(--top) - var(--s3)); overflow-y: auto; }
+.trade-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; margin-bottom: var(--s1); }
+.trade-head .ticker { font-size: 16px; font-weight: 650; }
+.trade-head .grow { flex: 1; }
+.trade-chart { height: 300px; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.facts-grid, .pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 4px var(--s2); margin: var(--s1) 0; }
+.fact, .pr-grid > div { border-bottom: 1px solid var(--grid); padding: 2px 0; }
+.fact small, .pr-grid small { display: block; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.trade-detail .card { margin-top: var(--s1); background: var(--bg-0); }
+.dialog-back {
+  position: fixed; inset: 0; z-index: 70; background: var(--scrim);
+  display: flex; align-items: center; justify-content: center; padding: var(--s2);
+}
+.dialog {
+  width: 520px; max-width: 100%; max-height: 90dvh; overflow-y: auto; background: var(--raised);
+  border: 1px solid var(--line-2); border-radius: var(--r); padding: var(--s2); box-shadow: var(--shadow);
+}
+.dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s1); }
+.preview-lines { list-style: none; margin: var(--s1) 0; padding: 0; display: grid; gap: 4px; }
+.preview-lines li { padding: 4px 0; border-bottom: 1px solid var(--grid); }
+
+/* Practice */
+.pr-tools { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s1) 0; }
+.pr-card { margin: var(--s1) 0 var(--s2); }
+.pr-title { margin: 0 0 var(--s1); font-size: 16px; }
+.pr-chart { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.pr-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s1); margin-top: var(--s1); }
+.pr-answer { min-height: 48px; font-size: 16px; font-weight: 600; }
+.pr-result { margin: var(--s1) 0; font-size: 14px; }
+.pr-next { margin-top: var(--s1); }
+.pr-stats { display: grid; gap: var(--s1); }
+.note-cell { text-align: left; white-space: normal; min-width: 160px; color: var(--text-2); }
+.metric small { font-size: 11px; }
+
+@media (max-width: 900px) {
+  .journal-split { grid-template-columns: 1fr; }
+  .trade-detail { position: static; max-height: none; }
+}
+@media (max-width: 640px) {
+  /* The trade opens full screen over the list, with a back button */
+  .trade-detail.phone-full {
+    position: fixed; inset: 0; z-index: 45; max-height: none; border-radius: 0; border: 0;
+    padding: var(--s1) var(--s2) calc(var(--s3) + env(safe-area-inset-bottom)); overflow-y: auto;
+    background: var(--bg-1);
+  }
+  .trade-detail .back-btn { width: 44px; min-height: 44px; }
+  .trade-list .table-wrap { max-height: none; }
+  .trade-list tbody tr { min-height: 44px; }
+  .trade-list th.setup, .trade-list td.setup { display: none; }
+  .pill.fresh .label { display: none; }
+  .trade-list td, .trade-list th { padding: 10px 8px; }
+  .pr-buttons { gap: var(--s1h); }
+  .pr-answer { min-height: 64px; font-size: 20px; }
+  .pr-tools { gap: var(--s1); }
+  .dialog-back { align-items: flex-end; padding: 0; }
+  .dialog { width: 100%; border-radius: var(--r) var(--r) 0 0; }
+}
