@@ -221,7 +221,7 @@ describe("All scans", () => {
   });
 });
 
-describe("The phone card", () => {
+describe("The phone card, behind Why and facts", () => {
   beforeEach(() => {
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("640"), addEventListener: () => {}, removeEventListener: () => {} }));
   });
@@ -230,8 +230,9 @@ describe("The phone card", () => {
   it("edits the order, copies each value, and has the why card, a note and a price alert", async () => {
     routes();
     render(<Today />);
-    const card = await screen.findByLabelText(`${A} card`);
+    const card = await screen.findByLabelText(`${A} plan`);
     expect(await within(card).findByText("Copy order for Saxo")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Why and facts" }));
     fireEvent.click(within(card).getByRole("button", { name: "Edit order" }));
     const edit = await within(card).findByLabelText("Edit order");
     expect(within(edit).getByLabelText("Order type")).toBeInTheDocument();
@@ -239,9 +240,7 @@ describe("The phone card", () => {
     expect(within(edit).getByLabelText("Copy Stop loss (own order, GTC)")).toBeInTheDocument();
     fireEvent.change(within(edit).getByLabelText("Expected price (sizing)"), { target: { value: "10.5" } });
     await waitFor(() => expect(sent.some((c) => c.url === "/api/ticket" && (c.body as { price: number }).price === 10.5)).toBe(true));
-    fireEvent.click(within(card).getByText("Why A+", { selector: "summary" }));
     expect(within(card).getByLabelText("Why A+")).toHaveTextContent("Earnings reaction day");
-    fireEvent.click(within(card).getByText("Note and price alert"));
     expect(within(card).getByLabelText("Note")).toBeInTheDocument();
     expect(within(card).getByLabelText("Alert price")).toBeInTheDocument();
     // the bars and indicator controls sit above the chart

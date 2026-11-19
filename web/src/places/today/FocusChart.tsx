@@ -52,6 +52,7 @@ export function FocusChart({
   height = 460,
   tools = true,
   head = true,
+  link = true,
 }: {
   ticker: string;
   levels: Record<string, number>;
@@ -67,6 +68,8 @@ export function FocusChart({
   tools?: boolean;
   /** The ticker, price and change above the chart (a card that says them already hides it) */
   head?: boolean;
+  /** The "Full chart" link beside the controls (the calm card has its own "Open on Chart") */
+  link?: boolean;
 }) {
   const [bars, setBars] = useState<Bars | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +101,11 @@ export function FocusChart({
         <div className="tools">
           {tools && <Segmented label="Bars" options={TIMEFRAMES.map((t) => [t, t] as const)} value={tf} onPick={onTf} />}
           {tools && <IndicatorMenu picked={picked} onChange={onPicked} />}
-          <a href={stockLink(ticker)} className="muted" title="Drawing tools, AVWAPs, minute bars and notes">
-            Full chart
-          </a>
+          {link && (
+            <a href={stockLink(ticker)} className="muted" title="Drawing tools, AVWAPs, minute bars and notes">
+              Full chart
+            </a>
+          )}
         </div>
       </div>
       {error && <p className="error">Chart: {error}</p>}

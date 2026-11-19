@@ -1,4 +1,4 @@
-// Today (design review 4 Nov 2026): the queue's three parts, flipping with the arrow keys, the
+// Today (calm layout, 19 Nov 2026): the stocks to act on, positions on the right, flipping with the arrow keys, the
 // bar switch, F (watch), W (bars), T (the Saxo values) and N (note), the plan card that leads with the decision (copy, edit
 // order, I placed it in Saxo), the C setups on request, a push link, and the phone's cards.
 import type { APIRequestContext, Page } from "@playwright/test";
@@ -23,7 +23,7 @@ const section = (page: Page, label: string) =>
   queueNav(page).locator(":scope > div", { has: page.locator(".section-label", { hasText: label }) });
 const plan = (page: Page, ticker: string) => page.getByLabel(`${ticker} plan`, { exact: true });
 
-test("the queue: to act on, your positions, watching; the arrow keys flip round", async ({ page, request }) => {
+test("the list: to act on, positions on the right; the arrow keys flip round", async ({ page, request }) => {
   const { rows, hidden_c } = await queue(request);
   const positions = (await (await request.get("/api/positions")).json()) as { cards: { ticker: string }[] };
   expect(rows.length).toBeGreaterThan(2);
@@ -31,13 +31,13 @@ test("the queue: to act on, your positions, watching; the arrow keys flip round"
   await open(page, "today");
   await expect(page.locator(".place-head .muted")).toContainText(`${rows.length} setups to act on`);
   await expect(section(page, "To act on").locator(".queue li")).toHaveCount(rows.length);
-  await expect(section(page, "Your positions").locator(".queue li")).toHaveCount(positions.cards.length);
+  await expect(page.getByLabel("Positions", { exact: true }).locator(".pos-list li")).toHaveCount(positions.cards.length);
   await expect(plan(page, rows[0].ticker)).toBeVisible();
   await page.keyboard.press("ArrowDown");
   await expect(plan(page, rows[1].ticker)).toBeVisible();
   await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("ArrowUp"); // round to the bottom of the queue
-  await expect(queueNav(page).locator(".queue button").last()).toHaveAttribute("aria-current", "true");
+  await page.keyboard.press("ArrowUp"); // round to the bottom: the last position
+  await expect(page.getByLabel("Positions", { exact: true }).locator("button[aria-current=true]")).toHaveCount(1);
   await page.keyboard.press("ArrowDown");
   await expect(plan(page, rows[0].ticker)).toBeVisible();
 });
@@ -67,7 +67,7 @@ test("F watches the stock (Flag green) and N writes a note; a price alert", asyn
   await expect(plan(page, t)).toBeVisible();
   await page.keyboard.press("f");
   await expect(page.locator("p.toast")).toHaveText(`${t} is on your watchlist`);
-  await expect(section(page, "Watching")).toContainText(t);
+  await expect(queueNav(page).getByRole("button", { name: /^Watching \d+$/ })).toBeVisible();
   const lists = (await (await request.get("/api/watchlists")).json()) as { lists: string[] };
   expect(lists.lists).toContain("Flag green");
 
@@ -97,7 +97,8 @@ test("the plan card: the decision, copy the order, edit it, and I placed it in S
   await open(page, "today");
   const card = plan(page, row.ticker);
   await expect(card.locator(".decision")).toHaveText(row.decision?.text ?? "");
-  await expect(card.locator(".quad")).toContainText(view.ticket.shares.toLocaleString("en-US"));
+  await expect(card.locator(".big-nums")).toContainText(view.ticket.shares.toLocaleString("en-US"));
+  await card.getByRole("button", { name: "Why and facts" }).click(); // the Saxo order is inside
   await expect(card.locator(".order-line code")).toHaveText(view.ticket.summary);
   // The stop is the plan's; shares keep the grade's risk (0.5 % of 100 000 USD x the grade's size)
   const stop = view.ticket.lines.find((l) => l.label.startsWith("Stop loss"));
@@ -134,7 +135,7 @@ test("the C setups show on request", async ({ page, request }) => {
   const c = pushed.rows.filter((r) => r.grade === "C");
   expect(c.length).toBeGreaterThan(0);
   await open(page, "today");
-  await page.getByRole("button", { name: `Show the ${hidden_c} C setup${hidden_c === 1 ? "" : "s"}` }).click();
+  await page.getByRole("button", { name: `C setups ${hidden_c}` }).click();
   await expect(section(page, "C setups").locator(".queue li")).toHaveCount(c.length);
   await section(page, "C setups").locator(".queue button").first().click();
   await expect(plan(page, c[0].ticker)).toContainText("Not a buy by the study");
@@ -152,14 +153,22 @@ test("a push link shows the push's stocks first", async ({ page, request }) => {
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test("one card per stock, flipped with next; the places in a bottom bar", async ({ page, request }) => {
+  test("one card per stock, picked from the chips; the places in a bottom bar", async ({ page, request }) => {
     const { rows } = await queue(request);
     await open(page, "today");
-    const card = page.getByLabel(`${rows[0].ticker} card`);
+    const card = plan(page, rows[0].ticker);
     await expect(card).toBeVisible();
-    await expect(card.getByRole("button", { name: "Copy order for Saxo" })).toBeVisible();
-    await page.getByRole("button", { name: "Next stock" }).click();
-    await expect(page.getByLabel(`${rows[1].ticker} card`)).toBeVisible();
+    // the copy button is docked above the bottom bar
+    const copy = card.getByRole("button", { name: "Copy order for Saxo" });
+    await expect(copy).toBeVisible();
+    const box = (await copy.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.y + box.height).toBeLessThanOrEqual(844 - 56);
+    const chips = page.getByRole("group", { name: "Today's stocks" });
+    await expect(chips.getByRole("button").first()).toHaveCSS("min-height", "44px");
+    await chips.getByRole("button").nth(1).click();
+    await expect(plan(page, rows[1].ticker)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     const bar = page.getByRole("navigation", { name: "Places (phone)" });
     await expect(bar).toBeVisible();
     await bar.getByRole("button", { name: "More" }).click();

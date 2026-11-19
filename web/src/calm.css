@@ -1,0 +1,141 @@
+/* Today, the calm layout (owner-approved mockup, 19 Nov 2026): one question, "what do I do now?".
+   Type: 12 px small, 13 px body, 15 px titles, 22 px numbers, 28 px ticker; weights 400 / 600 / 700.
+   Spacing on 4 / 8 px: rows 56, buttons 44, gaps 8 / 16 / 24. */
+
+/* The market on one thin line */
+.market-line {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
+  min-height: 40px; padding: 8px 0; margin-bottom: var(--s2);
+  border-bottom: 1px solid var(--border); color: var(--text-2);
+}
+.market-line .word { display: inline-flex; align-items: center; gap: 8px; color: var(--text-1); font-weight: 600; }
+.market-line .reason::before { content: "·"; margin-right: 16px; color: var(--text-3); }
+.market-line .grow { flex: 1 1 0; }
+.market-line .next { color: var(--text-2); }
+
+.calm-grid { display: grid; grid-template-columns: 272px minmax(0, 1fr) 296px; gap: var(--s3); align-items: start; }
+.calm-main { min-width: 0; }
+
+/* Left: the stocks to act on */
+.calm .section-label {
+  text-transform: none; letter-spacing: normal; font-size: 15px; font-weight: 600;
+  color: var(--text-1); margin: 0 0 var(--s1); padding: 0 8px;
+}
+.calm .section-label span:last-child { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.calm .queue-col > div + div { margin-top: var(--s2); }
+.calm .queue { gap: 2px; }
+.calm .queue button {
+  min-height: 56px; padding: 0 8px; border-radius: var(--r);
+  border: 0; box-shadow: none;
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: auto auto;
+  column-gap: 12px; row-gap: 0; align-content: center; justify-content: stretch; text-align: left;
+}
+.calm .queue button:hover:not(:disabled) { background: var(--bg-1); }
+.calm .queue button.active, .calm .queue button[aria-current="true"] {
+  background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent);
+}
+.calm .queue .badge { grid-row: 1 / 3; align-self: center; min-width: 32px; height: 24px; }
+.calm .queue .tk { grid-column: 2; grid-row: 1; align-self: end; min-width: 0; font-size: 14px; font-weight: 600; }
+.calm .queue .setup {
+  grid-column: 2; grid-row: 2; align-self: start; display: block; flex: none;
+  color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.calm .queue .setup small { display: inline; font-size: 12px; margin-left: 8px; }
+.calm .queue .chg { grid-column: 3; grid-row: 1 / 3; align-self: center; font-size: 13px; font-weight: 600; margin: 0; }
+.group-line { display: flex; flex-wrap: wrap; gap: 0 16px; margin: var(--s2) 0 0; padding: 0 8px; font-size: 12px; }
+.group-line button.link { min-height: 44px; padding: 0; color: var(--text-3); font-weight: 400; }
+.group-line button.link:hover, .group-line button.link[aria-expanded="true"] { color: var(--accent-text); }
+.calm .hotkeys { padding: 0 8px; }
+
+/* Middle: one big card */
+.calm-card { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.calm-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.calm-top .tk { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+.calm-top .setup { color: var(--text-2); font-size: 14px; }
+.calm-top .grow { flex: 1 1 0; }
+.calm-top .last { font-size: 22px; font-weight: 600; }
+.calm-top .chg { font-size: 15px; font-weight: 600; }
+.calm-top .badge.lg { height: 28px; min-width: 40px; font-size: 14px; }
+.calm-action { margin: 0; font-size: 15px; color: var(--text-2); }
+.calm-action .decision { font-size: 15px; font-weight: 600; letter-spacing: 0; color: var(--text-1); }
+.calm-action .decision-sub { display: inline; margin: 0; }
+.calm-card .chart-head { margin-bottom: var(--s1); }
+.calm-card .strip { border-bottom: 0; padding: 0; }
+.big-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.big-nums > div { padding: 12px 16px; background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r); display: flex; flex-direction: column; gap: 4px; }
+.big-nums span { font-size: 12px; color: var(--text-3); }
+.big-nums b { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.calm-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.copy-dock { display: contents; }
+.calm-actions .copy-dock button.primary { width: auto; min-height: 44px; padding: 0 20px; }
+.btn-link {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--border-2); border-radius: var(--r); color: var(--text-1); font-weight: 500;
+}
+.btn-link:hover { text-decoration: none; background: var(--bg-2); }
+.calm-actions .disclose { min-height: 44px; padding: 0 16px; color: var(--text-2); }
+.calm-more { display: flex; flex-direction: column; gap: var(--s2); max-width: 720px; }
+.calm-more > .card + .card { margin-top: 0; }
+.calm-more .strip { padding: 0; }
+.calm-more .saxo h3 { margin-top: 0; }
+
+/* Right: positions, alerts, the day's note */
+.calm-right { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.rail-section { display: flex; flex-direction: column; gap: var(--s1); }
+.rail-section p { margin: 0; padding: 0 8px; }
+.rail-head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 8px; }
+.rail-head h2 { font-size: 15px; }
+.pos-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pos-list button {
+  width: 100%; min-height: 56px; padding: 0 8px; display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 0;
+  border: 0; background: transparent; border-radius: var(--r); text-align: left;
+}
+.pos-list button:hover:not(:disabled) { background: var(--bg-1); }
+.pos-list button[aria-current="true"] { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent); }
+.pos-list .pos-top { display: flex; justify-content: space-between; align-items: baseline; }
+.pos-list .pos-top b { font-weight: 600; font-size: 14px; }
+.pos-list .pos-sub { display: flex; justify-content: space-between; gap: var(--s1); font-size: 12px; color: var(--text-3); }
+.calm-right .daily-card { margin: 0; }
+
+@media (max-width: 1380px) {
+  .calm-grid { grid-template-columns: 248px minmax(0, 1fr) 272px; gap: var(--s2); }
+}
+@media (max-width: 1100px) {
+  .calm-grid { grid-template-columns: 248px minmax(0, 1fr); }
+  .calm-right { grid-column: 2; }
+}
+
+/* Phone: the market line, chips, the card stacked, the positions; the copy button above the bar */
+@media (max-width: 640px) {
+  .calm-phone { padding-bottom: 80px; }
+  .calm-phone .place-head { margin-bottom: 0; }
+  .calm-phone .place-head .muted { display: none; }
+  .calm-phone .place-head .grow { flex: 1 1 0; }
+  .calm-phone .market-line { min-height: 32px; padding: 4px 0; margin-bottom: 0; border-bottom: 0; }
+  .calm-phone .market-line .reason { display: none; }
+  .calm-phone .market-line .next .ny { display: none; }
+  .today-chips { display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; padding: var(--s1) 0 12px; }
+  .today-chip { flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; font-weight: 600; gap: 8px; background: var(--bg-1); color: var(--text-1); }
+  .today-chip[aria-current="true"] { border-color: var(--accent); background: var(--accent-tint); }
+  .calm-phone .group-line { margin-top: 0; padding: 0; }
+  .calm-card { gap: 12px; }
+  .calm-top { flex-wrap: nowrap; gap: 8px; }
+  .calm-top .tk { font-size: 26px; }
+  .calm-top .setup { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .calm-top .grow { flex: 1 0 0; }
+  .calm-top .last { font-size: 16px; }
+  .big-nums { gap: var(--s1); }
+  .big-nums > div { padding: 8px 12px; }
+  .big-nums b { font-size: 18px; }
+  .calm-actions { gap: var(--s1); }
+  .calm-actions .btn-link, .calm-actions .disclose { flex: 1 1 0; justify-content: center; min-height: 48px; border: 1px solid var(--border-2); border-radius: var(--r); }
+  .copy-dock {
+    display: block; position: fixed; left: 0; right: 0; z-index: 29;
+    bottom: calc(var(--tabbar) + env(safe-area-inset-bottom));
+    padding: 8px 16px; background: var(--bg-1); border-top: 1px solid var(--border);
+  }
+  .calm-actions .copy-dock button.primary { width: 100%; min-height: 48px; font-size: 15px; }
+  .calm-phone .toast { bottom: calc(var(--tabbar) + 80px + env(safe-area-inset-bottom)); }
+  .calm-phone .rail-section { margin-top: var(--s2); }
+  .calm-phone .pos-list button { min-height: 44px; }
+}

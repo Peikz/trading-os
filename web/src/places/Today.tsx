@@ -6,16 +6,18 @@
 // setups, your watchlist and the next scan. A push link (`?t=A,B`) or a screen's flip link
 // (`#/today?screen=Name&t=A,B`) puts those stocks first.
 //
+// The calm layout (19 Nov 2026, owner-approved mockup): Focus is a market line, a compact "To act
+// on" list, ONE big card for the selected stock and, right, positions, alerts and the day's note.
+// Why, key facts, the Saxo order, the note and the price alert sit behind "Why and facts".
+//
 // Round 4 (19 Nov 2026), the last of Streamlit's board: the view (Focus, Grid of four charts, List
 // of cards), "Show" (today's list, the pushed scans with the C setups, every hit, or one of your
 // watchlists), a run picker that reaches earlier days, "All scans" (every pushed scan's table)
 // and, on a phone, one card per stock with the order's edit, copy, why, note, alert and bars.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, type BoardRow, DEFAULT_INDICATORS, type NextScan, type Positions, type Timeframe } from "../api";
-import { FactStrip, GradeBadge, KindBadge } from "../components/Card";
 import { DailyNote } from "../components/DailyNote";
-import { signed } from "../format";
-import { hrefFor, stockLink } from "../routes";
+import { hrefFor } from "../routes";
 import { setActive } from "../shell/active";
 import { useArrowKeys, usePref } from "../shell/prefs";
 import { useEarlierRuns, useRunPick, useTodayRuns } from "../shell/todayRun";
@@ -23,17 +25,13 @@ import { RunPicker } from "../ui/RunPicker";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia } from "../ui/kit";
 import { AllScans } from "./today/AllScans";
+import { ActRow, AlertsLine, Chips, GroupLine, MarketLine, PositionsList, StockCard } from "./today/Calm";
 import { ShowMenu, ViewToggle } from "./today/Controls";
-import { FocusChart, TIMEFRAMES } from "./today/FocusChart";
+import { TIMEFRAMES } from "./today/FocusChart";
 import {
-  alertOf,
-  anchorOf,
-  changeOf,
   type Item,
   type Kind,
-  levelsOf,
   plural,
-  priceOf,
   pushTickers,
   rowItem,
   screenName,
@@ -42,16 +40,13 @@ import {
   SCOPE_PUSHED,
   SCOPE_TODAY,
   scopeLabel,
-  sectorOf,
-  statsOf,
   titleLine,
   todayQuery,
   type View,
 } from "./today/model";
-import { SidePanel } from "./today/Panels";
-import { CopyOrder, EditOrder, Numbers, OrderLine, PlaceOrder, usePlan, VALUES_EVENT, WhyCard } from "./today/PlanCard";
+import { VALUES_EVENT } from "./today/PlanCard";
 import { GridView, GRID, ListView } from "./today/Views";
-import { GREEN, WatchButton, WatchNote } from "./today/WatchNote";
+import { GREEN } from "./today/WatchNote";
 
 export { pushTickers, screenName, titleLine };
 
@@ -228,9 +223,8 @@ export function Today() {
     const t = setTimeout(() => setFlash(null), 4000);
     return () => clearTimeout(t);
   }, [flash]);
-  useEffect(() => {
-    if (focusNote) noteRef.current?.focus();
-  }, [focusNote]);
+  const [more, setMore] = useState<"watch" | "c" | null>(null);
+  const touch = useRef<number | null>(null);
 
   const step = useCallback(
     (by: number) => {
@@ -291,6 +285,23 @@ export function Today() {
     : `${plural(nAct, "stock")} · ${scopeLabel(scope)}`;
   const loading = d.act === null;
 
+  // The C setups (opened by "C setups", or by the quiet day's link) and the watched stocks sit
+  // under the list; a stock stepped to with the keys opens its group
+  useEffect(() => {
+    if (d.cRows) setMore("c");
+  }, [d.cRows]);
+  useEffect(() => {
+    if (currentKind === "c" || currentKind === "watch") setMore(currentKind);
+  }, [currentKind]);
+  const openMore = (m: "watch" | "c" | null) => {
+    if (m === "c" && !d.cRows) d.showC();
+    setMore(m);
+  };
+  const listSections = todays ? sections.filter((s) => s.id === "push" || s.id === "act") : sections;
+  const extra = todays && more ? (sections.find((s) => s.id === more)?.items ?? []) : [];
+  const stepItems = [...listSections.flatMap((s) => s.items), ...extra];
+  const cCount = d.cRows ? d.cRows.length : d.hiddenC;
+
   const toast = flash && (
     <p className={`toast${flash.startsWith("Error") ? " error" : ""}`} role="status">
       {flash}
@@ -304,6 +315,7 @@ export function Today() {
         setScope(s);
         setSel(null);
         setGridAt(0);
+        setMore(null);
       }}
     />
   );
@@ -317,29 +329,52 @@ export function Today() {
     </div>
   );
   const allScans = <AllScans runs={runs} earlier={earlier} picked={run} />;
+  const card = current && (
+    <StockCard
+      item={current}
+      phone={phone}
+      tf={tf}
+      onTf={setTf}
+      picked={picked}
+      onPicked={setPicked}
+      watching={watchSet.has(current.ticker)}
+      onWatch={() => toggleWatch(current.ticker)}
+      onMessage={setFlash}
+      noteRef={noteRef}
+      noteSignal={focusNote}
+    />
+  );
+  const positions = <PositionsList cards={d.positions?.cards ?? []} current={current?.key ?? null} onPick={setSel} />;
 
   if (phone) {
+    const k = current ? stepItems.indexOf(current) : -1;
+    const go = (by: number) => {
+      if (stepItems.length) setSel(stepItems[(Math.max(k, 0) + by + stepItems.length) % stepItems.length].key);
+    };
     return (
-      <div className="today-phone">
+      <div className="today-phone calm-phone">
         {head}
         {d.error && <p className="error">{d.error}</p>}
-        <DailyNote />
+        <MarketLine next={d.next} />
         {picker}
+        {stepItems.length > 0 && <Chips items={stepItems} current={current?.key ?? null} onPick={setSel} />}
+        {todays && <GroupLine watch={d.watch.length} c={cCount} more={more} onMore={openMore} />}
         {quiet && !current && <Quiet d={d} onPick={setSel} items={items} />}
-        {current && (
-          <PhoneCards
-            items={items}
-            current={current}
-            onPick={setSel}
-            watchSet={watchSet}
-            onWatch={toggleWatch}
-            onMessage={setFlash}
-            tf={tf}
-            onTf={setTf}
-            picked={picked}
-            onPicked={setPicked}
-          />
+        {card && (
+          <div
+            onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
+            onTouchEnd={(e) => {
+              if (touch.current === null) return;
+              const dx = e.changedTouches[0].clientX - touch.current;
+              touch.current = null;
+              if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1);
+            }}
+          >
+            {card}
+          </div>
         )}
+        {positions}
+        <DailyNote />
         {allScans}
         {toast}
       </div>
@@ -379,118 +414,72 @@ export function Today() {
     );
   }
 
-  return (
+  const rows = (list: Item[]) => (
+    <ul className="queue">
+      {list.map((i) => (
+        <li key={i.key}>
+          <ActRow item={i} active={current?.key === i.key} onPick={() => setSel(i.key)} slotNames={slotNames} />
+        </li>
+      ))}
+    </ul>
+  );
+  const group = (label: string, list: Item[]) => (
     <div>
+      <div className="section-label">
+        <span>{label}</span>
+        <span>{list.length || ""}</span>
+      </div>
+      {rows(list)}
+    </div>
+  );
+  return (
+    <div className="calm">
       {head}
       {d.error && <p className="error">{d.error}</p>}
-      <DailyNote />
-      <div className="today">
-        <nav className="queue-col" aria-label="Queue">
-          {sections.map((s) => (
+      {picker}
+      <MarketLine next={d.next} />
+      <div className="calm-grid">
+        <nav className="queue-col calm-left" aria-label="Queue">
+          {listSections.map((s) => (
             <div key={s.id}>
               <div className="section-label">
                 <span>{s.label}</span>
-                <span>{s.items.length || ""}</span>
+                <span>{s.items.length ? (s.id === "act" && todays ? `${s.items.length} today` : s.items.length) : ""}</span>
               </div>
-              {s.id === "act" && picker}
-              {s.items.length === 0 ? (
-                <p className="queue-note">{s.empty ?? EMPTY[s.id]}</p>
-              ) : (
-                <ul className="queue">
-                  {s.items.map((i) => (
-                    <li key={i.key}>
-                      <QueueRow item={i} active={current?.key === i.key} onPick={() => setSel(i.key)} slotNames={slotNames} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {s.id === "act" && todays && d.hiddenC > 0 && !d.cRows && (
-                <button className="link queue-note" onClick={d.showC}>
-                  Show the {plural(d.hiddenC, "C setup")}
-                </button>
-              )}
+              {s.items.length === 0 ? <p className="queue-note">{s.empty ?? EMPTY[s.id]}</p> : rows(s.items)}
             </div>
           ))}
+          {todays && (
+            <>
+              <GroupLine watch={d.watch.length} c={cCount} more={more} onMore={openMore} />
+              {more === "c" && d.cRows && group("C setups · no tested edge", extra)}
+              {more === "watch" && group("Watching", extra)}
+            </>
+          )}
           <p className="hotkeys">
             <kbd>↑</kbd> <kbd>↓</kbd> flip · <kbd>F</kbd> watch · <kbd>N</kbd> note · <kbd>T</kbd> Saxo values · <kbd>W</kbd> bars
           </p>
         </nav>
-        {!current ? (
-          <div style={{ gridColumn: "2 / -1" }}>
-            {loading ? <div className="quiet muted">Loading today&apos;s queue…</div> : <Quiet d={d} onPick={setSel} items={items} />}
-          </div>
-        ) : (
-          <>
-            <div className="center-col">
-              <FocusChart
-                ticker={current.ticker}
-                levels={levelsOf(current)}
-                anchor={anchorOf(current)}
-                tf={tf}
-                onTf={setTf}
-                picked={picked}
-                onPicked={setPicked}
-                price={priceOf(current)}
-                change={changeOf(current)}
-              />
-              <FactStrip stats={statsOf(current)} />
-            </div>
-            <aside className="side-col" aria-label="Plan">
-              <SidePanel item={current} />
-              <WatchNote
-                ticker={current.ticker}
-                alertDefault={alertOf(current)}
-                watching={watchSet.has(current.ticker)}
-                onToggleWatch={() => toggleWatch(current.ticker)}
-                noteRef={noteRef}
-                onMessage={setFlash}
-              />
-            </aside>
-          </>
-        )}
+        <div className="calm-main">
+          {!current ? (
+            loading ? (
+              <div className="quiet muted">Loading today&apos;s queue…</div>
+            ) : (
+              <Quiet d={d} onPick={setSel} items={items} />
+            )
+          ) : (
+            card
+          )}
+        </div>
+        <aside className="calm-right" aria-label="Positions and alerts">
+          {positions}
+          <AlertsLine />
+          <DailyNote />
+        </aside>
       </div>
       {allScans}
       {toast}
     </div>
-  );
-}
-
-function QueueRow({
-  item,
-  active,
-  onPick,
-  slotNames,
-}: {
-  item: Item;
-  active: boolean;
-  onPick: () => void;
-  slotNames: Record<string, string>;
-}) {
-  const chg = changeOf(item);
-  const many = Object.keys(slotNames).length > 1;
-  const from = (item.row?.runs ?? []).map((s) => slotNames[s] ?? s).join(" · ");
-  const setup = item.row ? (item.kind === "watch" ? sectorOf(item.row) : item.row.scan_label) : item.pos!.setup;
-  return (
-    <button aria-current={active} className={active ? "active" : ""} onClick={onPick}>
-      {item.kind === "watch" ? (
-        <KindBadge kind="watch" />
-      ) : item.kind === "position" ? (
-        <KindBadge kind="position" />
-      ) : (
-        <GradeBadge grade={item.row!.grade} />
-      )}
-      <span className="tk">{item.ticker}</span>
-      <span className="setup">
-        {setup}
-        {from && many && <small className="from-runs">{from}</small>}
-      </span>
-      {typeof chg === "number" && (
-        <span className={`chg num ${chg >= 0 ? "up" : "down"}`}>
-          {chg >= 0 ? "+" : ""}
-          {chg.toFixed(1)}%
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -534,183 +523,6 @@ function Quiet({
         <a href={hrefFor("screener", "hits")}>Every scan hit</a>
       </div>
     </section>
-  );
-}
-
-// --- the phone: one card per stock, prev / next and dots
-
-function PhoneCards({
-  items,
-  current,
-  onPick,
-  watchSet,
-  onWatch,
-  onMessage,
-  tf,
-  onTf,
-  picked,
-  onPicked,
-}: {
-  items: Item[];
-  current: Item;
-  onPick: (key: string) => void;
-  watchSet: Set<string>;
-  onWatch: (t: string) => void;
-  onMessage: (t: string) => void;
-  tf: Timeframe;
-  onTf: (t: Timeframe) => void;
-  picked: string[];
-  onPicked: (p: string[]) => void;
-}) {
-  const k = items.indexOf(current);
-  const go = (by: number) => onPick(items[(k + by + items.length) % items.length].key);
-  const touch = useRef<number | null>(null);
-  return (
-    <div
-      onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
-      onTouchEnd={(e) => {
-        if (touch.current === null) return;
-        const dx = e.changedTouches[0].clientX - touch.current;
-        touch.current = null;
-        if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1);
-      }}
-    >
-      <PhoneCard
-        item={current}
-        watching={watchSet.has(current.ticker)}
-        onWatch={() => onWatch(current.ticker)}
-        onMessage={onMessage}
-        tf={tf}
-        onTf={onTf}
-        picked={picked}
-        onPicked={onPicked}
-      />
-      <div className="flipper">
-        <button className="icon-btn" aria-label="Previous stock" onClick={() => go(-1)} style={{ width: 44, height: 44 }}>
-          <Icon name="left" />
-        </button>
-        <div className="dots" role="group" aria-label={`Stock ${k + 1} of ${items.length}`}>
-          {items.map((i, n) => (
-            <button key={i.key} aria-label={`${i.ticker}`} aria-current={n === k} onClick={() => onPick(i.key)} />
-          ))}
-        </div>
-        <button className="icon-btn" aria-label="Next stock" onClick={() => go(1)} style={{ width: 44, height: 44 }}>
-          <Icon name="right" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** The phone card's order: the plan's numbers, one big copy button, the order on a line with
- * "Edit order" (type, own price, the shares follow, each value to copy) and "I placed it in Saxo". */
-function PhoneOrder({ row }: { row: BoardRow }) {
-  const plan = usePlan(row);
-  return (
-    <>
-      <Numbers row={row} view={plan.view} three />
-      <CopyOrder row={row} view={plan.view} big />
-      <OrderLine plan={plan} />
-      <EditOrder plan={plan} />
-      <PlaceOrder plan={plan} />
-    </>
-  );
-}
-
-function PhoneCard({
-  item,
-  watching,
-  onWatch,
-  onMessage,
-  tf,
-  onTf,
-  picked,
-  onPicked,
-}: {
-  item: Item;
-  watching: boolean;
-  onWatch: () => void;
-  onMessage: (t: string) => void;
-  tf: Timeframe;
-  onTf: (t: Timeframe) => void;
-  picked: string[];
-  onPicked: (p: string[]) => void;
-}) {
-  const row = item.row;
-  const graded = row && ["A+++", "A++", "A+", "A", "B", "C"].includes(row.grade) && item.kind !== "watch";
-  const price = priceOf(item);
-  const chg = changeOf(item);
-  return (
-    <article className="card phone-card" aria-label={`${item.ticker} card`}>
-      <div className="head">
-        {item.kind === "watch" || item.kind === "position" ? <KindBadge kind={item.kind} /> : <GradeBadge grade={row!.grade} large />}
-        <span className="tk">{item.ticker}</span>
-        <WatchButton watching={watching} onToggle={onWatch} compact />
-        <div className="price">
-          {price !== null && <div className="num">{price.toFixed(2)}</div>}
-          {chg !== null && (
-            <div className={`num ${chg >= 0 ? "up" : "down"}`}>
-              {chg >= 0 ? "+" : ""}
-              {chg.toFixed(1)}%
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="mini">
-        <FocusChart
-          ticker={item.ticker}
-          levels={levelsOf(item)}
-          anchor={anchorOf(item)}
-          tf={tf}
-          onTf={onTf}
-          picked={picked}
-          onPicked={onPicked}
-          height={200}
-          head={false}
-        />
-      </div>
-      {graded && (
-        <>
-          <div className="decision">{row!.decision?.text ?? (row!.grade === "C" ? "Not a buy by the study" : "Buy by the study's plan")}</div>
-          <div className="decision-sub">{[row!.decision?.local, row!.decision?.day].filter(Boolean).join(" · ") || row!.scan_label}</div>
-          <PhoneOrder row={row!} />
-          <details className="phone-more">
-            <summary>Why {row!.grade}</summary>
-            <WhyCard row={row!} />
-          </details>
-        </>
-      )}
-      {item.pos && (
-        <div className="quad trio">
-          <div>
-            <span>Open R</span>
-            <b className="num">{item.pos.open_r === null ? "–" : signed(item.pos.open_r, 2, "R")}</b>
-          </div>
-          <div>
-            <span>Stop</span>
-            <b className="num">{item.pos.stop === null ? "–" : item.pos.stop.toFixed(2)}</b>
-          </div>
-          <div>
-            <span>Shares</span>
-            <b className="num">{item.pos.shares.toLocaleString("en-US")}</b>
-          </div>
-        </div>
-      )}
-      {item.kind === "watch" && <FactStrip stats={statsOf(item)} />}
-      <details className="phone-more">
-        <summary>Note and price alert</summary>
-        <WatchNote
-          ticker={item.ticker}
-          alertDefault={alertOf(item)}
-          watching={watching}
-          onToggleWatch={onWatch}
-          onMessage={onMessage}
-        />
-      </details>
-      <a href={stockLink(item.ticker)} className="hint">
-        Full chart
-      </a>
-    </article>
   );
 }
 
