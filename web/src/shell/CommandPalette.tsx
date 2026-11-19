@@ -19,7 +19,6 @@ interface Item {
   stock?: StockRow;
 }
 
-const TICKERish = /^\$?[A-Za-z][A-Za-z0-9.-]{0,9}$/;
 
 export function CommandPalette({
   onClose,
@@ -81,16 +80,12 @@ export function CommandPalette({
     } else if (found.known) {
       stocks = found.rows.map((r) => stock(r.ticker, r.where, r));
     } else {
-      // No universe from the API: the old way, your picks that match and any typed ticker
+      // Only stocks that exist (owner, 19 Nov 2026): without the universe, only your own picks that
+      // match the text; a typed ticker is never opened on trust.
       stocks = picks.map((p) => stock(p.ticker, p.where)).filter(match);
-      if (TICKERish.test(query.trim())) {
-        const t = query.trim().replace(/^\$/, "").toUpperCase();
-        // A typed ticker comes first, unless the words name a page or tab
-        if (!stocks.some((i) => i.id === `s-${t}`) && !pages.some(match)) stocks.unshift(stock(t, "Open the chart"));
-      }
     }
     const out = [...stocks, ...pages.filter(match), ...actions.filter(match)];
-    return { items: q ? out : out.slice(0, 14), noStock: !!q && found.loaded && found.known && found.rows.length === 0 };
+    return { items: q ? out : out.slice(0, 14), noStock: !!q && found.loaded && !stocks.length };
   }, [query, picks, found, onClose, onPull, onPush]);
 
   useEffect(() => setIndex(0), [query]);

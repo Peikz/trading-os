@@ -37,7 +37,7 @@ function useStockFacts(): Map<string, { grade: string; where: string }> {
 }
 
 /** The rows for the typed text: `rows` (null until the universe has loaded) and `known`
- * (false when the API has no universe: callers then fall back to opening any ticker). */
+ * (false when the API has no universe: then nothing can be opened by typing). */
 export function useStockResults(query: string): { rows: StockRow[]; loaded: boolean; known: boolean } {
   const symbols = useSymbols();
   const facts = useStockFacts();
@@ -71,7 +71,7 @@ export function StockSearchBox({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   const box = useRef<HTMLDivElement>(null);
-  const { rows, known } = useStockResults(query);
+  const { rows, known, loaded } = useStockResults(query);
   useEffect(() => setIndex(0), [query]);
   useEffect(() => {
     if (!open) return;
@@ -112,7 +112,6 @@ export function StockSearchBox({ className = "" }: { className?: string }) {
             else if (e.key === "ArrowUp") setIndex((i) => Math.max(i - 1, 0));
             else if (e.key === "Enter") {
               if (rows[pick]) choose(rows[pick].ticker);
-              else if (!known && text) choose(text);
             } else if (e.key === "Escape") {
               setQuery("");
               setOpen(false);
@@ -132,7 +131,7 @@ export function StockSearchBox({ className = "" }: { className?: string }) {
             </li>
           ))}
           {rows.length === 0 && (
-            <li className="empty">{known ? "No stock matches" : `Press Enter to open ${text.toUpperCase()}`}</li>
+            <li className="empty">{!loaded ? "Loading the stock list…" : known ? "No stock matches" : "The stock list is not available"}</li>
           )}
         </ul>
       )}
