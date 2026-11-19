@@ -58,10 +58,8 @@ export function MarketLine({ next }: { next: NextScan | null }) {
   const bits = next ? nextScanBits(next.when) : null;
   return (
     <div className="market-line" aria-label="Market">
-      <span className="word">
-        <span className={`dot ${mood?.level ?? ""}`} aria-hidden="true" />
-        {mood?.word ?? (market ? "No market data" : "Market…")}
-      </span>
+      {/* The market word lives in the top bar's pill; this line gives only its reasons (owner, 19 Nov). */}
+      {!mood && <span className="word">{market ? "No market data" : "Market…"}</span>}
       {(mood?.reasons ?? []).map((r) => (
         <span key={r.text} className="reason">
           {reasonShort(r.text)}
