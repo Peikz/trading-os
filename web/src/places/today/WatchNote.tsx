@@ -37,6 +37,7 @@ export function WatchNote({
   onToggleWatch,
   noteRef,
   onMessage,
+  showWatch = true,
 }: {
   ticker: string;
   alertDefault: number;
@@ -44,6 +45,8 @@ export function WatchNote({
   onToggleWatch: () => void;
   noteRef?: RefObject<HTMLTextAreaElement>;
   onMessage: (text: string) => void;
+  /** The star row; the calm card has the star in its head already */
+  showWatch?: boolean;
 }) {
   const [notes, setNotes] = useState<StockNote[]>([]);
   const [text, setText] = useState("");
@@ -78,10 +81,12 @@ export function WatchNote({
 
   return (
     <section className="card" aria-label="Watch and note">
-      <div className="watch-row">
-        <WatchButton watching={watching} onToggle={onToggleWatch} />
-        <span className="muted hint">{watching ? "On your watchlist" : "Not on your watchlist"}</span>
-      </div>
+      {showWatch && (
+        <div className="watch-row">
+          <WatchButton watching={watching} onToggle={onToggleWatch} />
+          <span className="muted hint">{watching ? "On your watchlist" : "Not on your watchlist"}</span>
+        </div>
+      )}
       <label className="sr-only" htmlFor={`note-${ticker}`}>
         Note
       </label>
@@ -93,7 +98,7 @@ export function WatchNote({
         placeholder="Add a note: what you see in this chart (N)"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        style={{ marginTop: 12 }}
+        style={showWatch ? { marginTop: 12 } : undefined}
       />
       <button onClick={save} disabled={!text.trim()}>
         <Icon name="note" size={16} />

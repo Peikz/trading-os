@@ -95,13 +95,24 @@ describe("Today", () => {
     expect(await screen.findByText("2 setups to act on · 1 position · 1 on watch")).toBeInTheDocument();
     const queue = screen.getByRole("navigation", { name: "Queue" });
     expect(within(queue).getByText("To act on")).toBeInTheDocument();
-    expect(within(queue).getByText("Your positions")).toBeInTheDocument();
-    expect(within(queue).getByText("Watching")).toBeInTheDocument();
+    expect(within(queue).getByText("2 today")).toBeInTheDocument();
+    expect(within(queue).getAllByText("Buy at 10:30 NY · 16:30 CPH").length).toBe(2);
+    // positions are on the right; watching and the C setups sit under the list
+    expect(within(screen.getByLabelText("Positions")).getByText("Day 6 of 21")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Positions")).getByText("Stop 8.0 % away")).toBeInTheDocument();
+    expect(within(queue).getByRole("button", { name: "Watching 1" })).toBeInTheDocument();
+    expect(within(queue).getByRole("button", { name: "C setups 3" })).toBeInTheDocument();
     const plan = await screen.findByLabelText(`${B} plan`);
     expect(within(plan).getByText("Buy at 10:30 New York")).toBeInTheDocument();
     expect(within(plan).getByText("16:30 in Copenhagen · Wed 04 Nov")).toBeInTheDocument();
-    expect(await within(plan).findByText("1,000")).toBeInTheDocument(); // shares, from the ticket
-    expect(within(plan).getByText("$1,000")).toBeInTheDocument(); // risk
+    const nums = within(plan).getByLabelText("The plan's numbers");
+    expect(await within(nums).findByText("1,000")).toBeInTheDocument(); // shares, from the ticket
+    expect(within(nums).getByText("Buy at")).toBeInTheDocument();
+    expect(within(nums).getByText("9.00")).toBeInTheDocument();
+    // the why, the facts and the Saxo order are behind "Why and facts"
+    expect(screen.queryByLabelText("Why A+")).not.toBeInTheDocument();
+    fireEvent.click(within(plan).getByRole("button", { name: "Why and facts" }));
+    expect(within(plan).getByText("Risk $1,000")).toBeInTheDocument();
     expect(within(plan).getByText("Buy 1000 · Market · Day · stop loss 9.00 GTC")).toBeInTheDocument();
     const why = screen.getByLabelText("Why A+");
     expect(why).toHaveTextContent("5 quality points");
@@ -131,6 +142,7 @@ describe("Today", () => {
     routes([row(B, "A+")]);
     render(<Today />);
     const plan = await screen.findByLabelText(`${B} plan`);
+    fireEvent.click(within(plan).getByRole("button", { name: "Why and facts" }));
     await within(plan).findByText("Buy 1000 · Market · Day · stop loss 9.00 GTC");
     fireEvent.click(within(plan).getByText("Copy order for Saxo"));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${B}: Buy 1000 · Market · Day · stop loss 9.00 GTC`));
@@ -174,6 +186,7 @@ describe("Today", () => {
   it("takes a watched stock off the watchlist with the star", async () => {
     routes([row(B, "A+")]);
     render(<Today />);
+    fireEvent.click(await screen.findByRole("button", { name: "Watching 1" }));
     fireEvent.click(await screen.findByText(C));
     const star = await screen.findByRole("button", { name: /Watching: remove/ });
     fireEvent.click(star);
@@ -202,6 +215,7 @@ describe("Today", () => {
     expect(await screen.findByText("Nothing to buy today")).toBeInTheDocument();
     expect(screen.getByText("Nothing to act on · 1 position · 1 on watch")).toBeInTheDocument();
     expect(screen.getByText(/Next scan: the 10:15 check, Wed 04 Nov, 10:10 New York/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Market")).toHaveTextContent("Next scan 10:10 NY · 16:10 CPH"); // the thin line has it too
     expect(screen.getByText("Every scan hit").closest("a")).toHaveAttribute("href", "#/screener/hits");
     fireEvent.click(screen.getByRole("button", { name: "See the 3 C setups" }));
     await waitFor(() => expect(urls().some((u) => u.startsWith("/api/today?scope=pushed"))).toBe(true));
@@ -223,7 +237,7 @@ describe("Today", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("shows one card per stock on a phone, flipped with next and the dots", async () => {
+  it("shows one card per stock on a phone: chips for today's stocks, the positions below", async () => {
     vi.stubGlobal("matchMedia", (q: string) => ({
       matches: q.includes("640"),
       addEventListener: () => {},
@@ -231,14 +245,15 @@ describe("Today", () => {
     }));
     routes([row(B, "A+"), row(A, "A")]);
     render(<Today />);
-    const card = await screen.findByLabelText(`${B} card`);
+    const card = await screen.findByLabelText(`${B} plan`);
     expect(within(card).getByText("Buy at 10:30 New York")).toBeInTheDocument();
     expect(await within(card).findByText("Copy order for Saxo")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Stock 1 of 4" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Next stock" }));
-    expect(await screen.findByLabelText(`${A} card`)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: D }));
-    expect(await screen.findByLabelText(`${D} card`)).toHaveTextContent("+1.50R");
+    const chips = screen.getByRole("group", { name: "Today's stocks" });
+    expect(within(chips).getAllByRole("button")).toHaveLength(2);
+    fireEvent.click(within(chips).getByRole("button", { name: new RegExp(A) }));
+    expect(await screen.findByLabelText(`${A} plan`)).toBeInTheDocument();
+    fireEvent.click(within(screen.getByLabelText("Positions")).getByRole("button", { name: new RegExp(D) }));
+    expect(await screen.findByLabelText(`${D} position`)).toHaveTextContent("+1.50R");
     vi.unstubAllGlobals();
   });
 });
