@@ -212,9 +212,15 @@ main.place.wide .place-tabs { margin: 0; padding: 0 16px; }
   .show-chips { flex-wrap: wrap; }
   .chip-toggle { min-height: 44px; padding: 0 12px; }
   .list-filter { min-height: 44px; }
-  .treemap { height: 340px; }
-  .tm-tile { padding: 4px 6px; }
+  /* Compact grid on the phone: name and %, ~56 px tiles (the inline % boxes are for desktop) */
+  .treemap { height: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; border: 0; background: none; }
+  .tm-tile { position: static; left: auto !important; top: auto !important; width: auto !important; height: 56px !important; min-height: 56px; padding: 4px 8px; justify-content: center; }
+  .tm-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .tm-group { display: none; }
+  .chart-legend { font-size: 12px; line-height: 1.25; }
+  .chart-legend .ohl { display: none; }
+  .chart-legend > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart-legend > div ~ div { display: inline-block; margin-right: 8px; max-width: 100%; }
   .dtable-wrap { overflow-x: auto; }
 }
 

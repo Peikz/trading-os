@@ -388,6 +388,8 @@ button.link.queue-note { color: var(--accent-text); margin: 2px 0 var(--s1); }
 }
 .chart-legend { position: absolute; top: 10px; left: 12px; z-index: 2; font-size: 12px; pointer-events: none; }
 .chart-legend .ohlc { color: var(--text-2); }
+/* Stay inside the plot: the right price axis is ~64 px wide */
+.chart-legend { max-width: calc(100% - 76px); }
 .chart.tool-draw, .chart.tool-erase { cursor: crosshair; }
 .chart.tool-move { cursor: grab; touch-action: none; }
 .strip {
