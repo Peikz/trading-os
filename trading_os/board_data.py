@@ -44,11 +44,17 @@ def exchanges_of(universe_path: str | Path) -> dict[str, str]:
 
 
 def collect(
-    runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
+    runs,
+    cfg,
+    scan_frames: Callable[[str], dict],
+    exchanges=None,
+    everything: bool = False,
+    lookup=None,
 ) -> pd.DataFrame:
     """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
     newest first, one row per ticker and scan. `everything`: every scan's hits, all tiers, one
-    row per ticker (its best grade)."""
+    row per ticker (its best grade). `lookup`: the runs to take the exchange and sector from
+    (default `runs`), for a call that passes one run (the board's run picker)."""
     latest = []
     for slot in ("pm", "am", "mid", "eod", "ah"):  # ah: EP-AH (Emil, 27 Oct 2026)
         run = next((r for r in runs if r.slot == slot), None)
@@ -57,7 +63,9 @@ def collect(
     # The exchange per ticker from the newest run with a universe file (intraday runs have none)
     listing: dict = {}
     info = pd.DataFrame()
-    with_universe = next((r for r in runs if r.universe.exists()), None)
+    with_universe = next(
+        (r for r in (runs if lookup is None else lookup) if r.universe.exists()), None
+    )
     if exchanges is not None and with_universe is not None:
         listing = exchanges(str(with_universe.universe))
     if with_universe is not None:
@@ -711,16 +719,20 @@ def why(row: Mapping[str, Any]) -> dict:
     }
 
 
-MOOD_WORDS = {"green": "Healthy market", "amber": "Cautious market", "red": "Weak market"}
+MOOD_LEVELS = {"Strong": "green", "Mixed": "amber", "Weak": "red"}  # market_word -> pill colour
 LIGHT_LEVELS = {"GREEN": "green", "YELLOW": "amber", "RED": "red"}
 
 
 def market_mood(
-    row: Mapping[str, Any] | None, ibd_info: Mapping | None, heat_stats: Mapping | None
+    row: Mapping[str, Any] | None,
+    ibd_info: Mapping | None,
+    heat_stats: Mapping | None,
+    heat_text: str | None = None,
 ) -> dict:
-    """One word for the market from the three things the push shows (QQQ light, heat, IBD
-    state): green when all three are green, red when two or more are red, amber otherwise; with
-    each one's reason in plain words. A summary of facts, never a rule: nothing trades on it."""
+    """The market pill for the React app: the word and colour are `market_word`'s (Strong,
+    Mixed, Weak: the same word the Streamlit pill shows), with the reasons of the three things
+    the push shows (QQQ light, heat, IBD state), each in plain words and its own colour, and
+    the SPY / QQQ / VIX quotes. A summary of facts, never a rule: nothing trades on it."""
     row = row or {}
     reasons = []
     light = row.get("qqq_light")
@@ -748,15 +760,8 @@ def market_mood(
             level = "green" if "🟢" in words else "red" if "🔴" in words else "amber"
             days = ibd.sell_days(ibd_info["state"], ibd_info["dist_count"])
             reasons.append({"level": level, "text": f"IBD: {_plain(words).lower()} ({days})."})
-    levels = [r["level"] for r in reasons]
-    if not levels:
-        mood = None
-    elif all(x == "green" for x in levels):
-        mood = "green"
-    elif levels.count("red") >= 2 or all(x == "red" for x in levels):
-        mood = "red"
-    else:
-        mood = "amber"
+    word = None if not row and not ibd_info else market_word(row, ibd_info, heat_text)[0]
+    mood = MOOD_LEVELS.get(word)
     quotes = []
     for name in ("spy", "qqq", "vix"):
         close = row.get(f"{name}_close")
@@ -770,7 +775,7 @@ def market_mood(
             )
     return {
         "level": mood,
-        "word": MOOD_WORDS.get(mood, "No market data"),
+        "word": f"{word} market" if word else "No market data",
         "reasons": reasons,
         "quotes": quotes,
     }

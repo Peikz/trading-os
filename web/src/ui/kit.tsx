@@ -86,6 +86,16 @@ export function useMedia(query: string): boolean {
   return match;
 }
 
+/** A text wall folded away: the page leads with its tables and controls (Lab pages, UX round 3). */
+export function About({ children, label = "About" }: { children: ReactNode; label?: string }) {
+  return (
+    <details className="about">
+      <summary>{label}</summary>
+      <div className="about-body">{children}</div>
+    </details>
+  );
+}
+
 export const PHONE = "(max-width: 640px)";
 
 /** True when a key press came from a text field (hotkeys stay out of the way there). */

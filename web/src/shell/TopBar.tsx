@@ -5,10 +5,11 @@
 import { useEffect, useState } from "react";
 import { api, type Market, type Status } from "../api";
 import { deltaColour } from "../format";
-import { hrefFor, PLACES, type Place } from "../routes";
+import { hrefFor, MAIN_PLACES, PLACES, type Place, TABS } from "../routes";
 import { Icon } from "../ui/Icon";
 import { usePopover } from "../ui/kit";
 import { chartHref, useActive } from "./active";
+import { useArrowKeys } from "./prefs";
 import { ago, type Sync } from "./useSync";
 
 export function TopBar({
@@ -30,16 +31,20 @@ export function TopBar({
         <span className="name">Trading OS</span>
       </a>
       <nav className="places seg" aria-label="Places">
-        {PLACES.map((p) => (
-          <a
-            key={p.id}
-            href={p.id === "chart" ? chartHref(active) : hrefFor(p.id)}
-            aria-current={p.id === place ? "page" : undefined}
-            className={`seg-link${p.id === place ? " on" : ""}`}
-          >
-            {p.label}
-          </a>
-        ))}
+        {MAIN_PLACES.map((id) => {
+          const p = PLACES.find((x) => x.id === id)!;
+          return (
+            <a
+              key={p.id}
+              href={p.id === "chart" ? chartHref(active) : hrefFor(p.id)}
+              aria-current={p.id === place ? "page" : undefined}
+              className={`seg-link${p.id === place ? " on" : ""}`}
+            >
+              {p.label}
+            </a>
+          );
+        })}
+        <MoreMenu place={place} />
       </nav>
       <MarketPill />
       <span className="grow" />
@@ -54,7 +59,7 @@ export function TopBar({
             }}
           >
             <Icon name="refresh" size={16} />
-            New data
+            <span className="label">New data</span>
           </button>
         )}
         <button className="search-btn" onClick={onSearch} aria-label="Search stocks, pages and tabs">
@@ -66,6 +71,42 @@ export function TopBar({
         <StatusDot sync={sync} />
       </div>
     </header>
+  );
+}
+
+/** Practice and the Lab (Research, Runs, Scans, Health, Guide) under one "More" in the top bar. */
+function MoreMenu({ place }: { place: Place }) {
+  const { open, setOpen, ref } = usePopover();
+  const here = place === "practice" || place === "lab";
+  return (
+    <div className="popover-wrap" ref={ref}>
+      <button
+        type="button"
+        className={`more-top${here ? " on" : ""}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-current={here ? "page" : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        More
+        <Icon name="down" size={14} />
+      </button>
+      {open && (
+        <div className="popover left menu" role="menu" aria-label="More">
+          <a role="menuitem" href={hrefFor("practice")} onClick={() => setOpen(false)}>
+            Practice
+          </a>
+          <a role="menuitem" className="menu-head" href={hrefFor("lab")} onClick={() => setOpen(false)}>
+            Lab
+          </a>
+          {TABS.lab.map(([tab, text]) => (
+            <a key={tab} role="menuitem" href={hrefFor("lab", tab)} onClick={() => setOpen(false)}>
+              {text}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -123,8 +164,8 @@ export function MarketPill() {
             </div>
           )}
           <p className="muted hint">
-            Healthy when all three are green, weak when two are red, cautious otherwise. A
-            summary of facts, not a rule.
+            Strong: QQQ light green and a healthy IBD uptrend. Weak: QQQ light red and an IBD
+            correction. Mixed: everything else. A summary of facts, not a rule.
           </p>
           <a href={hrefFor("market", "overview")} onClick={() => setOpen(false)}>
             Open Market
@@ -212,6 +253,7 @@ function SyncLines({ sync }: { sync: Sync }) {
 
 function SettingsMenu({ sync }: { sync: Sync }) {
   const { open, setOpen, ref } = usePopover();
+  const [arrowKeys, setArrowKeys] = useArrowKeys();
   return (
     <div className="popover-wrap" ref={ref}>
       <button className="ghost icon-btn" aria-label="Settings" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -240,6 +282,10 @@ function SettingsMenu({ sync }: { sync: Sync }) {
             </button>
           </div>
           <h4 style={{ marginTop: 16 }}>Keys</h4>
+          <label className="check settings-row" style={{ justifyContent: "flex-start" }}>
+            <input type="checkbox" checked={arrowKeys} onChange={(e) => setArrowKeys(e.target.checked)} />
+            Arrow keys step through the list
+          </label>
           <p className="hotkeys">
             <kbd>/</kbd> or <kbd>Ctrl K</kbd> search, or just type a ticker · <kbd>↑</kbd> <kbd>↓</kbd>{" "}
             or <kbd>J</kbd> <kbd>K</kbd> step through the list · on Today <kbd>W</kbd> watch, <kbd>N</kbd> note

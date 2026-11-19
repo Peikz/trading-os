@@ -23,7 +23,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from trading_os import alerts, daily_notes, dashboard, journal, my_watchlists, plans, stock_notes
+from trading_os import (
+    alerts,
+    daily_notes,
+    dashboard,
+    journal,
+    my_watchlists,
+    plans,
+    practice,
+    stock_notes,
+)
 from trading_os.bars_pack import shard_of
 from trading_os.config import load_config
 
@@ -303,6 +312,31 @@ def write_journal(root: Path, days: list[dt.date], daily: pd.DataFrame) -> None:
     dashboard.save_note(root, "signal", f"{days[-1]}-eod-ep_day-0", "A", "clean gap", "ep", [])
 
 
+def write_practice(root: Path) -> None:
+    """The Practice export: two practice signals and one exam signal with made-up normalised bars
+    (entry = 100 at relative day 0), on real NYSE sessions so the dates can be shown."""
+    folder = practice.folder(root)
+    folder.mkdir(parents=True)
+    signals, bars_out = [], []
+    rows = [("pr-1", "practice", 3.0, 5), ("pr-2", "practice", -1.0, 3), ("ex-1", "exam", 2.0, 4)]
+    for k, (sid, pool, net_r, hold) in enumerate(rows):
+        signals.append({
+            "signal_id": sid, "pool": pool, "ticker": TICKERS[k], "setup_name": "ep_day",
+            "grade": "A", "net_r": net_r, "entry_date": pd.Timestamp("2024-05-24"),
+            "hold_days": hold, "price": 20.0 + k, "stop_pct": 7.0, "price_band": "10-30",
+            "gap_pct": 8.0, "rvol_prev_day": 1.4, "dollar_vol_20d": 2.5e7, "adr_pct": 5.0,
+            "dist_52w_high_pct": -12.0, "grade_rule": "plain",
+        })  # fmt: skip
+        for rel in range(-40, hold + 4):
+            base = 100.0 + rel * 0.4
+            bars_out.append({
+                "signal_id": sid, "rel_day": rel, "open": base, "high": base + 1.2,
+                "low": base - 1.0, "close": base + 0.3, "volume": 1e6 + 1000 * rel,
+            })  # fmt: skip
+    pd.DataFrame(signals).to_parquet(folder / "signals.parquet")
+    pd.DataFrame(bars_out).to_parquet(folder / "bars.parquet")
+
+
 def build(out: Path, today: dt.date | None = None) -> tuple[Path, Path]:
     """Write the repo and the cache under `out` (replacing them); returns (repo, cache)."""
     out = Path(out)
@@ -332,6 +366,7 @@ def build(out: Path, today: dt.date | None = None) -> tuple[Path, Path]:
     write_scan_watchlists(root, days[-1])
     write_research(root, cache, days, daily)
     write_journal(root, days, daily)
+    write_practice(root)
     (out / "manifest.json").write_text(
         json.dumps(
             {"tickers": TICKERS, "sessions": [str(d) for d in days], "watchlists": WATCHLISTS},

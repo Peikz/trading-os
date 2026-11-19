@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { api, type RunForm, type RunsPage } from "../api";
 import { Table } from "../components/Table";
-import { Scans } from "./Scans";
+import { About } from "../ui/kit";
 
 const COLUMNS = ["run", "on", "starts (NY · CPH)", "second start", "days", "does", "scans", "pushes"];
 
@@ -37,8 +37,12 @@ export function Runs() {
   const columns = page.started ? [...COLUMNS, "last start"] : COLUMNS;
   return (
     <div>
-      <p className="muted">{page.caption}</p>
-      <Table label="Runs" columns={columns} rows={page.rows} />
+      <About>
+        <p className="muted">{page.caption}</p>
+      </About>
+      <div className="left-table">
+        <Table label="Runs" columns={columns} rows={page.rows} />
+      </div>
       <div className="row">
         <button onClick={() => load(true)} disabled={loading}>
           {loading ? "Asking GitHub…" : "Load how each run last started (GitHub)"}
@@ -54,8 +58,6 @@ export function Runs() {
         ))}
       </select>
       {pick && <RunEditor key={pick} name={pick} writable={page.writable} onSaved={() => load()} />}
-      <h3>Scans</h3>
-      <Scans />
     </div>
   );
 }

@@ -1,5 +1,5 @@
-// Trading OS: six places with tabs inside where they have them. Today ("What do I do today?"),
-// Chart (one stock with its list beside it), Screener, Market, Journal and Lab; every one of the
+// Trading OS: seven places with tabs inside where they have them. Today ("What do I do today?"),
+// Chart (one stock with its list beside it), Screener, Market, Journal, Practice and Lab; every one of the
 // twelve earlier pages lives in one of them. The top bar has the places, the market in one word,
 // search (Ctrl+K, "/", or just type a ticker), settings and a status dot; on a phone the places
 // move to a bottom tab bar (Today, Chart, Screener, Market, More). Pull latest and Save & push
@@ -10,9 +10,12 @@ import { Guide } from "./pages/Guide";
 import { Market } from "./pages/Market";
 import { Research } from "./pages/Research";
 import { Runs } from "./pages/Runs";
+import { Scans } from "./pages/Scans";
 import { SystemHealth } from "./pages/SystemHealth";
 import { ChartWorkspace } from "./places/ChartWorkspace";
-import { Stocks as Screener } from "./places/Stocks";
+import { Practice } from "./places/Practice";
+import { Screener } from "./places/Screener";
+import { Watchlists } from "./places/Watchlists";
 import { Today } from "./places/Today";
 import { hrefFor, parseHash, PLACES, type Place, type Route, TABS } from "./routes";
 import { CommandPalette } from "./shell/CommandPalette";
@@ -28,7 +31,8 @@ function PlaceView({ route }: { route: Route }) {
   const { place, tab, params } = route;
   if (place === "today") return <Today />;
   if (place === "chart") return <ChartWorkspace params={params} />;
-  if (place === "screener") return <Screener params={params} />;
+  if (place === "watchlists") return <Watchlists params={params} />;
+  if (place === "practice") return <Practice />;
   const meta = PLACES.find((p) => p.id === place)!;
   return (
     <div>
@@ -46,10 +50,12 @@ function PlaceView({ route }: { route: Route }) {
           </a>
         ))}
       </div>
+      {place === "screener" && <Screener tab={tab} params={params} />}
       {place === "market" && <Market tab={tab} />}
       {place === "journal" && <Journal tab={tab} />}
       {place === "lab" && tab === "research" && <Research />}
       {place === "lab" && tab === "runs" && <Runs />}
+      {place === "lab" && tab === "scans" && <Scans />}
       {place === "lab" && tab === "health" && <SystemHealth />}
       {place === "lab" && tab === "guide" && <Guide />}
     </div>
@@ -101,7 +107,7 @@ export function App() {
   return (
     <div className="shell">
       <TopBar place={route.place} sync={sync} onSearch={() => setPalette("")} />
-      <main className={`place${route.place === "chart" ? " wide" : ""}`} key={version}>
+      <main className={`place${["chart", "screener", "watchlists"].includes(route.place) ? " wide" : ""}`} key={version}>
         <PlaceView route={route} />
       </main>
       <MobileNav place={route.place} />

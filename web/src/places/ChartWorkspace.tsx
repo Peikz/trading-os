@@ -8,11 +8,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type ChartData, type ChartQuery, type TrendLine } from "../api";
 import { DrawChart, type Point, type Tool } from "../components/DrawChart";
 import { setActive, syncFromRoute, useActive } from "../shell/active";
+import { CHART_SHOW, readPref, useArrowKeys, writePref } from "../shell/prefs";
+import { nameOf, useNames } from "../shell/symbols";
+import { ALL, chartListOf, useRunPick, useTodayRuns } from "../shell/todayRun";
 import { PHONE, typing, useMedia } from "../ui/kit";
 import { BottomPanel } from "./chart/BottomPanel";
-import { type Sort, type SortKey, sortRows, useChartList, useChartLists } from "./chart/lists";
+import { type SortKey, sortRows, useChartList, useChartLists, useListView } from "./chart/lists";
 import { PhoneHeader, SymbolBar, ToolRail, ToolsRow } from "./chart/SymbolBar";
-import { ListPicker, PhoneList, Sheet, WatchTable } from "./chart/WatchPanel";
+import { ColumnsMenu, ListFilter, ListPicker, PhoneList, Sheet, WatchTable } from "./chart/WatchPanel";
 import { GREEN } from "./today/WatchNote";
 
 const FIRST_QUERY: ChartQuery = {
@@ -25,6 +28,8 @@ const FIRST_QUERY: ChartQuery = {
   levels: true,
   anchors: [],
 };
+
+const CHART_SHOW_KEY = "chart-show";
 
 function useWatching(symbol: string) {
   const [on, setOn] = useState(false);
@@ -58,11 +63,27 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
   const active = useActive();
   useEffect(() => syncFromRoute(params), [params]);
 
-  const listId = active.list || "hits";
+  // "Today's hits" follows the run picked on Today (All today, or one scan run)
+  const [runPick, setRunPick] = useRunPick();
+  useTodayRuns();
+  const requested = active.list || "hits";
+  const isToday = requested === "hits" || requested.startsWith("run:");
+  const listId = isToday ? chartListOf(runPick) : requested;
+  const urlList = isToday ? "hits" : listId; // the address keeps "hits"; the pick says which run
   const catalog = useChartLists();
   const { list, error: listError } = useChartList(listId);
-  const [sort, setSort] = useState<Sort | null>(null);
-  const rows = useMemo(() => sortRows(list?.rows ?? [], sort), [list, sort]);
+  const { view, setSort, toggleColumn } = useListView(listId);
+  const sort = view.sort;
+  const [filter, setFilter] = useState("");
+  useEffect(() => setFilter(""), [listId]);
+  useNames();
+  const sorted = useMemo(() => sortRows(list?.rows ?? [], sort), [list, sort]);
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((r) => r.ticker.toLowerCase().includes(q) || r.setup.toLowerCase().includes(q) || nameOf(r.ticker).toLowerCase().includes(q));
+  }, [sorted, filter]);
+  const [arrowKeys] = useArrowKeys();
   const symbol = active.symbol;
   const at = rows.findIndex((r) => r.ticker === symbol);
   const row = at >= 0 ? rows[at] : undefined;
@@ -71,19 +92,20 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
   const inAddress = params.has("s") || params.has("t");
   useEffect(() => {
     if (symbol && !inAddress) setActive(symbol);
-    else if (!symbol && rows.length) setActive(rows[0].ticker, listId);
-  }, [symbol, inAddress, rows, listId]);
+    else if (!symbol && rows.length) setActive(rows[0].ticker, urlList);
+  }, [symbol, inAddress, rows, urlList]);
 
   const step = useCallback(
     (by: 1 | -1) => {
       if (!rows.length) return;
       const next = at < 0 ? (by > 0 ? 0 : rows.length - 1) : at + by;
       if (next < 0 || next >= rows.length) return;
-      setActive(rows[next].ticker, listId);
+      setActive(rows[next].ticker, urlList);
     },
-    [rows, at, listId],
+    [rows, at, urlList],
   );
   useEffect(() => {
+    if (!arrowKeys) return;
     const onKey = (e: KeyboardEvent) => {
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
@@ -94,9 +116,9 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step]);
+  }, [step, arrowKeys]);
 
-  const pick = (t: string) => setActive(t, listId);
+  const pick = (t: string) => setActive(t, urlList);
   // A first click sorts best first (numbers high to low, words A to Z), a second flips, a third clears
   const onSort = (key: SortKey) =>
     setSort((s) => {
@@ -112,14 +134,17 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
       value={listId}
       fallback={listLabel}
       onPick={(id) => {
-        setSort(null);
-        setActive(symbol, id);
+        // Today's lists share the pick with the Today page
+        if (id === "hits") setRunPick(ALL);
+        else if (id.startsWith("run:")) setRunPick(id.slice(4));
+        setActive(symbol, id === "hits" || id.startsWith("run:") ? "hits" : id);
       }}
     />
   );
 
   // The chart
-  const [q, setQ] = useState<ChartQuery>(FIRST_QUERY);
+  const [q, setQ] = useState<ChartQuery>(() => ({ ...FIRST_QUERY, ...readPref(CHART_SHOW_KEY, CHART_SHOW) }));
+  useEffect(() => writePref(CHART_SHOW_KEY, { hits: q.hits, fills: q.fills, levels: q.levels }), [q.hits, q.fills, q.levels]);
   const [data, setData] = useState<ChartData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>("none");
@@ -227,8 +252,11 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
         <ToolsRow q={q} setQ={setQ} data={data} tool={tool} onTool={setTool} enabled={toolsOn} />
         {bottom}
         <Sheet title={position}>
-          <div className="sheet-picker">{picker}</div>
-          <PhoneList rows={rows} symbol={symbol} onPick={pick} />
+          <div className="sheet-picker">
+            {picker}
+            <ListFilter value={filter} onChange={setFilter} />
+          </div>
+          <PhoneList rows={rows} symbol={symbol} onPick={pick} filtered={filter.trim() !== ""} />
         </Sheet>
       </div>
     );
@@ -242,8 +270,23 @@ export function ChartWorkspace({ params }: { params: URLSearchParams }) {
         {chart}
         {sideOpen && (
           <aside className="ws-side" aria-label="List panel">
-            <div className="ws-side-head">{picker}</div>
-            <WatchTable rows={rows} symbol={symbol} onPick={pick} sort={sort} onSort={onSort} label={listLabel} />
+            <div className="ws-side-head">
+              <div className="side-pick">
+                {picker}
+                <ColumnsMenu hidden={view.hidden} onToggle={toggleColumn} />
+              </div>
+              <ListFilter value={filter} onChange={setFilter} />
+            </div>
+            <WatchTable
+              rows={rows}
+              symbol={symbol}
+              onPick={pick}
+              sort={sort}
+              onSort={onSort}
+              label={listLabel}
+              hidden={view.hidden}
+              filtered={filter.trim() !== ""}
+            />
           </aside>
         )}
       </div>

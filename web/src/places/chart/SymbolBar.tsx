@@ -5,6 +5,8 @@
 import type { ChartData, ChartListRow, ChartQuery } from "../../api";
 import { GradeBadge } from "../../components/Card";
 import { type Tool } from "../../components/DrawChart";
+import { StockSearchBox } from "../../shell/stockSearch";
+import { nameOf, useNames } from "../../shell/symbols";
 import { Icon } from "../../ui/Icon";
 import { Segmented, usePopover } from "../../ui/kit";
 import { WatchButton } from "../today/WatchNote";
@@ -75,7 +77,6 @@ function Indicators({ q, setQ }: Pick<BarProps, "q" | "setQ">) {
 
 function Lines({ data, q, setQ }: Pick<BarProps, "data" | "q" | "setQ">) {
   const { open, setOpen, ref } = usePopover();
-  const flag = (k: "hits" | "fills" | "levels", v: boolean) => setQ((x) => ({ ...x, [k]: v }));
   const anchor = (name: string) =>
     setQ((x) => ({ ...x, anchors: x.anchors.includes(name) ? x.anchors.filter((y) => y !== name) : [...x.anchors, name] }));
   return (
@@ -86,15 +87,6 @@ function Lines({ data, q, setQ }: Pick<BarProps, "data" | "q" | "setQ">) {
       </button>
       {open && (
         <div className="popover left" role="dialog" aria-label="Lines">
-          <h4>On the chart</h4>
-          <div className="check-grid">
-            {(["levels", "hits", "fills"] as const).map((k) => (
-              <label key={k} className="check">
-                <input type="checkbox" checked={q[k]} onChange={(e) => flag(k, e.target.checked)} />
-                {{ levels: "Pivot and stops", hits: "Scan hits", fills: "My trades" }[k]}
-              </label>
-            ))}
-          </div>
           <h4>Show</h4>
           <Segmented label="Show" options={SPANS} value={q.span} onPick={(v) => setQ((x) => ({ ...x, span: v }))} />
           <h4>History</h4>
@@ -122,6 +114,32 @@ function Lines({ data, q, setQ }: Pick<BarProps, "data" | "q" | "setQ">) {
   );
 }
 
+const SHOW: ["levels" | "hits" | "fills", string, string][] = [
+  ["hits", "Scan hits", "The amber arrows where a scan found this stock"],
+  ["fills", "My trades", "The green and red arrows for your buys and sells"],
+  ["levels", "Pivot and stops", "The pivot, entry and stop lines"],
+];
+
+/** The arrows and lines on the chart, one tap each (remembered in the browser). */
+export function ShowChips({ q, setQ }: Pick<BarProps, "q" | "setQ">) {
+  return (
+    <div className="show-chips" role="group" aria-label="On the chart">
+      {SHOW.map(([k, text, title]) => (
+        <button
+          key={k}
+          type="button"
+          className="chip-toggle"
+          title={title}
+          aria-pressed={q[k]}
+          onClick={() => setQ((x) => ({ ...x, [k]: !x[k] }))}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Frames({ q, setQ }: Pick<BarProps, "q" | "setQ">) {
   return (
     <Segmented
@@ -135,6 +153,8 @@ export function Frames({ q, setQ }: Pick<BarProps, "q" | "setQ">) {
 
 export function SymbolBar(p: BarProps) {
   const { last, chg } = quote(p.row, p.data, p.symbol);
+  useNames();
+  const name = nameOf(p.symbol);
   const dir = chg === null ? "" : chg >= 0 ? "up" : "down";
   return (
     <header className="ws-bar">
@@ -147,6 +167,11 @@ export function SymbolBar(p: BarProps) {
         </button>
       </div>
       <span className="ticker">{p.symbol || "–"}</span>
+      {name && (
+        <span className="company" title={name}>
+          {name}
+        </span>
+      )}
       {p.symbol && <WatchButton compact watching={p.watching} onToggle={p.onWatch} />}
       {p.row?.grade && <GradeBadge grade={p.row.grade} />}
       <span className="num price">{last === null ? "" : last.toFixed(2)}</span>
@@ -159,8 +184,10 @@ export function SymbolBar(p: BarProps) {
         <Frames q={p.q} setQ={p.setQ} />
         <Indicators q={p.q} setQ={p.setQ} />
         <Lines data={p.data} q={p.q} setQ={p.setQ} />
+        <ShowChips q={p.q} setQ={p.setQ} />
       </span>
       <span className="grow" />
+      <StockSearchBox />
       <span className="position muted num" aria-live="polite">
         {p.position}
       </span>
@@ -174,6 +201,8 @@ export function SymbolBar(p: BarProps) {
 /** The phone's header: ‹ ticker last change › and a line of facts under it. */
 export function PhoneHeader(p: BarProps) {
   const { last, chg } = quote(p.row, p.data, p.symbol);
+  useNames();
+  const name = nameOf(p.symbol);
   const dir = chg === null ? "" : chg >= 0 ? "up" : "down";
   return (
     <header className="ws-phone-head">
@@ -190,6 +219,7 @@ export function PhoneHeader(p: BarProps) {
           <Icon name="right" size={22} />
         </button>
       </div>
+      {name && <div className="company-line muted">{name}</div>}
       <div className="facts muted">
         {p.row?.grade && <GradeBadge grade={p.row.grade} />}
         {p.row?.setup && <span>{p.row.setup}</span>}
@@ -221,6 +251,7 @@ export function ToolsRow(p: Pick<BarProps, "q" | "setQ" | "data"> & { tool: Tool
       <Frames q={p.q} setQ={p.setQ} />
       <Indicators q={p.q} setQ={p.setQ} />
       <Lines data={p.data} q={p.q} setQ={p.setQ} />
+      <ShowChips q={p.q} setQ={p.setQ} />
       <span className="grow" />
       <ToolRail tool={p.tool} onTool={p.onTool} enabled={p.enabled} />
     </div>

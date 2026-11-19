@@ -10,6 +10,7 @@ test("log a fill: the entry opens a position", async ({ page, request }) => {
   const t = TICKERS[7];
   const before = await json<{ totals: { positions: number } }>(request, "/api/journal/open");
   await open(page, "journal/trades");
+  await page.getByText("Log a fill by hand").click();
   await page.getByLabel("Ticker", { exact: true }).fill(t);
   await page.getByLabel("Side").selectOption("buy");
   await page.getByLabel("Shares", { exact: true }).fill("10");
@@ -26,7 +27,7 @@ test("log a fill: the entry opens a position", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Open positions" })).toContainText(t);
 });
 
-test("a broker CSV import adds fills and closes a trade", async ({ page, request }) => {
+test("a broker export: the preview first, then the import closes a trade", async ({ page, request }) => {
   const t = TICKERS[3];
   type Closed = { trades: { ticker: string }[] };
   const closedOf = async () =>
@@ -38,10 +39,13 @@ test("a broker CSV import adds fills and closes a trade", async ({ page, request
     `2026-06-10,${t},sell,100,11.0,1`,
   ].join("\n");
   await open(page, "journal/trades");
-  await page.getByText("Import broker fills (CSV)").click();
-  await page.getByLabel("Fills export").setInputFiles({ name: "fills.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
-  await page.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page.locator("details p.ok")).toBeVisible();
+  await page.getByRole("button", { name: "Import broker fills" }).click();
+  const dialog = page.getByRole("dialog", { name: "Import broker fills" });
+  await dialog.getByLabel("Fills export").setInputFiles({ name: "fills.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(dialog.getByText("2 rows read")).toBeVisible(); // the preview: nothing written yet
+  expect(await closedOf()).toBe(before);
+  await dialog.getByRole("button", { name: /^Import \d+ new fills$/ }).click();
+  await expect(dialog.locator("p.ok")).toBeVisible();
   // The fixture has no trade in this stock: the import closes one. (A rerun on the same repo
   // overlaps the first import's dates, and the journal rightly keeps that as one trade.)
   expect(await closedOf()).toBe(Math.max(before, 1));
@@ -49,13 +53,13 @@ test("a broker CSV import adds fills and closes a trade", async ({ page, request
   await expect(page.getByRole("table", { name: "Closed trades" })).toContainText(t);
 });
 
-test("a CSV without the mapped columns says what is missing", async ({ page, guard }) => {
-  guard.allow(/^\/api\/journal\/import$/, 400);
+test("a CSV without the mapped columns says what is missing", async ({ page }) => {
   await open(page, "journal/trades");
-  await page.getByText("Import broker fills (CSV)").click();
-  await page.getByLabel("Fills export").setInputFiles({ name: "bad.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2\n") });
-  await page.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page.locator("details p.error")).toContainText("missing columns");
+  await page.getByRole("button", { name: "Import broker fills" }).click();
+  const dialog = page.getByRole("dialog", { name: "Import broker fills" });
+  await dialog.getByLabel("Fills export").setInputFiles({ name: "bad.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2\n") });
+  await expect(dialog.locator("p.error")).toContainText("missing columns");
+  await expect(dialog.getByRole("button", { name: /^Import \d+ new fills$/ })).toHaveCount(0);
 });
 
 test("a daily note with a stock, filtered by that stock", async ({ page, request }) => {
@@ -75,14 +79,43 @@ test("a daily note with a stock, filtered by that stock", async ({ page, request
   await expect(page.locator(".note", { hasText: text })).toBeVisible();
 });
 
-test("the Plans, Trades and Live vs study tabs", async ({ page }) => {
+test("a trade opens beside the table: chart with the fills, and its conviction is saved", async ({ page, request }) => {
+  type Closed = { trades: { trade_id: string; ticker: string; conviction: number | null }[] };
+  const closed = await json<Closed>(request, "/api/journal/closed");
+  expect(closed.trades.length).toBeGreaterThan(0);
+  await open(page, "journal/trades");
+  const detail = page.getByRole("region", { name: /trade$/ });
+  await expect(detail).toBeVisible(); // the first trade is open at desktop width
+  await expect(detail.locator("canvas").first()).toBeVisible();
+  await detail.getByRole("radiogroup", { name: "Conviction" }).getByLabel("3", { exact: true }).check();
+  await detail.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(detail.locator("p.ok")).toBeVisible();
+  const after = await json<Closed>(request, "/api/journal/closed");
+  expect(after.trades.some((t) => t.conviction === 3)).toBe(true); // the same file Streamlit reads
+  await expect(page.getByRole("table", { name: "Closed trades" })).toContainText("◆3");
+});
+
+test("today's note is saved from the Journal and shows on Today", async ({ page, request }) => {
+  await open(page, "journal/trades");
+  await page.getByRole("button", { name: /Today's note/ }).click();
+  const text = `e2e: today ${Date.now()}`;
+  await page.getByLabel("Today's note text").fill(text);
+  await page.getByRole("button", { name: "Save today's note" }).click();
+  await expect(page.locator(".daily-body .ok")).toBeVisible();
+  const saved = await json<{ text: string }>(request, "/api/journal/daily-notes/today");
+  expect(saved.text).toBe(text);
+  await open(page, "today");
+  await expect(page.getByRole("button", { name: /Today's note/ })).toContainText(text);
+});
+
+test("the Plans, Trades and Live results tabs", async ({ page }) => {
   await open(page, "journal");
   await tab(page, "Plans");
   await expect(page.getByLabel("Start from a scan hit")).toBeVisible();
   await expect(page.getByRole("table").first()).toBeVisible();
   await tab(page, "Trades");
   await expect(page.locator(".metric").first()).toBeVisible();
-  await tab(page, "Live vs study");
+  await tab(page, "Live results");
   await expect(page.getByRole("table").first()).toBeVisible();
   await page.waitForLoadState("networkidle");
 });

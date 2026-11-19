@@ -62,6 +62,8 @@ export interface BoardRow {
   levels: Record<string, number>;
   decision?: Decision | null;
   why?: Why;
+  /** The slots of today's runs this stock was found in (with a run picked on Today). */
+  runs?: string[];
   [key: string]: unknown;
 }
 
@@ -81,6 +83,47 @@ export interface Today {
   hidden_c: number;
   total: number;
   next_scan?: NextScan | null;
+}
+
+/** One scan run of today: its time in New York and Copenhagen and the stocks to act on it found. */
+export interface TodayRun {
+  id: string;
+  slot: string;
+  name: string;
+  ny: string | null;
+  cph: string | null;
+  count: number;
+}
+
+export interface TodayRuns {
+  session: string | null;
+  all: { id: "all"; label: string; count: number };
+  runs: TodayRun[];
+}
+
+/** One scan hit of a run (a stock and a scan), as the Screener's "Scan hits" table shows it. */
+export interface ScanHit {
+  ticker: string;
+  scan: string;
+  scan_label: string;
+  grade: string;
+  runs: string[];
+  levels: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface ScanHits {
+  run: string;
+  label: string;
+  count: number;
+  scans: { id: string; label: string; count: number }[];
+  rows: ScanHit[];
+}
+
+/** `[ticker, company name]`, name empty when the data repo has none. */
+export interface SymbolList {
+  asof: string | null;
+  symbols: [string, string][];
 }
 
 export interface Candle {
@@ -152,6 +195,8 @@ export interface ScreenRequest extends ScreenSpec {
   run?: string | null;
   scan?: string | null;
   tiers?: string[];
+  /** More columns to bring back (screener fields), beside the usual ones. */
+  more?: string[];
 }
 
 export interface ScreenResult {
@@ -223,6 +268,9 @@ export interface GradeNote {
   grade: string;
   notes: string;
   tags: string;
+  /** How sure you were: 1 small, 2 normal, 3 high; null when not set */
+  conviction: number | null;
+  convictions: number[];
   attachments: string[];
   message?: string;
 }
@@ -295,6 +343,8 @@ export interface ClosedStats {
 
 export interface JournalClosed {
   stats: ClosedStats;
+  /** Closed trades by conviction: count, win %, mean R, total R */
+  by_conviction: Row[];
   curve: { time: string; value: number }[];
   trades: Row[];
   caption: string;
@@ -366,6 +416,8 @@ export interface ChartData {
   dates: string[];
   tradingview: string;
   note: string;
+  /** A name for each bar's time when the real dates are hidden (the Practice page's "day -3") */
+  labels?: Record<string, string> | null;
 }
 
 export interface ChartNotes {
@@ -386,6 +438,95 @@ export interface Intraday {
   levels: Level[];
   /** The live chart's 10:30 (the EP entry time) */
   markers?: { time: number; position: "aboveBar" | "belowBar"; shape: "arrowDown" | "arrowUp"; color: string; text: string }[];
+}
+
+/** What a broker export holds before anything is written (fills_import.preview) */
+export interface ImportPreview {
+  ok: boolean;
+  error: string | null;
+  lines: string[];
+  rows: number;
+  new: number;
+  existing: number;
+  first_date: string | null;
+  last_date: string | null;
+}
+
+export interface TodayNote {
+  day: string;
+  text: string;
+  note_id: string | null;
+}
+
+export interface PracticeTotals {
+  answered: number;
+  picks_r: number;
+  equal_r: number;
+  picks_r_per_signal: number | null;
+  equal_r_per_signal: number | null;
+}
+
+export interface PracticeStats {
+  pool: string;
+  answered: number;
+  by_choice: Record<string, { count: number; mean_r: number | null }>;
+  by_shown: { blind: PracticeTotals; shown: PracticeTotals };
+  picks_r: number;
+  equal_r: number;
+  picks_r_per_signal: number | null;
+  equal_r_per_signal: number | null;
+  big: { total: number; taken: number; skipped: number };
+  losers: { total: number; taken: number; skipped: number };
+  remaining: number;
+  pool_size: number;
+}
+
+export interface PracticeState {
+  available: boolean;
+  pools: { id: string; label: string }[];
+  choices?: string[];
+  multiplier?: Record<string, number>;
+  stats: Record<string, PracticeStats>;
+  lines: string[];
+}
+
+export interface PracticeResult {
+  choice: string;
+  pool: string;
+  net_r: number;
+  pick_r: number;
+  hold_days: number;
+  entry_date: string;
+  ticker: string;
+  setup: string;
+  answered_at: string | null;
+  shown: boolean;
+  note: string;
+}
+
+export interface PracticeSignal {
+  signal_id: string;
+  pool: string;
+  answered: boolean;
+  shown: boolean;
+  ticker: string | null;
+  facts: { label: string; value: string }[];
+  chart: ChartData;
+  result: PracticeResult | null;
+}
+
+export interface PracticeAnswered {
+  signal_id: string;
+  pool: string;
+  ticker: string;
+  setup_name: string;
+  choice: string;
+  net_r: number;
+  entry_date: string;
+  hold_days: number;
+  answered: string;
+  shown: boolean;
+  note: string;
 }
 
 /** A table from the API: column names and JSON rows; `total` counts rows before any limit. */
@@ -612,6 +753,8 @@ export interface ChartListRow {
   chg_pct: number | null;
   rvol: number | null;
   signal_id: string | null;
+  /** Today's runs it was a hit in (slots). */
+  runs?: string[];
 }
 
 export interface ChartList {
@@ -647,6 +790,7 @@ export const DEFAULT_INDICATORS = ["MA 10", "MA 20", "MA 50"];
 // only read or compute, or write outside the data repo, so they don't count.
 const NOT_WRITES = [
   /^\/api\/ticket$/,
+  /^\/api\/journal\/import\/preview$/,
   /^\/api\/screener\/run/,
   /^\/api\/research\//,
   /^\/api\/system\/validation$/,
@@ -691,9 +835,10 @@ const post = <T>(path: string, body: unknown, method = "POST") =>
 const enc = encodeURIComponent;
 
 export const api = {
-  today: (scope: Scope, tickers?: string[], screen?: string | null, wl?: string | null) => {
+  today: (scope: Scope, tickers?: string[], screen?: string | null, wl?: string | null, run?: string | null) => {
     const q = new URLSearchParams({ scope });
     if (wl) q.set("wl", wl);
+    if (run) q.set("run", run);
     if (tickers?.length) q.set("t", tickers.join(","));
     if (screen) q.set("screen", screen);
     return request<Today>(`/api/today?${q}`);
@@ -715,7 +860,13 @@ export const api = {
   saveGrade: (
     kind: "signal" | "trade",
     ref: string,
-    body: { grade: string; notes: string; tags: string; screenshots: { name: string; data: string }[] },
+    body: {
+      grade: string;
+      notes: string;
+      tags: string;
+      conviction: number | null;
+      screenshots: { name: string; data: string }[];
+    },
   ) => post<GradeNote>(`/api/grades/${kind}/${enc(ref)}`, body, "PUT"),
   positions: () => request<Positions>("/api/positions"),
   journalOpen: () => request<JournalOpen>("/api/journal/open"),
@@ -738,6 +889,9 @@ export const api = {
     }),
   removeFromWatchlist: (name: string, tickers: string[]) =>
     post<WatchList>(`/api/watchlists/${enc(name)}/remove`, { tickers }),
+  todayRuns: () => request<TodayRuns>("/api/today-runs"),
+  scanHits: (run: string) => request<ScanHits>(`/api/scan-hits?run=${enc(run)}`),
+  symbols: () => request<SymbolList>("/api/symbols"),
   chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
   chartLists: () => request<{ lists: ChartListInfo[] }>("/api/chart-lists"),
   chartList: (id: string) => request<ChartList>(`/api/chart-lists/${enc(id)}`),
@@ -819,8 +973,23 @@ export const api = {
   marketPage: (p: Record<string, string>) =>
     request<MarketPage>(`/api/market/page?${new URLSearchParams(p)}`),
   guide: () => request<{ text: string | null }>("/api/guide"),
-  importFills: (name: string, content: string) =>
-    post<{ message: string }>("/api/journal/import", { name, content }),
+  importPreview: (name: string, data: string) =>
+    post<ImportPreview>("/api/journal/import/preview", { name, data }),
+  importFills: (name: string, data: string) =>
+    post<{ message: string }>("/api/journal/import", { name, data }),
+  todayNote: () => request<TodayNote>("/api/journal/daily-notes/today"),
+  saveTodayNote: (text: string) => post<TodayNote>("/api/journal/daily-notes/today", { text }, "PUT"),
+  practice: () => request<PracticeState>("/api/practice"),
+  practiceNext: (pool: string) => request<{ signal_id: string | null }>(`/api/practice/next?pool=${enc(pool)}`),
+  practiceSignal: (id: string, shown: boolean, lines: string[]) =>
+    request<PracticeSignal>(
+      `/api/practice/signal/${enc(id)}?${new URLSearchParams({ shown: String(shown), lines: lines.join(",") })}`,
+    ),
+  practiceAnswer: (body: { signal_id: string; pool: string; choice: string; note: string; shown: boolean }) =>
+    post<{ result: PracticeResult }>("/api/practice/answer", body),
+  practiceNote: (signal_id: string, note: string) =>
+    post<{ saved: boolean }>("/api/practice/note", { signal_id, note }, "PUT"),
+  practiceAnswers: () => request<PracticeAnswered[]>("/api/practice/answers"),
   dailyNotes: (tag: string, days: number) =>
     request<DailyNotes>(`/api/journal/daily-notes?${new URLSearchParams({ ...(tag ? { tag } : {}), days: String(days) })}`),
   addDailyNote: (body: { text: string; day: string; tags: string }) =>

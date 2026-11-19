@@ -17,6 +17,7 @@ import {
 import { DrawChart } from "../components/DrawChart";
 import { Markdown } from "../components/Markdown";
 import { ApiTableView, Sections, Table } from "../components/Table";
+import { About } from "../ui/kit";
 
 const SECTIONS = [
   "Strategy rules",
@@ -70,7 +71,9 @@ export function Research() {
   return (
     <div>
       <Sections label="Section" options={SECTIONS} value={section} onPick={setSection} />
-      <p className="muted">{WHAT[section]}</p>
+      <About>
+        <p className="muted">{WHAT[section]}</p>
+      </About>
       {section === "Strategy rules" && <Rules />}
       {section === "How it was tested" && <Tested />}
       {section === "Grades" && <Grades />}

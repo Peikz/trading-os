@@ -3,19 +3,28 @@
 // server image) and Guide; the manual Pull latest / Save & push in Settings.
 import { expect, open, sym, test, TICKERS } from "./fixtures";
 
-const PLACES: [string, string[]][] = [
-  ["Today", []],
-  ["Chart", []],
-  ["Screener", []],
-  ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"]],
-  ["Journal", ["Positions", "Trades", "Plans", "Notes", "Live vs study"]],
-  ["Lab", ["Research", "Runs", "Health", "Guide"]],
+// [place, its tabs, in the top bar's More menu]
+const PLACES: [string, string[], boolean][] = [
+  ["Today", [], false],
+  ["Chart", [], false],
+  ["Watchlists", [], false],
+  ["Screener", ["Scan hits", "Screener"], false],
+  ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"], false],
+  ["Journal", ["Trades", "Positions", "Plans", "Notes", "Live results"], false],
+  ["Practice", [], true],
+  ["Lab", ["Research", "Runs", "Scans", "Health", "Guide"], true],
 ];
 
 test("every place and tab opens from the top bar", async ({ page }) => {
   await open(page, "today");
-  for (const [place, tabs] of PLACES) {
-    await page.getByRole("navigation", { name: "Places", exact: true }).getByRole("link", { name: place, exact: true }).click();
+  for (const [place, tabs, more] of PLACES) {
+    const nav = page.getByRole("navigation", { name: "Places", exact: true });
+    if (more) {
+      await nav.getByRole("button", { name: "More" }).click();
+      await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: place, exact: true }).first().click();
+    } else {
+      await nav.getByRole("link", { name: place, exact: true }).click();
+    }
     await expect(page.getByRole("heading", { level: 1, name: place, exact: true })).toBeVisible();
     await page.waitForLoadState("networkidle");
     await expect(page.locator("main .error")).toHaveCount(0);
@@ -31,7 +40,7 @@ test("every place and tab opens from the top bar", async ({ page }) => {
 test("the old page addresses open their place and tab", async ({ page }) => {
   for (const [old, heading, tab] of [
     ["positions", "Journal", "Positions"],
-    ["live", "Journal", "Live vs study"],
+    ["live", "Journal", "Live results"],
     ["research", "Lab", "Research"],
     ["health", "Lab", "Health"],
     ["guide", "Lab", "Guide"],
@@ -42,6 +51,8 @@ test("the old page addresses open their place and tab", async ({ page }) => {
     await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
   }
   await open(page, "watchlists");
+  await expect(page.getByRole("heading", { level: 1, name: "Watchlists", exact: true })).toBeVisible();
+  await open(page, "stocks");
   await expect(page.getByRole("heading", { level: 1, name: "Screener", exact: true })).toBeVisible();
   await open(page, "chart?t=wzqw");
   await expect(page.getByRole("heading", { level: 1, name: "Chart", exact: true })).toBeVisible();
@@ -55,6 +66,9 @@ test("the market in one word, with its reasons and SPY / QQQ / VIX", async ({ pa
   await pill.click();
   const why = page.getByRole("dialog", { name: "Market" });
   await expect(why).toContainText("QQQ light is green.");
+  await expect(why).toContainText("Strong: QQQ light green and a healthy IBD uptrend.");
+  // One word, the Streamlit pill's: Strong, Mixed or Weak
+  await expect(pill).toContainText(/^(Strong|Mixed|Weak) market$/);
   await expect(why.locator(".quote", { hasText: "SPY" })).toBeVisible();
   await why.getByRole("link", { name: "Open Market" }).click();
   await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -76,16 +90,18 @@ test("Ctrl+K jumps to a stock, a place or a tab", async ({ page }) => {
 
 test("Market: tiles, the setups at today's heat, sectors with the rotation, industries, breadth, IBD", async ({ page }) => {
   await open(page, "market/overview");
-  await expect(page.locator(".metric", { hasText: "QQQ light" })).toContainText("GREEN");
+  await expect(page.locator(".mtile", { hasText: "QQQ light" })).toContainText("Green");
+  // The sector heatmap: a tile per sector, coloured, and the table under it
+  await expect(page.getByRole("list", { name: /^Sectors by change/ }).getByRole("listitem").first()).toBeVisible();
+  await page.getByRole("group", { name: "Change over" }).getByRole("button", { name: "1M" }).click();
+  await expect(page.getByRole("table", { name: "Indexes, sectors and themes" })).toContainText(sym("K"));
   await page.getByRole("tab", { name: "Heat & setups" }).click();
   await expect(page.locator("h3", { hasText: /^Warm market: scan count \d+/ })).toBeVisible();
   const heat = page.getByRole("group", { name: "Setups at this heat" });
   await heat.getByRole("button", { name: /^cool/ }).click();
   await expect(heat.getByRole("button", { name: /^cool/ })).toHaveClass("on");
   await page.getByRole("tab", { name: "Sectors" }).click();
-  await expect(page.getByRole("table", { name: "Indexes, sectors and themes" })).toContainText(sym("K"));
   await expect(page.getByRole("img", { name: "Rotation against SPY" })).toBeVisible();
-  await page.getByRole("group", { name: "Return over" }).getByRole("button").first().click();
   await expect(page.getByRole("table", { name: "Top 15 industries" })).toBeVisible();
   await page.getByRole("group", { name: "Rank move since" }).getByRole("button", { name: "1 month" }).click();
   await expect(page.locator("b", { hasText: "Climbing most (1 month)" })).toBeVisible();
@@ -120,12 +136,14 @@ test("Runs and scans are view-only on the server image", async ({ page, request 
   const runs = (await (await request.get("/api/timed-runs")).json()) as { writable: boolean; note: string };
   expect(scans.writable).toBe(false);
   expect(runs.writable).toBe(false);
-  await open(page, "lab/scans"); // the old address opens Runs
+  await open(page, "lab/runs");
   await expect(page.getByRole("table", { name: "Runs" }).locator("tbody tr").first()).toBeVisible();
-  await expect(page.getByRole("table", { name: "Scans" }).locator("tbody tr").first()).toBeVisible();
-  await expect(page.locator("main p.warn")).toHaveText([runs.note, scans.note]);
+  await expect(page.locator("main p.warn")).toHaveText([runs.note]);
   const runEditor = page.getByLabel("Edit a run");
   await expect(runEditor.getByRole("button", { name: "Check and save" })).toBeDisabled();
+  await open(page, "lab/scans"); // the scan editor has a tab of its own
+  await expect(page.getByRole("table", { name: "Scans" }).locator("tbody tr").first()).toBeVisible();
+  await expect(page.locator("main p.warn")).toHaveText([scans.note]);
   const editor = page.getByLabel("Edit a scan");
   await page.getByLabel("Scan", { exact: true }).selectOption({ index: 1 });
   await expect(editor).toBeVisible();

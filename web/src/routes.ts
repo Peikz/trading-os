@@ -1,27 +1,38 @@
-// Six places (UX round 1, 18 Nov 2026): Today, Chart, Screener, Market, Journal and Lab. Hash
+// Eight places (UX rounds 1-3, 18 Nov 2026): Today, Chart, Watchlists, Screener, Market, Journal, then
+// Practice and Lab under "More". Hash
 // routes keep working on a static server and keep a push link's query string (`?push=am&t=A,B`)
 // for Today. The Chart takes the active stock and list in its address: `#/chart?s=TICKER&list=ID`.
 // The old addresses (the twelve pages, and Stocks) still open the right place and tab, so
 // bookmarks and older links keep working.
 
-export type Place = "today" | "chart" | "screener" | "market" | "journal" | "lab";
+export type Place = "today" | "chart" | "watchlists" | "screener" | "market" | "journal" | "practice" | "lab";
 
-export const PLACES: { id: Place; label: string; icon: string; question: string }[] = [
+export const PLACES: { id: Place; label: string; icon: string; question: string; short?: string }[] = [
   { id: "today", label: "Today", icon: "today", question: "What do I do today?" },
   { id: "chart", label: "Chart", icon: "chart", question: "One stock, with its list beside it" },
-  { id: "screener", label: "Screener", icon: "stocks", question: "Find stocks: lists, screens, scan hits" },
+  { id: "watchlists", label: "Watchlists", short: "Lists", icon: "star", question: "Your lists, the scans' watch lists and alerts" },
+  { id: "screener", label: "Screener", icon: "stocks", question: "Scan hits and screens: find stocks" },
   { id: "market", label: "Market", icon: "market", question: "How is the market?" },
   { id: "journal", label: "Journal", icon: "journal", question: "My trades and notes" },
+  { id: "practice", label: "Practice", icon: "draw", question: "Replay past signals and test your calls" },
   { id: "lab", label: "Lab", icon: "lab", question: "Research and the system" },
 ];
 
+/** The places in the top bar; Practice and Lab are in its More menu. */
+export const MAIN_PLACES: Place[] = ["today", "chart", "watchlists", "screener", "market", "journal"];
+
 /** The places on the phone's bottom bar; the rest are in More. */
-export const PHONE_TABS: Place[] = ["today", "chart", "screener", "market"];
+export const PHONE_TABS: Place[] = ["today", "chart", "watchlists", "screener"];
 
 export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
   today: [],
+  practice: [],
   chart: [],
-  screener: [],
+  watchlists: [],
+  screener: [
+    ["hits", "Scan hits"],
+    ["screen", "Screener"],
+  ],
   market: [
     ["overview", "Overview"],
     ["heat", "Heat & setups"],
@@ -30,15 +41,16 @@ export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
     ["ibd", "IBD"],
   ],
   journal: [
-    ["positions", "Positions"],
     ["trades", "Trades"],
+    ["positions", "Positions"],
     ["plans", "Plans"],
     ["notes", "Notes"],
-    ["live", "Live vs study"],
+    ["live", "Live results"],
   ],
   lab: [
     ["research", "Research"],
     ["runs", "Runs"],
+    ["scans", "Scans"],
     ["health", "Health"],
     ["guide", "Guide"],
   ],
@@ -53,12 +65,10 @@ export interface Route {
 // The old pages (12, before Nov 2026): place, tab, and how their query maps
 const LEGACY: Record<string, [Place, string]> = {
   chart: ["chart", ""],
-  watchlists: ["screener", ""],
-  screener: ["screener", ""],
   positions: ["journal", "positions"],
   live: ["journal", "live"],
   research: ["lab", "research"],
-  scans: ["lab", "runs"],
+  scans: ["lab", "scans"],
   health: ["lab", "health"],
   guide: ["lab", "guide"],
 };
@@ -91,14 +101,11 @@ export function parseHash(hash: string): Route {
       params.set("s", params.get("t")!.toUpperCase());
       params.delete("t");
     }
-    if (head === "watchlists" && !params.has("src")) params.set("src", "lists");
-    if (head === "screener" && !params.has("src")) params.set("src", "all");
     return { place, tab, params };
   }
   const place = (PLACES.some((p) => p.id === head) ? head : "today") as Place;
   const tabs = TABS[place];
-  const wanted = place === "lab" && sub === "scans" ? "runs" : sub; // Scans became Runs (4 Nov 2026)
-  const tab = tabs.some(([id]) => id === wanted) ? wanted : (tabs[0]?.[0] ?? "");
+  const tab = tabs.some(([id]) => id === sub) ? sub : (tabs[0]?.[0] ?? "");
   return { place, tab, params };
 }
 

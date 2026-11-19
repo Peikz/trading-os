@@ -21,8 +21,9 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api import chart, lists, pages, research
+from api import chart, lists, pages, research, scan_hits, symbols, today_runs
 from api import market as market_page
+from api import practice as practice_page
 from api.serialize import records, scalar
 from trading_os import board_data, chart_series, dashboard, heat, notify, screens
 from trading_os.config import DEFAULT_PATH as CONFIG_PATH
@@ -94,6 +95,7 @@ class ScreenRun(ScreenSpec):
     tiers: list[str] = Field(default_factory=lambda: ["alert", "log"])
     watchlist: str | None = None  # one of your lists, for source "list" (Nov 2026)
     limit: int = Field(500, ge=1, le=5000)
+    more: list[str] = Field(default_factory=list)  # extra screener fields to bring back (Nov 2026)
 
 
 def create_app(data_dir: Path | str | None = None, config_path: Path | str | None = None):
@@ -199,11 +201,14 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         t: str | None = None,
         screen: str | None = None,
         wl: str | None = None,
+        run: str | None = None,
     ) -> dict:
         """The board's queue: the newest runs' A+ / A / B first (C with scope pushed / all).
         `t`: a push link's stocks (`?t=A,B`), in the push's order, from every scan's hits.
         `screen` with `t`: a screen's results to flip through (no grade). Scope `watchlists`:
-        your own lists' stocks; `wl` picks one list by name."""
+        your own lists' stocks; `wl` picks one list by name. `run`: one run of today (its id from
+        `/api/today-runs`) or `all` (every run of the day, de-duplicated, each stock tagged with
+        the runs it came from); without it, the newest run of each slot."""
         found = runs(manual=False)
         wanted = [x for x in (t or "").split(",") if x]
         if (screen and wanted) or scope == "watchlists":
@@ -225,7 +230,12 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
                 "next_scan": next_scan(),
             }
         every = scope == "all" or bool(wanted)
-        hits = board_data.collect(found, cfg(), cache.scan_frames, exchanges, everything=every)
+        if run and not wanted:
+            hits = today_runs.hits(run, found, cfg(), cache.scan_frames, exchanges, every)
+            if hits is None:
+                raise HTTPException(404, "No such run today.")
+        else:
+            hits = board_data.collect(found, cfg(), cache.scan_frames, exchanges, everything=every)
         if wanted and len(hits):
             order = {x: i for i, x in enumerate(wanted)}
             hits = hits[hits["ticker"].isin(order)]
@@ -244,6 +254,12 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             "next_scan": next_scan(),
         }
 
+    @app.get("/api/today-runs")
+    def todays_runs() -> dict:
+        """The scan runs of the newest session: each with its time in New York and Copenhagen,
+        its name and how many stocks to act on it found; and the day as a whole."""
+        return today_runs.summary(runs(manual=False), cfg(), cache.scan_frames, exchanges, GRADED)
+
     @app.get("/api/market")
     def market() -> dict:
         """The market tiles: QQQ light, heat, IBD state, SPY, QQQ, VIX; and the full lines."""
@@ -252,9 +268,9 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             return {"tiles": [], "details": [], "mood": board_data.market_mood(None, None, None)}
         tiles = board_data.tiles(row, ibd_info, heat_text)
         try:
-            mood = board_data.market_mood(row, ibd_info, heat.load(root()))
+            mood = board_data.market_mood(row, ibd_info, heat.load(root()), heat_text)
         except (KeyError, TypeError, ValueError):  # an odd heat file: the word from the rest
-            mood = board_data.market_mood(row, ibd_info, None)
+            mood = board_data.market_mood(row, ibd_info, None, heat_text)
         return {
             "tiles": [{"label": k, "value": v, "delta": d} for k, v, d in tiles],
             "details": board_data.market_details(row),
@@ -299,10 +315,19 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         tickers = [x.strip().upper() for x in t.split(",") if x.strip()][:60]
         out = {}
         board_data.today_bars([x for x in tickers if len(x) <= 12])  # one TradingView call for all
+        from trading_os.bars_pack import shard_of
+
+        files: dict[
+            str, Path | None
+        ] = {}  # the bars file per first letter: looked up once per call
         for ticker in dict.fromkeys(tickers):
             if len(ticker) > 12:
                 continue
-            b = board_data.daily_bars(root(), ticker).tail(n)
+            shard = shard_of(ticker)
+            if shard not in files:
+                files[shard] = board_data.bars_file(root(), ticker)
+            b = board_data.ticker_bars(files[shard], ticker)
+            b = board_data.with_today(b, ticker).tail(n)
             out[ticker] = [
                 {"time": f"{d}", "open": float(o), "high": float(h), "low": float(lo),
                  "close": float(c)}
@@ -392,7 +417,8 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             result = notify.best_first(result).reset_index(drop=True)
         fields = [f.get("field") for f in req.filters]
         lead = ["grade", "grade_score", "tier"] if scan else []
-        cols = list(dict.fromkeys([*lead, *screens.SHOWN, *fields, req.sort, "exchange"]))
+        extra = [c for c in req.more if c in screens.FIELDS]
+        cols = list(dict.fromkeys([*lead, *screens.SHOWN, *fields, req.sort, "exchange", *extra]))
         cols = [c for c in cols if c and c in result]
         summary = " · ".join(screens.describe(f) for f in screens.check(req.filters))
         return {
@@ -442,6 +468,9 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     lists.register(app, ctx)
     research.register(app, ctx, find_run, run_id, cfg_path)
     market_page.register(app, ctx)
+    symbols.register(app, ctx)
+    scan_hits.register(app, ctx)
+    practice_page.register(app, ctx)
     return app
 
 

@@ -78,23 +78,28 @@ HEAT = {"bands": [[20, "cold"], [45, "cool"], [80, "warm"], [None, "hot"]],
         "band_labels": {"warm": "45-80"}}  # fmt: skip
 
 
-def test_market_mood_is_one_word_with_its_three_reasons():
+def test_market_mood_uses_the_streamlit_word_with_its_three_reasons():
     calm = {"qqq_light": "GREEN", "scan_count": 90.0, "spy_close": 500.0, "spy_chg_pct": 0.5}
     up = {"state": "uptrend", "dist_count": 1}
-    mood = board_data.market_mood(calm, up, HEAT)
-    assert mood["level"] == "green" and mood["word"] == "Healthy market"
+    mood = board_data.market_mood(calm, up, HEAT, "hot")
+    assert mood["level"] == "green" and mood["word"] == "Strong market"
+    assert mood["word"] == f"{board_data.market_word(calm, up, 'hot')[0]} market"
     assert [r["level"] for r in mood["reasons"]] == ["green", "green", "green"]
     assert mood["quotes"] == [{"label": "SPY", "value": "500.00", "delta": "+0.5%"}]
 
     mixed = board_data.market_mood({**calm, "qqq_light": "YELLOW", "scan_count": 70}, up, HEAT)
-    assert mixed["level"] == "amber" and mixed["word"] == "Cautious market"
+    assert mixed["level"] == "amber" and mixed["word"] == "Mixed market"
     assert mixed["reasons"][1]["text"].startswith("Heat is warm: 70 stocks")
     assert mixed["reasons"][1]["text"].endswith("(this band: 45-80).")
 
     down = {"state": "correction", "dist_count": 7}
     weak = board_data.market_mood({**calm, "qqq_light": "RED"}, down, HEAT)
-    assert weak["level"] == "red" and weak["reasons"][2]["text"] == "IBD: correction (7 sell days)."
-    assert board_data.market_mood(None, None, None)["level"] is None
+    assert weak["level"] == "red" and weak["word"] == "Weak market"
+    assert weak["reasons"][2]["text"] == "IBD: correction (7 sell days)."
+    # green QQQ light under a correction is mixed, as in the Streamlit pill
+    assert board_data.market_mood(calm, down, HEAT)["word"] == "Mixed market"
+    none = board_data.market_mood(None, None, None)
+    assert none["level"] is None and none["word"] == "No market data"
 
 
 def test_next_scan_names_the_slot_in_both_clocks():
