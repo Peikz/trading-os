@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ChartListRow, type WatchList } from "../api";
 import { GradeBadge } from "../components/Card";
 import { download, readText } from "../format";
+import { sortedRows } from "../components/Table";
 import { PriceAlerts, ScanLists } from "../pages/Watchlists";
 import { Sparkline } from "./chart/WatchPanel";
 import { useSparks } from "./chart/lists";
@@ -218,7 +219,18 @@ function ListView({ name, phone, onChanged }: { name: string; phone: boolean; on
   useEffect(() => {
     api.watchlist(name).then(setList, (e: Error) => setError(e.message));
   }, [name, version]);
-  const rows = useMemo(() => list?.rows ?? [], [list]);
+  // A click on a header sorts (a second flips it, a third clears it)
+  const [sort, setSort] = useState<{ col: string; down: boolean } | null>(null);
+  const rows = useMemo(() => sortedRows(list?.rows ?? [], sort), [list, sort]);
+  const onSort = (col: string) => setSort((s) => (!s || s.col !== col ? { col, down: false } : s.down ? null : { col, down: true }));
+  const sortHead = (col: string, text: string, cls?: string) => (
+    <th className={cls} aria-sort={sort?.col === col ? (sort.down ? "descending" : "ascending") : undefined}>
+      <button className="th-btn" onClick={() => onSort(col)}>
+        {text}
+        {sort?.col === col && <Icon name={sort.down ? "down" : "up"} size={12} />}
+      </button>
+    </th>
+  );
   const sparks = useSparks(rows.map((r) => String(r.ticker)));
   const changed = () => {
     setVersion((v) => v + 1);
@@ -374,14 +386,15 @@ function ListView({ name, phone, onChanged }: { name: string; phone: boolean; on
           <thead>
             <tr>
               <th className="chk" />
-              <th>Ticker</th>
-              <th className="r">Last</th>
-              <th className="r">Chg %</th>
+              {sortHead("ticker", "Ticker")}
+              {sortHead("close", "Last", "r")}
+              {sortHead("chg_pct", "Chg %", "r")}
               <th>20 days</th>
-              <th className="r">RVOL</th>
+              {sortHead("rvol50", "RVOL", "r")}
               <th>Today</th>
-              <th>Note</th>
-              <th>Added</th>
+              {sortHead("note", "Note")}
+              {sortHead("added", "Added")}
+              <th>TradingView</th>
             </tr>
           </thead>
           <tbody>
@@ -409,6 +422,13 @@ function ListView({ name, phone, onChanged }: { name: string; phone: boolean; on
                   <td>{h ? <span className="today-hit">{h.grade && <GradeBadge grade={h.grade} />} {h.setup}</span> : <span className="muted">–</span>}</td>
                   <td className="muted">{typeof r.note === "string" ? r.note : ""}</td>
                   <td className="muted">{added(r.added)}</td>
+                  <td>
+                    {list?.tv?.[t] ? (
+                      <a href={list.tv[t]} target="_blank" rel="noreferrer" aria-label={`${t} on TradingView`}>
+                        TV ↗
+                      </a>
+                    ) : null}
+                  </td>
                 </tr>
               );
             })}

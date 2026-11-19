@@ -8,8 +8,8 @@ import { GradeBadge } from "../../components/Card";
 import { GradeForm } from "../../components/GradeForm";
 import { RCurve } from "../../components/RCurve";
 import { TradeChart } from "../../components/TradeChart";
-import { Metric, Table } from "../../components/Table";
-import { signed, usd } from "../../format";
+import { Metric, sortedRows, Table, tableCsv } from "../../components/Table";
+import { download, signed, usd } from "../../format";
 import { stockLink } from "../../routes";
 import { Icon } from "../../ui/Icon";
 import { PHONE, useMedia } from "../../ui/kit";
@@ -74,7 +74,7 @@ function TradeDetail({
         <Conviction value={trade.conviction} />
         <a href={stockLink(ticker)}>Full chart</a>
       </div>
-      <TradeChart ticker={ticker} entry={dayOf(trade.entry_date)} exit={dayOf(trade.exit_date)} />
+      <TradeChart ticker={ticker} entry={dayOf(trade.entry_date)} exit={dayOf(trade.exit_date)} stop={num(trade.order_stop)} />
       <div className="facts-grid">
         <Fact label="R">
           <RValue v={trade.r_multiple} />
@@ -119,10 +119,20 @@ export function Trades() {
     return () => window.removeEventListener("trading-os:journal", on);
   }, []);
 
-  // Newest exit first
-  const trades = useMemo(
-    () => [...(data?.trades ?? [])].sort((a, b) => dayOf(b.exit_date).localeCompare(dayOf(a.exit_date))),
-    [data],
+  // Newest exit first, or the order of the header you clicked (a second click flips it, a third clears it)
+  const [sort, setSort] = useState<{ col: string; down: boolean } | null>(null);
+  const trades = useMemo(() => {
+    const newest = [...(data?.trades ?? [])].sort((a, b) => dayOf(b.exit_date).localeCompare(dayOf(a.exit_date)));
+    return sortedRows(newest, sort);
+  }, [data, sort]);
+  const onSort = (col: string) => setSort((s) => (!s || s.col !== col ? { col, down: false } : s.down ? null : { col, down: true }));
+  const head = (col: string, text: string, extra: { className?: string; title?: string } = {}) => (
+    <th {...extra} aria-sort={sort?.col === col ? (sort.down ? "descending" : "ascending") : undefined}>
+      <button type="button" className="th-sort" onClick={() => onSort(col)}>
+        {text}
+        {sort?.col === col && <span aria-hidden="true">{sort.down ? " ▾" : " ▴"}</span>}
+      </button>
+    </th>
   );
   const current = trades.find((t) => String(t.trade_id) === pick) ?? (phone ? undefined : trades[0]);
   const step = useCallback(
@@ -159,17 +169,27 @@ export function Trades() {
       </div>
       <div className="journal-split">
         <div className="trade-list" ref={list} onKeyDown={onKey}>
+          <div className="table-tools">
+            <button
+              type="button"
+              className="ghost table-csv"
+              aria-label="Download the closed trades as CSV"
+              onClick={() => download("closed-trades.csv", tableCsv(["ticker", "direction", "setup", "entry_date", "exit_date", "entry_avg", "exit_avg", "quantity", "pnl", "r_multiple", "grade", "conviction"], trades))}
+            >
+              CSV
+            </button>
+          </div>
           <div className="table-wrap">
             <table aria-label="Closed trades">
               <thead>
                 <tr>
-                  <th>Exit</th>
-                  <th>Stock</th>
-                  <th className="setup">Setup</th>
-                  <th>R</th>
-                  <th>P&L</th>
-                  <th>Grade</th>
-                  <th title="Conviction: 1 small, 2 normal, 3 high">Conv.</th>
+                  {head("exit_date", "Exit")}
+                  {head("ticker", "Stock")}
+                  {head("setup", "Setup", { className: "setup" })}
+                  {head("r_multiple", "R")}
+                  {head("pnl", "P&L")}
+                  {head("grade", "Grade")}
+                  {head("conviction", "Conv.", { title: "Conviction: 1 small, 2 normal, 3 high" })}
                 </tr>
               </thead>
               <tbody>

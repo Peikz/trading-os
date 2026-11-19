@@ -1,21 +1,21 @@
 // The Chart's bottom panel: what the API already knows about the active stock. Plan (the newest
-// scan hit's decision and numbers), Notes (the stock's notes), Position (an open position's
-// card), Journal (closed trades, and the grading form for a scan hit) and Lines (typed-in
-// trend lines, anchored VWAPs, minute bars). It collapses to its tab strip.
+// scan hit's decision and numbers), Notes (the stock's notebook page: its notes, its trades and the
+// grading form of a scan hit), Position (an open position's card) and Lines (a horizontal line at a
+// price, the saved lines with remove, typed-in trend lines, anchored VWAPs, minute bars). It
+// collapses to its tab strip.
 import { useEffect, useState } from "react";
-import { api, type BoardRow, type ChartData, type ChartListRow, type PositionCard, type Row } from "../../api";
+import { api, type BoardRow, type ChartData, type ChartListRow, type PositionCard, type SavedMark } from "../../api";
 import { GradeBadge } from "../../components/Card";
-import { cell, signed, usd } from "../../format";
-import { IntradaySection, Notes, TypeIn } from "../../pages/Chart";
-import { HitGrading } from "../../pages/Screener";
+import { usd } from "../../format";
+import { IntradaySection, TypeIn } from "../../pages/Chart";
 import { Icon } from "../../ui/Icon";
 import { Numbers } from "../today/PlanCard";
+import { NotesTab } from "./NotesTab";
 
 const TABS = [
   ["plan", "Plan"],
   ["notes", "Notes"],
   ["position", "Position"],
-  ["journal", "Journal"],
   ["lines", "Lines"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -62,13 +62,13 @@ export function BottomPanel({
       </div>
       {open && (
         <div className="ws-tab-body" role="tabpanel">
-          {!symbol && <p className="muted">Pick a stock to see its plan, notes, position and journal.</p>}
+          {!symbol && <p className="muted">Pick a stock to see its plan, notes and position.</p>}
           {symbol && tab === "plan" && <PlanTab symbol={symbol} />}
-          {symbol && tab === "notes" && <Notes ticker={symbol} onMessage={onMessage} />}
+          {symbol && tab === "notes" && <NotesTab symbol={symbol} row={row} />}
           {symbol && tab === "position" && <PositionTab symbol={symbol} />}
-          {symbol && tab === "journal" && <JournalTab symbol={symbol} row={row} />}
           {symbol && tab === "lines" && data && data.ticker === symbol && (
             <>
+              <SavedLines ticker={symbol} data={data} version={data.marks.length} onSaved={onSaved} onMessage={onMessage} />
               <TypeIn ticker={symbol} data={data} onSaved={onSaved} onMessage={onMessage} />
               <IntradaySection ticker={symbol} />
               <p className="muted hint">{data.note}</p>
@@ -158,52 +158,75 @@ function PositionTab({ symbol }: { symbol: string }) {
   );
 }
 
-const TRADE_COLUMNS = ["entry_date", "exit_date", "setup", "entry_avg", "exit_avg", "pnl", "r_multiple"];
-
-function JournalTab({ symbol, row }: { symbol: string; row: ChartListRow | undefined }) {
-  const [trades, setTrades] = useState<Row[] | null>(null);
+/** Lines on the stock: "＋ Horizontal line" at a price, and every saved line, level and anchor with a
+ * remove button (Streamlit's "Lines and levels"). The price starts at the last close. */
+function SavedLines({
+  ticker,
+  data,
+  version,
+  onSaved,
+  onMessage,
+}: {
+  ticker: string;
+  data: ChartData;
+  version: number;
+  onSaved: () => void;
+  onMessage: (t: string) => void;
+}) {
+  const last = data.candles.length ? data.candles[data.candles.length - 1].close : 0;
+  const [price, setPrice] = useState(last ? last.toFixed(2) : "");
+  const [marks, setMarks] = useState<SavedMark[] | null>(null);
+  const [again, setAgain] = useState(0);
+  useEffect(() => setPrice(last ? last.toFixed(2) : ""), [ticker, last]);
   useEffect(() => {
     let live = true;
-    setTrades(null);
-    api.journalClosed().then(
-      (j) => live && setTrades(j.trades.filter((t) => t.ticker === symbol)),
-      () => live && setTrades([]),
-    );
+    api.savedMarks(ticker).then((m) => live && setMarks(m), () => live && setMarks([]));
     return () => {
       live = false;
     };
-  }, [symbol]);
+  }, [ticker, version, again]);
+  const fail = (e: Error) => onMessage(`Error: ${e.message}`);
+  const add = () =>
+    api.addLevel(ticker, Number(price)).then(() => {
+      onMessage(`Line saved at ${Number(price).toFixed(2)}.`);
+      setAgain((n) => n + 1);
+      onSaved();
+    }, fail);
   return (
-    <div>
-      {trades === null ? (
-        <p className="muted">Loading…</p>
-      ) : trades.length === 0 ? (
-        <p className="muted">No closed trades in {symbol} yet.</p>
-      ) : (
-        <div className="table-wrap">
-          <table aria-label={`Closed trades in ${symbol}`}>
-            <thead>
-              <tr>
-                {TRADE_COLUMNS.map((c) => (
-                  <th key={c}>{c.replace(/_/g, " ")}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t, i) => (
-                <tr key={String(t.trade_id ?? i)}>
-                  {TRADE_COLUMNS.map((c) => (
-                    <td key={c} className="num">
-                      {c === "r_multiple" && typeof t[c] === "number" ? signed(t[c] as number, 2, "R") : cell(c, t[c])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <section className="lines-tab" aria-label={`Lines on ${ticker}`}>
+      <b>Lines on {ticker}</b> <span className="muted">· saved for this stock, on every device</span>
+      <div className="row">
+        <label>
+          Price{" "}
+          <input aria-label="Level price" type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </label>
+        <button disabled={!(Number(price) > 0)} onClick={add}>
+          <Icon name="plus" size={16} />
+          Horizontal line
+        </button>
+      </div>
+      {marks && marks.length === 0 && <p className="muted">No lines yet. Add a level above, or draw with the line tool.</p>}
+      {marks && marks.length > 0 && (
+        <ul className="saved-lines" aria-label="Saved lines">
+          {marks.map((m) => (
+            <li key={m.mark_id}>
+              <span>{m.text}</span>
+              <button
+                className="ghost icon-btn"
+                aria-label={`Remove: ${m.text}`}
+                onClick={() =>
+                  api.removeMark(ticker, m.mark_id).then(() => {
+                    setAgain((n) => n + 1);
+                    onSaved();
+                  }, fail)
+                }
+              >
+                <Icon name="x" size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-      {row?.signal_id && <HitGrading ticker={symbol} signalId={row.signal_id} scanLabel={row.setup} />}
-    </div>
+    </section>
   );
 }

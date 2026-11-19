@@ -1,5 +1,6 @@
 // The API's shapes (api/main.py) and a small fetch helper. Every number is computed by the
 // Python package; the browser only shows it.
+import { manualRunsOn } from "./shell/prefs";
 
 export type Value = string | number | boolean | null;
 
@@ -207,6 +208,8 @@ export interface ScreenResult {
   rows: Record<string, Value>[];
   tickers: string[];
   tv_list: string;
+  /** Each stock's TradingView chart address (`board_data.tradingview_url`). */
+  tv?: Record<string, string>;
   signal_ids: Record<string, string>;
 }
 
@@ -362,6 +365,7 @@ export interface WatchList {
   columns: string[];
   rows: Row[];
   tv_list: string;
+  tv?: Record<string, string>;
 }
 
 export interface WatchAdded {
@@ -834,6 +838,50 @@ export interface ChartList {
   rows: ChartListRow[];
 }
 
+/** A ticker everywhere (`/api/search/ticker`): its scan hits, where it sits, its notes. */
+export interface SearchTicker {
+  ticker: string;
+  runs_searched: number;
+  hits: { run: string; scan: string; tier: string | null; grade: string | null; why: string | null; points: string | null }[];
+  places: string[];
+  notes: { date: string; kind: string; text: string }[];
+}
+
+/** Words in the notes and the guide (`/api/search/words`). */
+export interface SearchWords {
+  q: string;
+  stock: { ticker: string; date: string; text: string }[];
+  daily: { date: string; text: string }[];
+  journal: { kind: string; ref_id: string; text: string }[];
+  guide: { section: string; line: string }[];
+}
+
+/** One pushed scan's table of one run (`/api/scan-tables`): the scan's own columns, the A+/A/B
+ * blocks as the push shows them, the facts behind the names and the stocks with a saved chart. */
+export interface ScanTable {
+  scan: string;
+  label: string;
+  shown: number;
+  total: number;
+  columns: { header: string; key: string; fmt: string }[];
+  rows: Record<string, Value>[];
+  blocks: { ticker: string; title: string; lines: string[] }[];
+  facts: string[];
+  charts: string[];
+}
+
+export interface ScanTables {
+  run: string;
+  label: string;
+  scans: ScanTable[];
+}
+
+export interface SavedMark {
+  mark_id: string;
+  kind: string;
+  text: string;
+}
+
 export interface ChartQuery {
   period: string;
   timeframe: string;
@@ -883,7 +931,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const res = await fetch(path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    // The Settings toggle "Show manual test runs" (per browser): every route lists runs by it
+    headers: {
+      "Content-Type": "application/json",
+      "X-Manual-Runs": manualRunsOn() ? "1" : "0",
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -965,7 +1018,20 @@ export const api = {
   symbols: () => request<SymbolList>("/api/symbols"),
   chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
   chartLists: () => request<{ lists: ChartListInfo[] }>("/api/chart-lists"),
-  chartList: (id: string) => request<ChartList>(`/api/chart-lists/${enc(id)}`),
+  chartList: (id: string, tickers?: string[]) =>
+    request<ChartList>(`/api/chart-lists/${enc(id)}${tickers ? `?t=${tickers.map(enc).join(",")}` : ""}`),
+  settings: () => request<{ data_folder: string }>("/api/settings"),
+  health: () => request<{ ok: boolean; runs: number; latest: string | null }>("/api/health"),
+  known: (ticker: string) => request<{ ticker: string; known: boolean }>(`/api/known/${enc(ticker)}`),
+  searchTicker: (ticker: string) => request<SearchTicker>(`/api/search/ticker/${enc(ticker)}`),
+  searchWords: (q: string) => request<SearchWords>(`/api/search/words?q=${enc(q)}`),
+  scanTables: (run: string, scan?: string) =>
+    request<ScanTables>(`/api/scan-tables?run=${enc(run)}${scan ? `&scan=${enc(scan)}` : ""}`),
+  runChartUrl: (run: string, scan: string, ticker: string) =>
+    `/api/run-chart/${enc(run)}/${enc(scan)}/${enc(ticker)}`,
+  addLevel: (ticker: string, price: number) =>
+    post<{ mark_id: string }>(`/api/chart/${enc(ticker)}/levels`, { price }),
+  savedMarks: (ticker: string) => request<SavedMark[]>(`/api/chart/${enc(ticker)}/saved`),
   chart: (ticker: string, q: ChartQuery) => {
     const p = new URLSearchParams({
       period: q.period,

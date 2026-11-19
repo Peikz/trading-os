@@ -9,6 +9,7 @@ import { hrefFor, PLACES, TABS } from "../routes";
 import { openChart } from "./active";
 import { StockRowView, type StockRow, useStockResults } from "./stockSearch";
 import { Icon } from "../ui/Icon";
+import { looksLikeTicker, SearchDetail, tickerOf } from "./SearchDetail";
 
 interface Item {
   id: string;
@@ -36,6 +37,20 @@ export function CommandPalette({
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const found = useStockResults(query);
+  // A ticker that is not a universe stock may still exist (an ETF in the daily bars): ask
+  const typed = looksLikeTicker(query) ? tickerOf(query) : "";
+  const inUniverse = !!typed && found.rows.some((r) => r.ticker === typed);
+  const [exists, setExists] = useState<{ ticker: string; known: boolean } | null>(null);
+  useEffect(() => {
+    setExists(null);
+    if (!typed || !found.loaded || inUniverse) return;
+    let live = true;
+    const timer = setTimeout(() => api.known(typed).then((k) => live && setExists(k), () => {}), 200);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [typed, found.loaded, inUniverse]);
 
   useEffect(() => {
     input.current?.focus();
@@ -84,9 +99,14 @@ export function CommandPalette({
       // match the text; a typed ticker is never opened on trust.
       stocks = picks.map((p) => stock(p.ticker, p.where)).filter(match);
     }
+    // Enter on an exact KNOWN ticker opens the Chart, even one only the daily bars have (an ETF)
+    if (typed && exists?.known && exists.ticker === typed && !stocks.some((x) => x.label === typed)) {
+      stocks = [stock(typed, "In the data repo"), ...stocks];
+    }
     const out = [...stocks, ...pages.filter(match), ...actions.filter(match)];
     return { items: q ? out : out.slice(0, 14), noStock: !!q && found.loaded && !stocks.length };
-  }, [query, picks, found, onClose, onPull, onPush]);
+  }, [query, picks, found, onClose, onPull, onPush, typed, exists]);
+  const unknown = !!typed && exists?.ticker === typed && !exists.known && !inUniverse;
 
   useEffect(() => setIndex(0), [query]);
   const pick = Math.min(index, Math.max(0, items.length - 1));
@@ -121,7 +141,7 @@ export function CommandPalette({
           />
           <kbd>Esc</kbd>
         </div>
-        {noStock && <p className="empty no-stock">No stock matches</p>}
+        {noStock && <p className="empty no-stock">{unknown ? `${typed} is not in the universe` : "No stock matches"}</p>}
         {items.length === 0 ? (
           !noStock && <p className="empty">Nothing matches.</p>
         ) : (
@@ -143,6 +163,7 @@ export function CommandPalette({
             ))}
           </ul>
         )}
+        <SearchDetail text={query} onClose={onClose} />
       </div>
     </div>
   );

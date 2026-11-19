@@ -1,79 +1,79 @@
 // Today: "What do I do today?" (design review 4 Nov 2026). Left, the queue in three parts: TO ACT
 // ON (A+ / A / B), YOUR POSITIONS and WATCHING (Flag green). Centre, the chart and a quiet strip
 // of key facts. Right, the plan card that leads with the decision, why the grade, then Watch and
-// a note. Arrow keys flip the queue, W watches, N writes a note. A quiet day (no A+ / A / B)
-// shows a calm "Nothing to buy today" with the way on: the C setups, your watchlist and the next
-// scan. A push link (`?t=A,B`) or a screen's flip link puts those stocks first. On a phone, one
-// card per stock, flipped with prev / next and dots.
+// a note. Arrow keys flip the queue, F watches, N writes a note, T opens the Saxo values and W steps
+// the bars. A quiet day (no A+ / A / B) shows a calm "Nothing to buy today" with the way on: the C
+// setups, your watchlist and the next scan. A push link (`?t=A,B`) or a screen's flip link
+// (`#/today?screen=Name&t=A,B`) puts those stocks first.
+//
+// Round 4 (19 Nov 2026), the last of Streamlit's board: the view (Focus, Grid of four charts, List
+// of cards), "Show" (today's list, the pushed scans with the C setups, every hit, or one of your
+// watchlists), a run picker that reaches earlier days, "All scans" (every pushed scan's table)
+// and, on a phone, one card per stock with the order's edit, copy, why, note, alert and bars.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  api,
-  type BoardRow,
-  DEFAULT_INDICATORS,
-  type NextScan,
-  type PositionCard,
-  type Positions,
-  type Spark,
-  type Stat,
-  type Timeframe,
-} from "../api";
+import { api, type BoardRow, DEFAULT_INDICATORS, type NextScan, type Positions, type Timeframe } from "../api";
 import { FactStrip, GradeBadge, KindBadge } from "../components/Card";
 import { DailyNote } from "../components/DailyNote";
-import { MiniCandles } from "../components/MiniCandles";
-import { signed, usd } from "../format";
-import { stripIcons } from "../plain";
+import { signed } from "../format";
 import { hrefFor, stockLink } from "../routes";
 import { setActive } from "../shell/active";
-import { useArrowKeys } from "../shell/prefs";
-import { useRunPick, useTodayRuns } from "../shell/todayRun";
+import { useArrowKeys, usePref } from "../shell/prefs";
+import { useEarlierRuns, useRunPick, useTodayRuns } from "../shell/todayRun";
 import { RunPicker } from "../ui/RunPicker";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia } from "../ui/kit";
-import { FocusChart } from "./today/FocusChart";
-import { CopyOrder, Numbers, PlanCard, useTicket, WhyCard } from "./today/PlanCard";
+import { AllScans } from "./today/AllScans";
+import { ShowMenu, ViewToggle } from "./today/Controls";
+import { FocusChart, TIMEFRAMES } from "./today/FocusChart";
+import {
+  alertOf,
+  anchorOf,
+  changeOf,
+  type Item,
+  type Kind,
+  levelsOf,
+  plural,
+  priceOf,
+  pushTickers,
+  rowItem,
+  screenName,
+  SCOPE_ALL,
+  SCOPE_LIST,
+  SCOPE_PUSHED,
+  SCOPE_TODAY,
+  scopeLabel,
+  sectorOf,
+  statsOf,
+  titleLine,
+  todayQuery,
+  type View,
+} from "./today/model";
+import { SidePanel } from "./today/Panels";
+import { CopyOrder, EditOrder, Numbers, OrderLine, PlaceOrder, usePlan, VALUES_EVENT, WhyCard } from "./today/PlanCard";
+import { GridView, GRID, ListView } from "./today/Views";
 import { GREEN, WatchButton, WatchNote } from "./today/WatchNote";
 
-/** The push link's stocks (`?t=A,B`), as the Streamlit board reads them. */
-export function pushTickers(search: string): string[] {
-  const t = new URLSearchParams(search).get("t") ?? "";
-  return t
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+export { pushTickers, screenName, titleLine };
+
+/** The query of the address, kept current: a flip link from the Screener changes only the hash. */
+function useTodayQuery(): string {
+  const [q, setQ] = useState(() => todayQuery(window.location));
+  useEffect(() => {
+    const on = () => setQ(todayQuery(window.location));
+    window.addEventListener("hashchange", on);
+    window.addEventListener("popstate", on);
+    return () => {
+      window.removeEventListener("hashchange", on);
+      window.removeEventListener("popstate", on);
+    };
+  }, []);
+  return q;
 }
 
-/** The screen a "Flip through on Today" link came from (`?screen=Name&t=A,B`). */
-export function screenName(search: string): string | null {
-  return new URLSearchParams(search).get("screen") || null;
-}
-
-type Kind = "push" | "act" | "c" | "position" | "watch";
-interface Item {
-  key: string;
-  kind: Kind;
-  ticker: string;
-  row?: BoardRow;
-  pos?: PositionCard;
-}
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** "2 setups to act on · 1 position · 2 on watch" */
-export function titleLine(act: number, positions: number, watch: number): string {
-  return [
-    act ? `${plural(act, "setup")} to act on` : "Nothing to act on",
-    plural(positions, "position"),
-    `${watch} on watch`,
-  ].join(" · ");
-}
-
-function rowItem(kind: Kind, r: BoardRow): Item {
-  return { key: `${kind}:${r.ticker}:${r.scan}`, kind, ticker: r.ticker, row: r };
-}
-
-function useToday(run: string) {
-  const fromPush = useMemo(() => pushTickers(window.location.search), []);
-  const screen = useMemo(() => screenName(window.location.search), []);
+function useToday(run: string, scope: string) {
+  const query = useTodayQuery();
+  const fromPush = useMemo(() => pushTickers(query), [query]);
+  const screen = useMemo(() => screenName(query), [query]);
   const [act, setAct] = useState<BoardRow[] | null>(null);
   const [hiddenC, setHiddenC] = useState(0);
   const [next, setNext] = useState<NextScan | null>(null);
@@ -81,17 +81,27 @@ function useToday(run: string) {
   const [cRows, setCRows] = useState<BoardRow[] | null>(null);
   const [positions, setPositions] = useState<Positions | null>(null);
   const [watch, setWatch] = useState<BoardRow[]>([]);
+  const [lists, setLists] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const loadWatch = useCallback(
     () => api.today("watchlists", [], null, GREEN).then((d) => setWatch(d.rows), () => setWatch([])),
     [],
   );
-  // The run picked at the top of "To act on": every run of today, or one of them
+  // The list shown: today's graded queue (of the run picked at the top), or what "Show" picked
   useEffect(() => {
     let live = true;
     setCRows(null);
-    api.today("graded", [], null, null, run).then(
+    const list = scope.startsWith(SCOPE_LIST) ? scope.slice(SCOPE_LIST.length) : null;
+    const call =
+      scope === SCOPE_PUSHED
+        ? api.today("pushed", [], null, null, run)
+        : scope === SCOPE_ALL
+          ? api.today("all", [], null, null, run)
+          : list !== null
+            ? api.today("watchlists", [], null, list)
+            : api.today("graded", [], null, null, run);
+    call.then(
       (d) => {
         if (!live) return;
         setAct(d.rows);
@@ -108,12 +118,16 @@ function useToday(run: string) {
     return () => {
       live = false;
     };
-  }, [run]);
+  }, [run, scope]);
   useEffect(() => {
     if (fromPush.length) api.today("all", fromPush, screen).then((d) => setPush(d.rows), () => setPush([]));
+    else setPush([]);
+  }, [fromPush, screen]);
+  useEffect(() => {
     api.positions().then(setPositions, () => setPositions(null));
+    api.watchlists().then((w) => setLists(w.lists), () => setLists([]));
     loadWatch();
-  }, [fromPush, screen, loadWatch]);
+  }, [loadWatch]);
 
   const showC = useCallback(
     () =>
@@ -123,24 +137,44 @@ function useToday(run: string) {
       ),
     [run],
   );
-  return { fromPush, screen, act, hiddenC, next, push, cRows, showC, positions, watch, loadWatch, error };
+  return { fromPush, screen, act, hiddenC, next, push, cRows, showC, positions, watch, lists, loadWatch, error };
 }
+
+const EMPTY: Record<Kind, string> = {
+  push: "",
+  act: "No A+, A or B setups in the latest scans.",
+  c: "No C setups.",
+  position: "No open positions.",
+  watch: "Star a stock to watch it here.",
+};
 
 export function Today() {
   const [run, setRun] = useRunPick();
   const runs = useTodayRuns();
-  const d = useToday(run);
+  const earlier = useEarlierRuns(runs);
+  const [view, setView] = usePref<View>("today-view", "Focus");
+  const [scope, setScope] = usePref<string>("today-scope", SCOPE_TODAY);
+  const d = useToday(run, scope);
   const [arrowKeys] = useArrowKeys();
   const phone = useMedia(PHONE);
   const [sel, setSel] = useState<string | null>(null);
+  const [gridAt, setGridAt] = useState(0);
   const slotNames = useMemo(() => Object.fromEntries((runs?.runs ?? []).map((r) => [r.slot, r.name])), [runs]);
-  const picker = (
+  // A list that is gone (deleted since) falls back to today's
+  useEffect(() => {
+    if (scope.startsWith(SCOPE_LIST) && d.lists.length && !d.lists.includes(scope.slice(SCOPE_LIST.length))) setScope(SCOPE_TODAY);
+  }, [scope, d.lists, setScope]);
+  const todays = scope === SCOPE_TODAY;
+  const isList = scope.startsWith(SCOPE_LIST);
+  const picker = !isList && (
     <RunPicker
       runs={runs}
       value={run}
+      earlier={earlier}
       onPick={(id) => {
         setRun(id);
         setSel(null);
+        setGridAt(0);
       }}
     />
   );
@@ -152,22 +186,32 @@ export function Today() {
 
   const pinned = d.screen ? `From the screen: ${d.screen}` : "From the push";
   const sections = useMemo(() => {
-    const out: { id: Kind; label: string; items: Item[] }[] = [];
+    const out: { id: Kind; label: string; items: Item[]; empty?: string }[] = [];
     if (d.push.length) out.push({ id: "push", label: pinned, items: d.push.map((r) => rowItem("push", r)) });
-    out.push({ id: "act", label: "To act on", items: (d.act ?? []).map((r) => rowItem("act", r)) });
-    if (d.cRows) out.push({ id: "c", label: "C setups · no tested edge", items: d.cRows.map((r) => rowItem("c", r)) });
-    out.push({
-      id: "position",
-      label: "Your positions",
-      items: (d.positions?.cards ?? []).map((p) => ({ key: `position:${p.ticker}`, kind: "position", ticker: p.ticker, pos: p })),
-    });
-    out.push({ id: "watch", label: "Watching", items: d.watch.map((r) => rowItem("watch", r)) });
+    if (todays) {
+      out.push({ id: "act", label: "To act on", items: (d.act ?? []).map((r) => rowItem("act", r)) });
+      if (d.cRows) out.push({ id: "c", label: "C setups · no tested edge", items: d.cRows.map((r) => rowItem("c", r)) });
+      out.push({
+        id: "position",
+        label: "Your positions",
+        items: (d.positions?.cards ?? []).map((p) => ({ key: `position:${p.ticker}`, kind: "position", ticker: p.ticker, pos: p })),
+      });
+      out.push({ id: "watch", label: "Watching", items: d.watch.map((r) => rowItem("watch", r)) });
+    } else {
+      out.push({
+        id: "act",
+        label: scopeLabel(scope),
+        items: (d.act ?? []).map((r) => rowItem(isList ? "watch" : "act", r)),
+        empty: isList ? "This watchlist is empty: star a stock, or add to it on the Watchlists page." : "No signals in the latest runs.",
+      });
+    }
     return out;
-  }, [d.push, d.act, d.cRows, d.positions, d.watch, pinned]);
+  }, [d.push, d.act, d.cRows, d.positions, d.watch, pinned, todays, scope, isList]);
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const actionable = sections.filter((s) => s.id === "push" || s.id === "act").flatMap((s) => s.items);
-  const quiet = d.act !== null && actionable.length === 0;
-  const current = items.find((i) => i.key === sel) ?? (sel === null && !quiet ? actionable[0] : undefined) ?? null;
+  const quiet = todays && d.act !== null && actionable.length === 0;
+  const gridCurrent = view === "Grid" ? items[Math.min(gridAt, Math.max(0, items.length - 1))] : undefined;
+  const current = items.find((i) => i.key === sel) ?? gridCurrent ?? (sel === null && !quiet ? actionable[0] : undefined) ?? null;
   const index = current ? items.indexOf(current) : -1;
   const watchSet = useMemo(() => new Set(d.watch.map((r) => r.ticker)), [d.watch]);
 
@@ -196,6 +240,16 @@ export function Today() {
     },
     [items, index],
   );
+  const stepGrid = useCallback(
+    (by: number) => {
+      if (!items.length) return;
+      const pages = Math.ceil(items.length / GRID);
+      const page = Math.floor(gridAt / GRID);
+      setGridAt((((page + by + pages) % pages) * GRID));
+      setSel(null);
+    },
+    [items, gridAt],
+  );
   const toggleWatch = useCallback(
     (ticker: string) => {
       const on = watchSet.has(ticker);
@@ -217,19 +271,24 @@ export function Today() {
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector(".palette-back")) return;
       const key = e.key.toLowerCase();
-      if (arrowKeys && (e.key === "ArrowDown" || e.key === "ArrowRight")) step(1);
-      else if (arrowKeys && (e.key === "ArrowUp" || e.key === "ArrowLeft")) step(-1);
-      else if (key === "w" && current) toggleWatch(current.ticker);
+      const next = e.key === "ArrowDown" || e.key === "ArrowRight";
+      const prev = e.key === "ArrowUp" || e.key === "ArrowLeft";
+      if (arrowKeys && (next || prev)) (view === "Grid" ? stepGrid : step)(next ? 1 : -1);
+      else if (key === "f" && current) toggleWatch(current.ticker);
+      else if (key === "w") setTf((t) => TIMEFRAMES[(TIMEFRAMES.indexOf(t) + 1) % TIMEFRAMES.length]);
+      else if (key === "t" && current) window.dispatchEvent(new Event(VALUES_EVENT));
       else if (key === "n" && current) setFocusNote((k) => k + 1);
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, current, toggleWatch, arrowKeys]);
+  }, [step, stepGrid, current, toggleWatch, arrowKeys, view]);
 
   const nAct = (d.act ?? []).length;
-  const title = titleLine(nAct, d.positions?.cards.length ?? 0, d.watch.length);
+  const title = todays
+    ? titleLine(nAct, d.positions?.cards.length ?? 0, d.watch.length)
+    : `${plural(nAct, "stock")} · ${scopeLabel(scope)}`;
   const loading = d.act === null;
 
   const toast = flash && (
@@ -237,14 +296,32 @@ export function Today() {
       {flash}
     </p>
   );
+  const showMenu = (
+    <ShowMenu
+      value={scope}
+      lists={d.lists}
+      onPick={(s) => {
+        setScope(s);
+        setSel(null);
+        setGridAt(0);
+      }}
+    />
+  );
+  const head = (
+    <div className="place-head">
+      <h1>Today</h1>
+      <span className="muted">{loading ? "Loading…" : title}</span>
+      <span className="grow" />
+      {!phone && <ViewToggle value={view} onPick={setView} />}
+      {showMenu}
+    </div>
+  );
+  const allScans = <AllScans runs={runs} earlier={earlier} picked={run} />;
 
   if (phone) {
     return (
       <div className="today-phone">
-        <div className="place-head">
-          <h1>Today</h1>
-          <span className="muted">{loading ? "Loading…" : title}</span>
-        </div>
+        {head}
         {d.error && <p className="error">{d.error}</p>}
         <DailyNote />
         {picker}
@@ -257,8 +334,46 @@ export function Today() {
             watchSet={watchSet}
             onWatch={toggleWatch}
             onMessage={setFlash}
+            tf={tf}
+            onTf={setTf}
+            picked={picked}
+            onPicked={setPicked}
           />
         )}
+        {allScans}
+        {toast}
+      </div>
+    );
+  }
+
+  if (view !== "Focus") {
+    return (
+      <div>
+        {head}
+        {d.error && <p className="error">{d.error}</p>}
+        <DailyNote />
+        {picker}
+        {loading ? (
+          <div className="quiet muted">Loading today&apos;s list…</div>
+        ) : view === "Grid" ? (
+          <GridView
+            items={items}
+            at={gridAt}
+            onAt={(i) => {
+              setGridAt(i);
+              setSel(null);
+            }}
+            current={current?.key ?? null}
+            onSelect={setSel}
+            tf={tf}
+            onTf={setTf}
+            picked={picked}
+            onPicked={setPicked}
+          />
+        ) : (
+          <ListView items={items} slotNames={slotNames} />
+        )}
+        {allScans}
         {toast}
       </div>
     );
@@ -266,10 +381,7 @@ export function Today() {
 
   return (
     <div>
-      <div className="place-head">
-        <h1>Today</h1>
-        <span className="muted">{loading ? "Loading…" : title}</span>
-      </div>
+      {head}
       {d.error && <p className="error">{d.error}</p>}
       <DailyNote />
       <div className="today">
@@ -282,7 +394,7 @@ export function Today() {
               </div>
               {s.id === "act" && picker}
               {s.items.length === 0 ? (
-                <p className="queue-note">{EMPTY[s.id]}</p>
+                <p className="queue-note">{s.empty ?? EMPTY[s.id]}</p>
               ) : (
                 <ul className="queue">
                   {s.items.map((i) => (
@@ -292,7 +404,7 @@ export function Today() {
                   ))}
                 </ul>
               )}
-              {s.id === "act" && d.hiddenC > 0 && !d.cRows && (
+              {s.id === "act" && todays && d.hiddenC > 0 && !d.cRows && (
                 <button className="link queue-note" onClick={d.showC}>
                   Show the {plural(d.hiddenC, "C setup")}
                 </button>
@@ -300,12 +412,12 @@ export function Today() {
             </div>
           ))}
           <p className="hotkeys">
-            <kbd>↑</kbd> <kbd>↓</kbd> flip · <kbd>W</kbd> watch · <kbd>N</kbd> note
+            <kbd>↑</kbd> <kbd>↓</kbd> flip · <kbd>F</kbd> watch · <kbd>N</kbd> note · <kbd>T</kbd> Saxo values · <kbd>W</kbd> bars
           </p>
         </nav>
         {!current ? (
           <div style={{ gridColumn: "2 / -1" }}>
-            {loading ? <div className="quiet muted">Loading today's queue…</div> : <Quiet d={d} onPick={setSel} items={items} />}
+            {loading ? <div className="quiet muted">Loading today&apos;s queue…</div> : <Quiet d={d} onPick={setSel} items={items} />}
           </div>
         ) : (
           <>
@@ -313,7 +425,7 @@ export function Today() {
               <FocusChart
                 ticker={current.ticker}
                 levels={levelsOf(current)}
-                anchor={(current.row?.avwap_anchor as string | null) ?? (current.row?.run_session as string | null) ?? null}
+                anchor={anchorOf(current)}
                 tf={tf}
                 onTf={setTf}
                 picked={picked}
@@ -337,18 +449,11 @@ export function Today() {
           </>
         )}
       </div>
+      {allScans}
       {toast}
     </div>
   );
 }
-
-const EMPTY: Record<Kind, string> = {
-  push: "",
-  act: "No A+, A or B setups in the latest scans.",
-  c: "No C setups.",
-  position: "No open positions.",
-  watch: "Star a stock to watch it here.",
-};
 
 function QueueRow({
   item,
@@ -386,128 +491,6 @@ function QueueRow({
         </span>
       )}
     </button>
-  );
-}
-
-function sectorOf(row: BoardRow): string {
-  return typeof row.industry === "string" ? row.industry : typeof row.sector === "string" ? row.sector : "";
-}
-
-function priceOf(i: Item): number | null {
-  if (i.pos) return i.pos.price;
-  return typeof i.row?.close === "number" ? (i.row.close as number) : null;
-}
-
-function changeOf(i: Item): number | null {
-  if (i.pos) return i.pos.move_pct;
-  return typeof i.row?.chg_pct === "number" ? i.row.chg_pct : null;
-}
-
-function levelsOf(i: Item): Record<string, number> {
-  if (i.row) return i.row.levels ?? {};
-  const out: Record<string, number> = {};
-  if (i.pos?.entry) out.entry = i.pos.entry;
-  if (i.pos?.stop) out.stop = i.pos.stop;
-  return out;
-}
-
-function alertOf(i: Item): number {
-  if (i.pos) return i.pos.stop ?? i.pos.entry;
-  return typeof i.row?.alert_default === "number" ? (i.row.alert_default as number) : 0;
-}
-
-function statsOf(i: Item): Stat[] {
-  if (i.row) return i.row.stats ?? [];
-  const p = i.pos!;
-  return [
-    { label: "Shares", value: p.shares.toLocaleString("en-US") },
-    { label: "Entry", value: p.entry.toFixed(2) },
-    { label: "In since", value: p.entry_date },
-    { label: "Stop", value: p.stop === null ? "no stop" : p.stop.toFixed(2) },
-    { label: "To stop", value: p.to_stop_pct === null ? "–" : `${p.to_stop_pct.toFixed(1)}%` },
-  ];
-}
-
-function SidePanel({ item }: { item: Item }) {
-  if (item.pos) return <PositionPanel p={item.pos} />;
-  const row = item.row!;
-  if (item.kind === "watch") {
-    return (
-      <section className="card" aria-label={`${row.ticker} watch`}>
-        <div className="plan head" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <KindBadge kind="watch" />
-          <b>{row.ticker}</b>
-          <span className="muted">{sectorOf(row)}</span>
-        </div>
-        <p className="muted">On your watchlist. Not a scan hit today, so there is no plan or grade.</p>
-        <a href={stockLink(row.ticker)}>Open the full chart</a>
-      </section>
-    );
-  }
-  if (!["A+++", "A++", "A+", "A", "B", "C"].includes(row.grade)) {
-    return (
-      <section className="card" aria-label={`${row.ticker} screen`}>
-        <b>{row.ticker}</b> <span className="muted">{row.run_label}</span>
-        <p className="muted">A screen is a list to look at, not a tested setup: no grade, no buy.</p>
-      </section>
-    );
-  }
-  return (
-    <>
-      <PlanCard row={row} />
-      <WhyCard row={row} />
-    </>
-  );
-}
-
-function PositionPanel({ p }: { p: PositionCard }) {
-  return (
-    <section className="card plan" aria-label={`${p.ticker} position`}>
-      <div className="head">
-        <KindBadge kind="position" />
-        <span className="tk">{p.ticker}</span>
-        <span className="muted">{p.setup}</span>
-      </div>
-      <div className="decision">
-        {p.shares.toLocaleString("en-US")} shares since {p.entry_date}
-      </div>
-      <div className="decision-sub">
-        {p.direction} at {p.entry.toFixed(2)}
-      </div>
-      <div className="quad">
-        <div>
-          <span>Price</span>
-          <b className="num">{p.price === null ? "–" : p.price.toFixed(2)}</b>
-        </div>
-        <div>
-          <span>Open R</span>
-          <b className={`num ${p.open_r === null ? "" : p.open_r >= 0 ? "up" : "down"}`}>
-            {p.open_r === null ? "–" : signed(p.open_r, 2, "R")}
-          </b>
-        </div>
-        <div>
-          <span>P&L</span>
-          <b className={`num ${p.pnl === null ? "" : p.pnl >= 0 ? "up" : "down"}`}>{usd(p.pnl)}</b>
-        </div>
-        <div>
-          <span>To stop</span>
-          <b className="num">{p.to_stop_pct === null ? "no stop" : `${p.to_stop_pct.toFixed(1)}%`}</b>
-        </div>
-      </div>
-      {p.facts.length > 0 && (
-        <>
-          <h3>What the plan says</h3>
-          <ul>
-            {p.facts.map((f) => (
-              <li key={f} className={f.startsWith("⚠") ? "warn" : ""}>
-                {stripIcons(f)}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      <a href={hrefFor("journal", "positions")}>All positions in the Journal</a>
-    </section>
   );
 }
 
@@ -563,6 +546,10 @@ function PhoneCards({
   watchSet,
   onWatch,
   onMessage,
+  tf,
+  onTf,
+  picked,
+  onPicked,
 }: {
   items: Item[];
   current: Item;
@@ -570,6 +557,10 @@ function PhoneCards({
   watchSet: Set<string>;
   onWatch: (t: string) => void;
   onMessage: (t: string) => void;
+  tf: Timeframe;
+  onTf: (t: Timeframe) => void;
+  picked: string[];
+  onPicked: (p: string[]) => void;
 }) {
   const k = items.indexOf(current);
   const go = (by: number) => onPick(items[(k + by + items.length) % items.length].key);
@@ -584,7 +575,16 @@ function PhoneCards({
         if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1);
       }}
     >
-      <PhoneCard item={current} watching={watchSet.has(current.ticker)} onWatch={() => onWatch(current.ticker)} onMessage={onMessage} />
+      <PhoneCard
+        item={current}
+        watching={watchSet.has(current.ticker)}
+        onWatch={() => onWatch(current.ticker)}
+        onMessage={onMessage}
+        tf={tf}
+        onTf={onTf}
+        picked={picked}
+        onPicked={onPicked}
+      />
       <div className="flipper">
         <button className="icon-btn" aria-label="Previous stock" onClick={() => go(-1)} style={{ width: 44, height: 44 }}>
           <Icon name="left" />
@@ -602,38 +602,44 @@ function PhoneCards({
   );
 }
 
+/** The phone card's order: the plan's numbers, one big copy button, the order on a line with
+ * "Edit order" (type, own price, the shares follow, each value to copy) and "I placed it in Saxo". */
+function PhoneOrder({ row }: { row: BoardRow }) {
+  const plan = usePlan(row);
+  return (
+    <>
+      <Numbers row={row} view={plan.view} three />
+      <CopyOrder row={row} view={plan.view} big />
+      <OrderLine plan={plan} />
+      <EditOrder plan={plan} />
+      <PlaceOrder plan={plan} />
+    </>
+  );
+}
+
 function PhoneCard({
   item,
   watching,
   onWatch,
   onMessage,
+  tf,
+  onTf,
+  picked,
+  onPicked,
 }: {
   item: Item;
   watching: boolean;
   onWatch: () => void;
   onMessage: (t: string) => void;
+  tf: Timeframe;
+  onTf: (t: Timeframe) => void;
+  picked: string[];
+  onPicked: (p: string[]) => void;
 }) {
   const row = item.row;
   const graded = row && ["A+++", "A++", "A+", "A", "B", "C"].includes(row.grade) && item.kind !== "watch";
-  const { view } = useTicket(graded ? row! : null, null, null);
-  const [bars, setBars] = useState<{ t: string; c: Spark } | null>(null);
-  useEffect(() => {
-    let live = true;
-    api.bars(item.ticker, "1D", []).then(
-      (b) => live && setBars({ t: item.ticker, c: b.candles.slice(-60) }),
-      () => live && setBars({ t: item.ticker, c: [] }),
-    );
-    return () => {
-      live = false;
-    };
-  }, [item.ticker]);
   const price = priceOf(item);
   const chg = changeOf(item);
-  const place = () =>
-    api.placeTicket(row!, view?.kind ?? null, null).then(
-      (r) => onMessage(r.message),
-      (e: Error) => onMessage(`Error: ${e.message}`),
-    );
   return (
     <article className="card phone-card" aria-label={`${item.ticker} card`}>
       <div className="head">
@@ -651,24 +657,27 @@ function PhoneCard({
         </div>
       </div>
       <div className="mini">
-        {bars && bars.t === item.ticker ? (
-          <MiniCandles candles={bars.c} levels={levelsOf(item)} height={140} label={item.ticker} />
-        ) : (
-          <div style={{ height: 140 }} />
-        )}
+        <FocusChart
+          ticker={item.ticker}
+          levels={levelsOf(item)}
+          anchor={anchorOf(item)}
+          tf={tf}
+          onTf={onTf}
+          picked={picked}
+          onPicked={onPicked}
+          height={200}
+          head={false}
+        />
       </div>
       {graded && (
         <>
           <div className="decision">{row!.decision?.text ?? (row!.grade === "C" ? "Not a buy by the study" : "Buy by the study's plan")}</div>
           <div className="decision-sub">{[row!.decision?.local, row!.decision?.day].filter(Boolean).join(" · ") || row!.scan_label}</div>
-          <Numbers row={row!} view={view} three />
-          <CopyOrder row={row!} view={view} big />
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <span className="muted hint">{row!.scan_label}</span>
-            <button className="link" onClick={place} disabled={!view?.ticket}>
-              I placed it in Saxo
-            </button>
-          </div>
+          <PhoneOrder row={row!} />
+          <details className="phone-more">
+            <summary>Why {row!.grade}</summary>
+            <WhyCard row={row!} />
+          </details>
         </>
       )}
       {item.pos && (
@@ -688,6 +697,16 @@ function PhoneCard({
         </div>
       )}
       {item.kind === "watch" && <FactStrip stats={statsOf(item)} />}
+      <details className="phone-more">
+        <summary>Note and price alert</summary>
+        <WatchNote
+          ticker={item.ticker}
+          alertDefault={alertOf(item)}
+          watching={watching}
+          onToggleWatch={onWatch}
+          onMessage={onMessage}
+        />
+      </details>
       <a href={stockLink(item.ticker)} className="hint">
         Full chart
       </a>

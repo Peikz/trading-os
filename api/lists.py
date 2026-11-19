@@ -179,10 +179,17 @@ def register(app: FastAPI, ctx: Context) -> None:
         return {"lists": out}
 
     @app.get("/api/chart-lists/{list_id:path}")
-    def chart_list(list_id: str) -> dict:
+    def chart_list(list_id: str, t: str | None = None) -> dict:
         """One list's rows: ticker, grade, setup, last, % change, relative volume (a scan's hits
         also carry the hit's signal id, for its grading form)."""
         kind, _, name = list_id.partition(":")
+        if list_id == "screen":  # the Screener's last result: its tickers come with the request
+            tickers = [x.strip().upper() for x in (t or "").split(",") if x.strip()][:200]
+            return {
+                "id": list_id,
+                "label": "Last screener result",
+                "rows": rows_for(tickers, today_hits(), "screen"),
+            }
         if list_id == "hits":
             hits = today_hits()
             return {
@@ -191,14 +198,15 @@ def register(app: FastAPI, ctx: Context) -> None:
                 "rows": rows_for(graded_hits(hits), hits, "", hit_signals()),
             }
         if kind == "run" and name:
-            if name not in {today_runs.run_key(r) for r in today_runs.todays_runs(ctx.runs())}:
-                raise HTTPException(404, "No such run today.")
+            earlier = today_runs.pick(ctx.runs(), name)
+            if earlier is None:
+                raise HTTPException(404, "No such run.")
             hits = today_hits(name)
             label = next(
                 (r["name"] for r in today_runs.summary(
                     ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges, GRADED
                 )["runs"] if r["id"] == name),
-                name,
+                earlier.label,
             )  # fmt: skip
             return {
                 "id": list_id,

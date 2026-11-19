@@ -147,7 +147,7 @@ describe("Today", () => {
     expect((place.body as { kind: string }).kind).toBe("stop");
   });
 
-  it("flips the queue with the arrow keys, watches with W and writes a note with N", async () => {
+  it("flips the queue with the arrow keys, watches with F and writes a note with N", async () => {
     routes([row(B, "A+"), row(A, "A")]);
     render(<Today />);
     await screen.findByLabelText(`${B} plan`);
@@ -160,7 +160,7 @@ describe("Today", () => {
     fireEvent.keyDown(window, { key: "ArrowDown" }); // round to the top
     expect(await screen.findByLabelText(`${B} plan`)).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "w" });
+    fireEvent.keyDown(window, { key: "f" });
     await waitFor(() => expect(sent.find((c) => c.url === "/api/flags")?.body).toEqual({ ticker: B, name: "Flag green" }));
     expect(await screen.findByRole("status")).toHaveTextContent(`${B} is on your watchlist`);
 

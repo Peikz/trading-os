@@ -68,9 +68,29 @@ export function PriceAlerts() {
   const [side, setSide] = useState("above");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   useEffect(() => {
     api.alerts().then(setData, (e: Error) => setMessage(`Error: ${e.message}`));
   }, []);
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  // One call per alert (the same write as the single remove); the last answer is the new list
+  const removePicked = async () => {
+    try {
+      let out: Alerts | null = null;
+      for (const id of picked) out = await api.removeAlert(id);
+      if (out) setData(out);
+      setMessage(`Removed ${picked.size} ${picked.size === 1 ? "alert" : "alerts"}.`);
+      setPicked(new Set());
+    } catch (e) {
+      setMessage(`Error: ${(e as Error).message}`);
+    }
+  };
 
   const add = () =>
     api.addAlert(ticker, Number(level), side, note).then(
@@ -113,12 +133,29 @@ export function PriceAlerts() {
       {message && <p className={message.startsWith("Error") ? "error" : "ok"}>{message}</p>}
       {data && data.alerts.length === 0 && <p className="muted">No alerts of your own yet.</p>}
       {data && data.alerts.length > 0 && (
+        <>
+        {picked.size > 0 && (
+          <div className="select-bar" role="status">
+            <span>{picked.size} selected</span>
+            <button onClick={() => setPicked(new Set())}>Clear</button>
+            <button className="danger" onClick={removePicked}>
+              Remove selected
+            </button>
+          </div>
+        )}
         <Table
           label="Your alerts"
-          columns={["ticker", "direction", "level", "note", ""]}
+          columns={[" ", "ticker", "direction", "level", "note", ""]}
           rows={data.alerts.map((a) => ({ ...a }))}
           render={(c, r) =>
-            c === "" ? (
+            c === " " ? (
+              <input
+                type="checkbox"
+                aria-label={`Select ${r.ticker} ${r.direction} ${r.level}`}
+                checked={picked.has(String(r.alert_id))}
+                onChange={() => toggle(String(r.alert_id))}
+              />
+            ) : c === "" ? (
               <button
                 className="ghost icon-btn"
                 aria-label={`Remove ${r.ticker} ${r.direction} ${r.level}`}
@@ -129,6 +166,7 @@ export function PriceAlerts() {
             ) : undefined
           }
         />
+        </>
       )}
       {data && data.fired.length > 0 && (
         <>

@@ -78,6 +78,7 @@ def register(app: FastAPI, ctx: Context) -> None:
             out["scan_label"] = notify.SCAN_LABELS.get(rec["scan"], rec["scan"])
             out["runs"] = seen[(rec["ticker"], rec["scan"])]
             out["levels"] = levels
+            out["tv"] = board_data.tradingview_url(str(rec["ticker"]), out.get("exchange"))
             rows.append(out)
         counts = both.groupby("scan", sort=False).size()
         scans = [

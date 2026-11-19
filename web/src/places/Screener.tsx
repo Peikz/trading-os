@@ -20,9 +20,9 @@ import { MiniCandles } from "../components/MiniCandles";
 import { download, formatValue } from "../format";
 import { describeFilter, FilterRow } from "../pages/Screener";
 import { openChart } from "../shell/active";
-import { useArrowKeys, usePref } from "../shell/prefs";
+import { useArrowKeys, usePref, writeLastScreen } from "../shell/prefs";
 import { nameOf, useNames } from "../shell/symbols";
-import { useRunPick, useTodayRuns } from "../shell/todayRun";
+import { useEarlierRuns, useRunPick, useTodayRuns } from "../shell/todayRun";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia, usePopover } from "../ui/kit";
 import { RunMenu } from "../ui/RunPicker";
@@ -30,9 +30,10 @@ import { useVisibleSparks } from "./chart/lists";
 import { onePerStock } from "./screener/oneRow";
 import { Sparkline } from "./chart/WatchPanel";
 import { Preview, type Rec } from "./screener/Preview";
+import { GradeBlocks, ScanTab } from "./screener/ScanTab";
 
 type Page = "hits" | "screen";
-type ViewName = "Overview" | "Technical" | "Setup";
+type ViewName = "Overview" | "Technical" | "Setup" | "Scan table";
 type Kind = "text" | "grade" | "money" | "pct" | "pp" | "num" | "x" | "r" | "win" | "bool" | "spark" | "runs";
 interface Col {
   key: string;
@@ -48,16 +49,20 @@ const CHG: Col = { key: "chg_pct", label: "Chg %", kind: "pct" };
 const SPARK: Col = { key: "spark", label: "20 days", kind: "spark" };
 
 const HIT_VIEWS: Record<ViewName, Col[]> = {
+  "Scan table": [],
   Overview: [T, G, { key: "scan_label", label: "Setup", kind: "text" }, LAST, CHG, SPARK, { key: "rvol50", label: "RVOL", kind: "num", title: "Volume against its 50-day average" }, { key: "adr20_pct", label: "ADR %", kind: "pp", title: "Average daily range, 20 days" }, { key: "runs", label: "Runs", kind: "runs" }],
   Technical: [T, G, { key: "rs_pct", label: "RS", kind: "num", title: "Relative strength percentile (1-99)" }, { key: "pct_from_52w_high", label: "From high", kind: "pct", title: "From the 52-week high" }, { key: "ret_22", label: "1 month", kind: "pct" }, { key: "ret_63", label: "3 months", kind: "pct" }, { key: "dist_ma10_adr", label: "To 10-day line", kind: "num", title: "Distance to the 10-day line, in ADRs" }, { key: "above_ma50", label: "Over 50-day", kind: "bool" }, { key: "above_ma200", label: "Over 200-day", kind: "bool" }],
   Setup: [T, G, { key: "scan_label", label: "Setup", kind: "text" }, { key: "grade_stat_mean_r", label: "Pred. R", kind: "r", title: "The study's average R for this grade" }, { key: "grade_stat_win_pct", label: "Win %", kind: "win" }, { key: "grade_why", label: "Why", kind: "text" }, { key: "si_tag", label: "Short", kind: "text" }, { key: "ibd_tag", label: "IBD", kind: "text" }, { key: "vol_build", label: "Vol build", kind: "x" }],
 };
 const SCREEN_VIEWS: Record<ViewName, Col[]> = {
+  "Scan table": [],
   Overview: [T, LAST, CHG, SPARK, { key: "rvol50", label: "RVOL", kind: "num" }, { key: "adr20_pct", label: "ADR %", kind: "pp" }, { key: "market_cap", label: "Market cap", kind: "money" }, { key: "industry", label: "Industry", kind: "text" }],
   Technical: [T, { key: "rs_pct", label: "RS", kind: "num" }, { key: "pct_from_52w_high", label: "From high", kind: "pct" }, { key: "ret_22", label: "1 month", kind: "pct" }, { key: "ret_63", label: "3 months", kind: "pct" }, { key: "dist_ma10_adr", label: "To 10-day line", kind: "num" }, { key: "above_ma50", label: "Over 50-day", kind: "bool" }, { key: "above_ma200", label: "Over 200-day", kind: "bool" }],
   Setup: [T, { key: "vol_build", label: "Vol build", kind: "x" }, { key: "hist_range_nd", label: "10-day range", kind: "num", title: "10-day range in ADRs (tightness)" }, { key: "earnings_in_sessions", label: "Earnings in", kind: "num", title: "Sessions to the next report" }, { key: "industry_rank", label: "Industry rank", kind: "num" }, { key: "minervini_tt", label: "Trend template", kind: "bool" }, { key: "ma_surf", label: "MA-surf", kind: "bool" }],
 };
 const VIEWS: ViewName[] = ["Overview", "Technical", "Setup"];
+/** Scan hits with one scan picked also has that scan's own table (its columns, the grade blocks). */
+const SCAN_VIEW: ViewName = "Scan table";
 const GRADE_RANK: Record<string, number> = { "A+++": 0, "A++": 1, "A+": 2, A: 3, B: 4, C: 5, "": 9 };
 const GRADES = ["All", "A+", "A", "B", "C"] as const;
 const BLANK: ScreenSpec = { filters: [], sort: "rs_pct", descending: true };
@@ -100,7 +105,8 @@ function gradeFilter(g: (typeof GRADES)[number], rec: Rec): boolean {
 function csv(cols: Col[], rows: Rec[]): string {
   const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const real = cols.filter((c) => c.kind !== "spark");
-  return [real.map((c) => q(c.label)).join(","), ...rows.map((r) => real.map((c) => q(c.key === "runs" ? (r.runs as string[] | undefined)?.join(" ") : r[c.key])).join(","))].join("\n");
+  const tv = (r: Rec) => q(typeof r.tv === "string" ? r.tv : "");
+  return [[...real.map((c) => q(c.label)), q("TradingView")].join(","), ...rows.map((r) => [...real.map((c) => q(c.key === "runs" ? (r.runs as string[] | undefined)?.join(" ") : r[c.key])), tv(r)].join(","))].join("\n");
 }
 
 export function Screener({ tab, params }: { tab: string; params: URLSearchParams }) {
@@ -124,7 +130,11 @@ export function Screener({ tab, params }: { tab: string; params: URLSearchParams
     setSel(null);
   }, [page]);
 
-  const cols = (page === "hits" ? HIT_VIEWS : SCREEN_VIEWS)[view];
+  const [hitScan, setHitScan] = useState<{ scan: string | null; run: string; slots: string[] }>({ scan: null, run: "all", slots: [] });
+  const runs = useTodayRuns();
+  const scanTab = page === "hits" && hitScan.scan !== null;
+  const shownView: ViewName = view === SCAN_VIEW && !scanTab ? "Overview" : view;
+  const cols = (page === "hits" ? HIT_VIEWS : SCREEN_VIEWS)[shownView];
   const sorted = useMemo(() => {
     if (!rows || !sort) return rows;
     const kind = cols.find((c) => c.key === sort.key)?.kind;
@@ -146,7 +156,13 @@ export function Screener({ tab, params }: { tab: string; params: URLSearchParams
   }, [rows, sort, cols]);
   const key = (r: Rec) => `${r.ticker}|${r.scan ?? ""}`;
   const current = sorted?.find((r) => key(r) === sel) ?? (phone ? null : sorted?.[0] ?? null);
-  const open = (r: Rec) => openChart(String(r.ticker), page === "hits" && ["A+++", "A++", "A+", "A", "B"].includes(String(r.grade)) ? "hits" : undefined);
+  const open = (r: Rec) => {
+    if (page === "screen") {
+      // The Chart's "Last screener result": the stocks of this result, in this order
+      writeLastScreen((sorted ?? []).map((x) => String(x.ticker)));
+      openChart(String(r.ticker), "screen");
+    } else openChart(String(r.ticker), ["A+++", "A++", "A+", "A", "B"].includes(String(r.grade)) ? "hits" : undefined);
+  };
 
   useEffect(() => {
     if (!arrowKeys || !sorted?.length) return;
@@ -186,8 +202,8 @@ export function Screener({ tab, params }: { tab: string; params: URLSearchParams
     <div className="sc-body">
       <section className="sc-main" aria-label="Results">
         <div className="view-tabs" role="tablist" aria-label="Columns">
-          {VIEWS.map((v) => (
-            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
+          {[...VIEWS, ...(scanTab ? [SCAN_VIEW] : [])].map((v) => (
+            <button key={v} role="tab" aria-selected={shownView === v} onClick={() => setView(v)}>
               {v}
             </button>
           ))}
@@ -196,17 +212,19 @@ export function Screener({ tab, params }: { tab: string; params: URLSearchParams
         {rows !== null && rows.length === 0 && !error && (
           <p className="muted sc-pad">{page === "hits" ? "No scan hits match these filters." : "No stocks match these filters."}</p>
         )}
-        {sorted && sorted.length > 0 && mode === "charts" && <Charts rows={sorted} onOpen={open} />}
-        {sorted && sorted.length > 0 && mode === "table" && !phone && (
+        {scanTab && shownView === SCAN_VIEW && <ScanTab run={hitScan.run} scan={hitScan.scan!} runs={runs} slots={hitScan.slots} />}
+        {sorted && sorted.length > 0 && mode === "charts" && shownView !== SCAN_VIEW && <Charts rows={sorted} onOpen={open} />}
+        {sorted && sorted.length > 0 && mode === "table" && !phone && shownView !== SCAN_VIEW && (
           <DataTable cols={cols} rows={sorted} sort={sort} onSort={(k) => setSort((s) => (s?.key !== k ? { key: k, down: true } : s.down ? { key: k, down: false } : null))} current={current ? key(current) : null} keyOf={key} onSelect={(r) => setSel(key(r))} onOpen={open} />
         )}
-        {sorted && sorted.length > 0 && mode === "table" && phone && <PhoneRows rows={sorted} onOpen={open} page={page} />}
+        {sorted && sorted.length > 0 && mode === "table" && phone && shownView !== SCAN_VIEW && <PhoneRows rows={sorted} onOpen={open} page={page} />}
+        {scanTab && shownView !== SCAN_VIEW && mode === "table" && <GradeBlocks run={hitScan.run} scan={hitScan.scan!} runs={runs} slots={hitScan.slots} />}
       </section>
-      {!phone && mode === "table" && <Preview rec={current} source={page === "hits" ? "A scan hit." : "A screen is a list to look at: no grade, no buy."} onOpen={() => current && open(current)} />}
+      {!phone && mode === "table" && shownView !== SCAN_VIEW && <Preview rec={current} source={page === "hits" ? "A scan hit." : "A screen is a list to look at: no grade, no buy."} onOpen={() => current && open(current)} />}
     </div>
   );
 
-  const common = { setRows, setCount, setError, setBar, setTvList, view };
+  const common = { setRows, setCount, setError, setBar, setTvList, view: shownView === SCAN_VIEW ? "Overview" : shownView, setHitScan };
   return (
     <div className="sc-place">
       {page === "hits" ? <HitsData {...common} key="hits" /> : <ScreenData {...common} params={params} key="screen" />}
@@ -223,11 +241,13 @@ type Common = {
   setBar: (n: React.ReactNode) => void;
   setTvList: (s: string) => void;
   view: ViewName;
+  setHitScan?: (s: { scan: string | null; run: string; slots: string[] }) => void;
 };
 
 /** Scan hits: Run, Scan and Grade choose the rows; the filter bar shows the three. */
-function HitsData({ setRows, setCount, setError, setBar, setTvList }: Common) {
+function HitsData({ setRows, setCount, setError, setBar, setTvList, setHitScan }: Common) {
   const runs = useTodayRuns();
+  const earlier = useEarlierRuns(runs);
   const [run, setRun] = useRunPick();
   const [scan, setScan] = useState("all");
   const [grade, setGrade] = useState<(typeof GRADES)[number]>("All");
@@ -260,9 +280,14 @@ function HitsData({ setRows, setCount, setError, setBar, setTvList }: Common) {
     setTvList([...new Set(picked.map((r) => (r.exchange ? `${r.exchange}:${r.ticker}` : String(r.ticker))))].join(","));
   }, [picked, data, setRows, setCount, setTvList]);
   useEffect(() => {
+    // The slots the picked scan's hits came from: "All today" reads that scan's table from the newest of them
+    const slots = [...new Set((data?.rows ?? []).filter((r) => r.scan === scan).flatMap((r) => r.runs))];
+    setHitScan?.({ scan: scan === "all" ? null : scan, run, slots });
+  }, [scan, run, data, setHitScan]);
+  useEffect(() => {
     setBar(
       <>
-        <RunMenu runs={runs} value={run} onPick={setRun} />
+        <RunMenu runs={runs} value={run} onPick={setRun} earlier={earlier} />
         <ScanMenu scans={data?.scans ?? []} value={scan} onPick={setScan} />
         <div className="seg-line" role="group" aria-label="Grade">
           {GRADES.map((g) => (
@@ -273,7 +298,7 @@ function HitsData({ setRows, setCount, setError, setBar, setTvList }: Common) {
         </div>
       </>,
     );
-  }, [runs, run, setRun, data, scan, grade, setBar]);
+  }, [runs, run, setRun, earlier, data, scan, grade, setBar]);
   return null;
 }
 
@@ -340,7 +365,7 @@ function ScreenData({ setRows, setCount, setError, setBar, setTvList, view, para
           (r) => {
             if (!on) return;
             setResult(r);
-            setRows(r.rows as Rec[]);
+            setRows(r.rows.map((x) => ({ ...x, tv: r.tv?.[String(x.ticker)] })) as Rec[]);
             setError(null);
             setCount(`${r.count} ${r.count === 1 ? "stock" : "stocks"} · ${r.when}`);
             setTvList(r.tv_list);
@@ -399,11 +424,21 @@ function ScreenData({ setRows, setCount, setError, setBar, setTvList, view, para
           <button aria-pressed={!live} onClick={() => setLive(false)}>Last close</button>
           <button aria-pressed={live} onClick={() => setLive(true)}>Live now</button>
         </div>
+        <button
+          className="fbtn"
+          disabled={!result?.tickers.length}
+          title="Step through this result's stocks on Today, one card each"
+          onClick={() => {
+            const q = new URLSearchParams({ screen: name || "Screener", t: (result?.tickers ?? []).slice(0, 100).join(",") });
+            window.location.hash = `#/today?${q}`;
+          }}
+        >
+          Flip through on Today
+        </button>
       </>,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt when its inputs change
-  }, [meta, name, spec, live, setBar]);
-  void result;
+  }, [meta, name, spec, live, setBar, result]);
   void version;
   void setVersion;
   return null;
@@ -632,6 +667,7 @@ function DataTable({
                 )}
               </th>
             ))}
+            <th>TradingView</th>
           </tr>
         </thead>
         <tbody>
@@ -642,6 +678,13 @@ function DataTable({
                   <Cell col={c} rec={r} sparks={sparks} />
                 </td>
               ))}
+              <td>
+                {typeof r.tv === "string" ? (
+                  <a href={r.tv} target="_blank" rel="noreferrer" aria-label={`${r.ticker} on TradingView`} onClick={(e) => e.stopPropagation()}>
+                    TV ↗
+                  </a>
+                ) : null}
+              </td>
             </tr>
           ))}
         </tbody>

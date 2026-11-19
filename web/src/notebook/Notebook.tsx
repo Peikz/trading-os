@@ -15,7 +15,7 @@ import { DailyPage, FreePage, type Patch, StockPage, TradePage } from "./PageVie
 import { RightPanel, TagView, type Target } from "./Panels";
 import { Sidebar } from "./Sidebar";
 
-function useIndex() {
+export function useIndex() {
   const [index, setIndex] = useState<NbIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reload = useCallback(
@@ -53,16 +53,11 @@ function usePersisted(key: string, fallback: boolean): [boolean, (v: boolean) =>
   ];
 }
 
-export function Notebook({ params }: { params: URLSearchParams }) {
-  const phone = useMedia(PHONE);
-  const { index, error, patch } = useIndex();
+/** What the editor needs to suggest `#tags`, `$tickers` and `[[pages]]`, from the loaded index. */
+export function useNbEnvOf(index: NbIndex | null): NbEnv {
   const symbols = useSymbols();
-  const [query, setQuery] = useState("");
-  const [sideOpen, setSideOpen] = usePersisted("side", true);
-  const [rightOpen, setRightOpen] = usePersisted("right", true);
-  const sel = parseSelection(params.get("p"));
   const entries = useMemo(() => (index ? entriesOf(index) : []), [index]);
-  const env = useMemo<NbEnv>(
+  return useMemo<NbEnv>(
     () => ({
       tags: tagCounts(entries).map((t) => t.tag),
       tickers: index?.tickers ?? [],
@@ -71,6 +66,17 @@ export function Notebook({ params }: { params: URLSearchParams }) {
     }),
     [entries, index, symbols],
   );
+}
+
+export function Notebook({ params }: { params: URLSearchParams }) {
+  const phone = useMedia(PHONE);
+  const { index, error, patch } = useIndex();
+  const [query, setQuery] = useState("");
+  const [sideOpen, setSideOpen] = usePersisted("side", true);
+  const [rightOpen, setRightOpen] = usePersisted("right", true);
+  const sel = parseSelection(params.get("p"));
+  const entries = useMemo(() => (index ? entriesOf(index) : []), [index]);
+  const env = useNbEnvOf(index);
 
   // [[A page that does not exist]] and "New page": make the file, then open it
   const making = useRef<string | null>(null);

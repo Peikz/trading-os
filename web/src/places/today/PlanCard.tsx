@@ -107,12 +107,14 @@ export function CopyOrder({ row, view, big }: { row: BoardRow; view: TicketView 
   );
 }
 
-export function PlanCard({ row }: { row: BoardRow }) {
+/** The order's state for one stock: the order type and price you changed, the ticket that follows,
+ * and "I placed it in Saxo". Shared by the desktop card and the phone card. The T key (and the
+ * "Values" button) opens and closes "Edit order", where the values to type into Saxo are. */
+export function usePlan(row: BoardRow) {
   const [kind, setKind] = useState<string | null>(null);
   const [own, setOwn] = useState("");
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
-  const [copiedLine, setCopiedLine] = useState<string | null>(null);
 
   // A new stock starts at its plan's order type and price
   useEffect(() => {
@@ -121,18 +123,131 @@ export function PlanCard({ row }: { row: BoardRow }) {
     setEditing(false);
     setSaved(null);
   }, [row.ticker, row.scan]);
+  useEffect(() => {
+    const on = () => setEditing((e) => !e);
+    window.addEventListener(VALUES_EVENT, on);
+    return () => window.removeEventListener(VALUES_EVENT, on);
+  }, []);
 
   const priceNow = own === "" ? null : Number(own);
   const { view, error } = useTicket(row, kind, priceNow);
-  const d = row.decision;
-  const t = view?.ticket;
-
   const place = () =>
     api.placeTicket(row, view?.kind ?? kind, priceNow).then(
       (r) => setSaved(r.message),
       (e: Error) => setSaved(`Error: ${e.message}`),
     );
+  const pickKind = (k: string) => {
+    setKind(k);
+    setOwn("");
+    setSaved(null);
+  };
+  return { view, error, kind, own, setOwn, pickKind, editing, setEditing, saved, place };
+}
+export type Plan = ReturnType<typeof usePlan>;
 
+/** The T key: open or close the values to type into Saxo. */
+export const VALUES_EVENT = "trading-os:toggle-values";
+
+/** The order on one line, and the "Edit order" button. */
+export function OrderLine({ plan }: { plan: Plan }) {
+  const { view, error, editing, setEditing } = plan;
+  const t = view?.ticket;
+  return (
+    <div className="order-line">
+      <code>{t?.summary ?? (view?.note || error || "Working out the order…")}</code>
+      <button className="link" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+        {editing ? "Done" : "Edit order"}
+      </button>
+    </div>
+  );
+}
+
+/** Order type and price (the shares follow so the risk stays), then each value to type into Saxo
+ * with its own copy button. */
+export function EditOrder({ plan }: { plan: Plan }) {
+  const { view, own, setOwn, pickKind, editing } = plan;
+  const [copiedLine, setCopiedLine] = useState<string | null>(null);
+  const t = view?.ticket;
+  if (!editing) return null;
+  if (!view) return <p className="muted hint">Loading the order…</p>;
+  return (
+    <div className="edit-order" aria-label="Edit order">
+      <div className="row">
+        <label>
+          Order type{" "}
+          <select aria-label="Order type" value={view.kind} onChange={(e) => pickKind(e.target.value)}>
+            {Object.entries(view.kinds).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+                {k === view.default ? " (plan)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label title="The plan's price; type your own and the shares follow so the risk stays the same">
+          {view.price_label}{" "}
+          <input
+            aria-label={view.price_label}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder={view.plan_price?.toFixed(2) ?? ""}
+            value={own}
+            onChange={(e) => setOwn(e.target.value)}
+          />
+        </label>
+      </div>
+      {t && (
+        <>
+          {t.when && <p className="muted hint">When: {t.when}</p>}
+          <dl className="lines">
+            {t.lines.map((l) => (
+              <div key={l.label}>
+                <dt>{l.label}</dt>
+                <dd>
+                  <code>{l.value}</code>
+                  <button
+                    className="ghost icon-btn"
+                    aria-label={`Copy ${l.label}`}
+                    onClick={() => copy(l.value).then(() => setCopiedLine(l.label), () => setCopiedLine(null))}
+                  >
+                    <Icon name={copiedLine === l.label ? "check" : "copy"} size={16} />
+                  </button>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="muted hint">{t.caption}. The shares follow the price so the risk stays the same.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** What the ticket says to watch for, and "I placed it in Saxo". */
+export function PlaceOrder({ plan }: { plan: Plan }) {
+  const { view, error, saved, place } = plan;
+  const t = view?.ticket;
+  return (
+    <>
+      {view?.error && <p className="warn hint">{view.error}</p>}
+      {view?.note && t && <p className="muted hint">{view.note}</p>}
+      {error && <p className="error hint">Ticket: {error}</p>}
+      <button className="block" onClick={place} disabled={!t} title="Saves this order as today's plan, so your fill matches it in the Journal">
+        I placed it in Saxo
+      </button>
+      {saved && (
+        <p className={saved.startsWith("Error") ? "error hint" : "ok hint"} role="status">
+          {saved}
+        </p>
+      )}
+    </>
+  );
+}
+
+export function PlanCard({ row }: { row: BoardRow }) {
+  const plan = usePlan(row);
+  const d = row.decision;
   return (
     <section className="card plan" aria-label={`${row.ticker} plan`}>
       <div className="head">
@@ -153,86 +268,11 @@ export function PlanCard({ row }: { row: BoardRow }) {
           </div>
         </>
       )}
-      <Numbers row={row} view={view} />
-      <CopyOrder row={row} view={view} />
-      <div className="order-line">
-        <code>{t?.summary ?? (view?.note || error || "Working out the order…")}</code>
-        <button className="link" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>
-          {editing ? "Done" : "Edit order"}
-        </button>
-      </div>
-      {editing && !view && <p className="muted hint">Loading the order…</p>}
-      {editing && view && (
-        <div className="edit-order" aria-label="Edit order">
-          <div className="row">
-            <label>
-              Order type{" "}
-              <select
-                aria-label="Order type"
-                value={view.kind}
-                onChange={(e) => {
-                  setKind(e.target.value);
-                  setOwn("");
-                  setSaved(null);
-                }}
-              >
-                {Object.entries(view.kinds).map(([k, label]) => (
-                  <option key={k} value={k}>
-                    {label}
-                    {k === view.default ? " (plan)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label title="The plan's price; type your own and the shares follow so the risk stays the same">
-              {view.price_label}{" "}
-              <input
-                aria-label={view.price_label}
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={view.plan_price?.toFixed(2) ?? ""}
-                value={own}
-                onChange={(e) => setOwn(e.target.value)}
-              />
-            </label>
-          </div>
-          {t && (
-            <>
-              {t.when && <p className="muted hint">When: {t.when}</p>}
-              <dl className="lines">
-                {t.lines.map((l) => (
-                  <div key={l.label}>
-                    <dt>{l.label}</dt>
-                    <dd>
-                      <code>{l.value}</code>
-                      <button
-                        className="ghost icon-btn"
-                        aria-label={`Copy ${l.label}`}
-                        onClick={() => copy(l.value).then(() => setCopiedLine(l.label), () => setCopiedLine(null))}
-                      >
-                        <Icon name={copiedLine === l.label ? "check" : "copy"} size={16} />
-                      </button>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="muted hint">{t.caption}. The shares follow the price so the risk stays the same.</p>
-            </>
-          )}
-        </div>
-      )}
-      {view?.error && <p className="warn hint">{view.error}</p>}
-      {view?.note && t && <p className="muted hint">{view.note}</p>}
-      {error && <p className="error hint">Ticket: {error}</p>}
-      <button className="block" onClick={place} disabled={!t} title="Saves this order as today's plan, so your fill matches it in the Journal">
-        I placed it in Saxo
-      </button>
-      {saved && (
-        <p className={saved.startsWith("Error") ? "error hint" : "ok hint"} role="status">
-          {saved}
-        </p>
-      )}
+      <Numbers row={row} view={plan.view} />
+      <CopyOrder row={row} view={plan.view} />
+      <OrderLine plan={plan} />
+      <EditOrder plan={plan} />
+      <PlaceOrder plan={plan} />
     </section>
   );
 }

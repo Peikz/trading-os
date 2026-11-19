@@ -62,7 +62,8 @@ export function TradeChart({
   // Around the trade: three months before the entry to six weeks after the exit
   const days = raw.candles.map((c) => c.time);
   const from = days.find((t) => t >= addDays(entry, -90)) ?? days[0];
-  const to = [...days].reverse().find((t) => t <= addDays(exit || entry, 45)) ?? days[days.length - 1];
+  // An open trade runs to the newest bar; a closed one to six weeks after the exit
+  const to = exit ? ([...days].reverse().find((t) => t <= addDays(exit, 45)) ?? days[days.length - 1]) : days[days.length - 1];
   const levels: Level[] = stop ? [{ name: "stop", price: stop, colour: "#ef5350" }] : [];
   const data: ChartData = from && to ? { ...raw, visible: { from, to }, levels } : { ...raw, levels };
   return (

@@ -1,12 +1,11 @@
-// The Chart's lower panels (trading_os/chart_view.py): the stock's notes, typed-in trend lines
+// The Chart's lower panels (trading_os/chart_view.py): typed-in trend lines (the stock's notes are
+// the Notes tab, places/chart/NotesTab.tsx)
 // and anchored VWAPs with the saved marks, and minute bars (study days, or live from Alpaca
 // when the server has its keys). They sit in the Chart workspace's bottom panel
 // (places/ChartWorkspace.tsx), which owns the chart itself.
 import { useEffect, useMemo, useState } from "react";
-import { api, type ChartData, type ChartNotes, type Intraday, type IntradayDays } from "../api";
+import { api, type ChartData, type Intraday, type IntradayDays } from "../api";
 import { IntradayChart } from "../components/IntradayChart";
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 export function Pills({
   label,
@@ -27,96 +26,6 @@ export function Pills({
         </button>
       ))}
     </div>
-  );
-}
-
-export function Notes({ ticker, onMessage }: { ticker: string; onMessage: (t: string) => void }) {
-  const [notes, setNotes] = useState<ChartNotes | null>(null);
-  const [day, setDay] = useState(today());
-  const [text, setText] = useState("");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ text: "", day: "" });
-  useEffect(() => {
-    api.chartNotes(ticker).then(setNotes, () => setNotes(null));
-  }, [ticker]);
-  const fail = (e: Error) => onMessage(`Error: ${e.message}`);
-  return (
-    <section>
-      <h3>Notes on {ticker}</h3>
-      <div className="row">
-        <input aria-label="Note day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
-      </div>
-      <textarea aria-label="New note" rows={3} value={text} onChange={(e) => setText(e.target.value)} />
-      <button
-        disabled={!text.trim()}
-        onClick={() =>
-          api.addChartNote(ticker, text, day).then((n) => {
-            setNotes(n);
-            setText("");
-          }, fail)
-        }
-      >
-        Save note
-      </button>
-      {notes && notes.notes.length === 0 && <p className="muted">No notes on this stock yet.</p>}
-      {notes?.notes.map((n) => (
-        <div key={n.note_id} className="note">
-          <b>{n.note_date}</b>{" "}
-          <span className="muted">
-            · written {n.written}
-            {n.edited ? ` · edited ${n.edited}` : ""}
-          </span>
-          {editing === n.note_id ? (
-            <div>
-              <input aria-label="Edit day" type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} />
-              <textarea aria-label="Edit note" rows={3} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} />
-              <button
-                onClick={() =>
-                  api.editChartNote(ticker, n.note_id, edit.text, edit.day).then((x) => {
-                    setNotes(x);
-                    setEditing(null);
-                  }, fail)
-                }
-              >
-                Save
-              </button>
-              <button onClick={() => setEditing(null)}>Cancel</button>
-            </div>
-          ) : (
-            <>
-              <p className="pre">{n.text}</p>
-              <button
-                className="link"
-                onClick={() => {
-                  setEditing(n.note_id);
-                  setEdit({ text: n.text, day: n.note_date });
-                }}
-              >
-                Edit
-              </button>
-              <button className="link" onClick={() => api.removeChartNote(ticker, n.note_id).then(setNotes, fail)}>
-                Delete
-              </button>
-            </>
-          )}
-        </div>
-      ))}
-      {notes && notes.daily.length > 0 && (
-        <>
-          <b>From your daily notes ({notes.daily.length})</b>
-          {notes.daily.map((n, i) => (
-            <div key={i} className="note">
-              <b>{n.note_date}</b> · daily note{n.also.length ? ` · also ${n.also.join(" · ")}` : ""}
-              <p className="pre">{n.text}</p>
-            </div>
-          ))}
-        </>
-      )}
-      <p className="muted">
-        Notes are kept for good in the data repo (data/journal/stock_notes/): an edit or a delete
-        adds a row and never erases the old text. Save & push sends them to GitHub.
-      </p>
-    </section>
   );
 }
 

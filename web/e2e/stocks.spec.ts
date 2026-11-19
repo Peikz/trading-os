@@ -78,11 +78,11 @@ test("Scan hits: today's runs, the scan and grade filters, the stock on the Char
   await page.getByRole("group", { name: "Grade" }).getByRole("button", { name: "All", exact: true }).click();
   await expect(table.locator("tbody tr")).toHaveCount(hits.rows.length);
 
-  // Enter opens the selected row on the Chart; a graded hit has its grading form in the Journal tab
+  // Enter opens the selected row on the Chart; a graded hit has its grading form in the Notes tab
   const first = hits.rows[0];
   await page.keyboard.press("Enter");
   await expect(page.locator(".ws-bar .ticker")).toHaveText(first.ticker);
-  await page.getByRole("tab", { name: "Journal", exact: true }).click();
+  await page.getByRole("tab", { name: "Notes", exact: true }).click();
   const form = page.getByLabel("Grading form");
   await expect(form).toBeVisible();
   await form.getByRole("radiogroup").locator("label", { hasText: /^B$/ }).click();

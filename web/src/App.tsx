@@ -20,12 +20,12 @@ import { Today } from "./places/Today";
 import { hrefFor, parseHash, PLACES, type Place, type Route, TABS } from "./routes";
 import { CommandPalette } from "./shell/CommandPalette";
 import { MobileNav } from "./shell/MobileNav";
-import { TopBar } from "./shell/TopBar";
+import { TopBar, useRunsLine } from "./shell/TopBar";
 import { useSync } from "./shell/useSync";
 import { typing } from "./ui/kit";
 
 // Letters a place uses itself, so typing them does not open the search
-const OWN_KEYS: Partial<Record<Place, string>> = { today: "wn", chart: "jk" };
+const OWN_KEYS: Partial<Record<Place, string>> = { today: "wfnt", chart: "jk" };
 
 function PlaceView({ route }: { route: Route }) {
   const { place, tab, params } = route;
@@ -60,6 +60,12 @@ function PlaceView({ route }: { route: Route }) {
       {place === "lab" && tab === "guide" && <Guide />}
     </div>
   );
+}
+
+/** The one muted line at the bottom of a page: how many runs, and the session's date. */
+function Footer() {
+  const line = useRunsLine();
+  return line ? <footer className="page-foot muted">{line}</footer> : null;
 }
 
 export function App() {
@@ -113,6 +119,7 @@ export function App() {
       >
         <PlaceView route={route} />
       </main>
+      {!["chart", "screener", "watchlists"].includes(route.place) && <Footer />}
       <MobileNav place={route.place} />
       {palette !== null && (
         <CommandPalette

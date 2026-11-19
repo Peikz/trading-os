@@ -55,6 +55,9 @@ function routes() {
     "GET /api/positions": { source: null, totals: {}, cards: [] },
     "GET /api/today": { scope: "all", rows: [], hidden_c: 0, total: 0, next_scan: null },
     "GET /api/journal/closed": { stats: {}, curve: [], trades: [], caption: "" },
+    "GET /api/notebook": { today: "2026-11-19", daily: [], trades: [], stocks: [], pages: [], tags: [], tickers: [] },
+    "GET /api/chart/WZQW/saved": [],
+    "GET /api/chart/XZQX/saved": [],
     [`GET /api/chart/${A}/notes`]: { notes: [], daily: [] },
     [`GET /api/chart/${B}/notes`]: { notes: [], daily: [] },
   });
@@ -150,8 +153,11 @@ describe("ChartWorkspace", () => {
     expect(await screen.findByText(`No scan hit for ${A} in the newest runs, so no plan.`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Position" }));
     expect(await screen.findByText(`No open position in ${A}.`)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Journal" }));
-    expect(await screen.findByText(`No closed trades in ${A} yet.`)).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Journal" })).not.toBeInTheDocument(); // one Notes tab now
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Plan", "Notes", "Position", "Lines"]);
+    fireEvent.click(screen.getByRole("tab", { name: "Notes" }));
+    expect(await screen.findByText(`No trades in ${A} yet.`)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Journal" })).toHaveAttribute("href", `#/journal/notes?p=stock%3A${A}`);
     fireEvent.click(screen.getByRole("button", { name: "Hide the stock panel" }));
     expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Hide the list" }));

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api, type Positions as Data } from "../api";
 import { chartLink } from "../components/Card";
 import { Metric } from "../components/Table";
+import { TradeChart } from "../components/TradeChart";
 import { signed, usd } from "../format";
 
 export function Positions() {
@@ -57,6 +58,10 @@ export function Positions() {
                     delta={c.stop === null ? undefined : `stop ${c.stop.toFixed(2)}`}
                   />
                 </div>
+                <details className="position-chart">
+                  <summary>Chart: your entry, fills and stop</summary>
+                  <TradeChart ticker={c.ticker} entry={c.entry_date} exit="" stop={c.stop} height={260} />
+                </details>
                 {c.facts.length > 0 && (
                   <ul>
                     {c.facts.map((f) => (

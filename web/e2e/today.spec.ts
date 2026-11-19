@@ -1,5 +1,5 @@
 // Today (design review 4 Nov 2026): the queue's three parts, flipping with the arrow keys, the
-// bar switch, W (watch) and N (note), the plan card that leads with the decision (copy, edit
+// bar switch, F (watch), W (bars), T (the Saxo values) and N (note), the plan card that leads with the decision (copy, edit
 // order, I placed it in Saxo), the C setups on request, a push link, and the phone's cards.
 import type { APIRequestContext, Page } from "@playwright/test";
 import { expect, open, test } from "./fixtures";
@@ -60,12 +60,12 @@ test("the bar switch asks for daily, weekly and monthly bars, and the Indicators
   expect((await more).status()).toBe(200);
 });
 
-test("W watches the stock (Flag green) and N writes a note; a price alert", async ({ page, request }) => {
+test("F watches the stock (Flag green) and N writes a note; a price alert", async ({ page, request }) => {
   const { rows } = await queue(request);
   const t = rows[0].ticker;
   await open(page, "today");
   await expect(plan(page, t)).toBeVisible();
-  await page.keyboard.press("w");
+  await page.keyboard.press("f");
   await expect(page.locator("p.toast")).toHaveText(`${t} is on your watchlist`);
   await expect(section(page, "Watching")).toContainText(t);
   const lists = (await (await request.get("/api/watchlists")).json()) as { lists: string[] };
