@@ -875,3 +875,60 @@ table.wl { table-layout: fixed; width: 100%; }
   .dialog-back { align-items: flex-end; padding: 0; }
   .dialog { width: 100%; border-radius: var(--r) var(--r) 0 0; }
 }
+
+/* The footer line (round 4): runs and the session's date, muted, under every page that scrolls */
+.page-foot { max-width: 1680px; width: 100%; margin: 0 auto; padding: 0 var(--s3) var(--s3); font-size: 12px; }
+@media (max-width: 640px) { .page-foot { padding-bottom: calc(var(--tabbar) + var(--s3)); } }
+
+/* Sortable headers and the CSV button of the shared table (round 4) */
+.table-tools { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+.table-csv { font-size: 11px; padding: 2px 8px; min-height: 0; height: 22px; color: var(--text-3); }
+.th-sort { all: unset; cursor: pointer; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
+.th-sort:hover, .th-sort:focus-visible { color: var(--text); }
+th[aria-sort] .th-sort { color: var(--text); }
+
+/* The search's detail under the stock rows (round 4) */
+.search-detail { border-top: 1px solid var(--line); padding: var(--s1h) var(--s2) var(--s2); max-height: 38vh; overflow-y: auto; font-size: 13px; }
+.search-detail h4 { margin: var(--s1) 0; font-size: 13px; }
+.search-detail p { margin: var(--s1) 0; }
+.search-detail .sd-list { list-style: none; margin: var(--s1) 0 0; padding: 0; max-height: none; overflow: visible; display: flex; flex-direction: column; gap: 4px; }
+.search-detail .table-wrap { margin: 4px 0; }
+
+/* Today's Grid and List views, and All scans (round 4) */
+.grid-bar { display: flex; align-items: center; gap: var(--s1); margin: var(--s1) 0; flex-wrap: wrap; }
+.grid-cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.grid-cell { border: 1px solid var(--line); border-radius: var(--r); padding: var(--s1h) var(--s1h) var(--s1); background: var(--surface); min-width: 0; cursor: pointer; }
+.grid-cell.active { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
+.grid-cell-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.grid-cell .chart-head { margin-bottom: 2px; }
+.list-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: var(--s2); align-items: start; }
+.list-card { border: 1px solid var(--line); border-radius: var(--r); padding: var(--s2); background: var(--surface); min-width: 0; }
+.list-card > header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: var(--s1); }
+.list-card .tk { font-size: 17px; }
+.list-card .chg { margin-left: auto; }
+.list-card .card { border: none; padding: 0; background: none; box-shadow: none; margin-top: var(--s1); }
+.phone-more { margin: var(--s1) 0; }
+.phone-more summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; color: var(--accent-text); }
+.all-scans { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
+.all-scans .toggle { font-size: 14px; }
+.all-scans-body { margin-top: var(--s2); display: grid; gap: var(--s3); }
+.scan-table h3 { font-size: 15px; margin: 0 0 var(--s1); }
+.scan-table .table-wrap { max-height: 420px; overflow: auto; }
+.grade-blocks { display: grid; gap: var(--s1); margin: var(--s1) 0; font-size: 13px; }
+.grade-block p { margin: 0 0 2px; }
+.grade-block ul { margin: 0; padding-left: 18px; color: var(--text-2); }
+.scan-charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s1); margin-top: var(--s1); }
+.scan-charts img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+.scan-charts figcaption { font-size: 12px; color: var(--text-2); }
+@media (max-width: 900px) { .grid-cells { grid-template-columns: minmax(0, 1fr); } .list-cards { grid-template-columns: minmax(0, 1fr); } }
+
+/* The Chart's Notes and Lines tabs (round 4) */
+.notes-tab { max-width: 880px; }
+.notes-top { display: flex; align-items: baseline; gap: var(--s1h); margin-bottom: var(--s1); flex-wrap: wrap; }
+.notes-top .open-journal { font-size: 13px; }
+.nb-day { font-size: 12px; min-height: 26px; padding: 0 6px; width: auto; }
+.nb-meta { font-size: 12px; }
+.notes-tab .table-wrap { margin: var(--s1) 0; }
+.lines-tab { margin-bottom: var(--s2); }
+.saved-lines { list-style: none; margin: var(--s1) 0 0; padding: 0; display: grid; gap: 2px; }
+.saved-lines li { display: flex; align-items: center; justify-content: space-between; gap: var(--s1); min-height: 32px; border-bottom: 1px solid var(--line); font-size: 13px; }

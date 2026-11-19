@@ -50,6 +50,8 @@ export function FocusChart({
   price,
   change,
   height = 460,
+  tools = true,
+  head = true,
 }: {
   ticker: string;
   levels: Record<string, number>;
@@ -61,6 +63,10 @@ export function FocusChart({
   price?: number | null;
   change?: number | null;
   height?: number;
+  /** The bars and indicator controls; a grid shows them once above the charts */
+  tools?: boolean;
+  /** The ticker, price and change above the chart (a card that says them already hides it) */
+  head?: boolean;
 }) {
   const [bars, setBars] = useState<Bars | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,17 +87,17 @@ export function FocusChart({
   return (
     <section aria-label={`${ticker} chart`}>
       <div className="chart-head">
-        <span className="ticker">{ticker}</span>
-        {typeof price === "number" && <span className="price num">{price.toFixed(2)}</span>}
-        {typeof change === "number" && (
+        {head && <span className="ticker">{ticker}</span>}
+        {head && typeof price === "number" && <span className="price num">{price.toFixed(2)}</span>}
+        {head && typeof change === "number" && (
           <span className={`num ${change >= 0 ? "up" : "down"}`}>
             {change >= 0 ? "+" : ""}
             {change.toFixed(1)}%
           </span>
         )}
         <div className="tools">
-          <Segmented label="Bars" options={TIMEFRAMES.map((t) => [t, t] as const)} value={tf} onPick={onTf} />
-          <IndicatorMenu picked={picked} onChange={onPicked} />
+          {tools && <Segmented label="Bars" options={TIMEFRAMES.map((t) => [t, t] as const)} value={tf} onPick={onTf} />}
+          {tools && <IndicatorMenu picked={picked} onChange={onPicked} />}
           <a href={stockLink(ticker)} className="muted" title="Drawing tools, AVWAPs, minute bars and notes">
             Full chart
           </a>

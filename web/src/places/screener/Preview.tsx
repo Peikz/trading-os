@@ -88,6 +88,11 @@ export function Preview({ rec, source, onOpen }: { rec: Rec | null; source: stri
           Open on Chart
         </button>
         <button onClick={watch}>★ Watch</button>
+        {typeof rec.tv === "string" && (
+          <a href={rec.tv} target="_blank" rel="noreferrer">
+            TradingView ↗
+          </a>
+        )}
       </div>
       {msg && <p className="muted" role="status">{msg}</p>}
       <p className="muted hint">↑ ↓ move through the list · Enter opens on Chart</p>

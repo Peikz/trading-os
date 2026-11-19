@@ -57,3 +57,13 @@ export type ChartShow = typeof CHART_SHOW;
 /** The arrow keys, J and K step through the list (Settings). On unless switched off. */
 export const useArrowKeys = () => usePref<boolean>("arrow-keys", true);
 export const arrowKeysOn = () => readPref<boolean>("arrow-keys", true);
+
+/** Show the manual test runs next to the scheduled ones (Settings). On unless switched off, as in
+ * Streamlit; the API reads it from a header on every request. */
+export const useManualRuns = () => usePref<boolean>("manual-runs", true);
+export const manualRunsOn = () => readPref<boolean>("manual-runs", true);
+
+/** The stocks of the Screener's last result, for the Chart's "Last screener result" list. */
+export const LAST_SCREEN_KEY = "last-screen";
+export const readLastScreen = () => readPref<string[]>(LAST_SCREEN_KEY, []);
+export const writeLastScreen = (tickers: string[]) => writePref(LAST_SCREEN_KEY, tickers.slice(0, 200));

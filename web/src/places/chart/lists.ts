@@ -3,17 +3,29 @@
 // drawn at once).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ChartList, type ChartListInfo, type ChartListRow } from "../../api";
-import { readPref, writePref } from "../../shell/prefs";
+import { readLastScreen, readPref, writePref } from "../../shell/prefs";
 
 export function useChartLists(): ChartListInfo[] | null {
   const [lists, setLists] = useState<ChartListInfo[] | null>(null);
   useEffect(() => {
-    const load = () => api.chartLists().then((r) => setLists(r.lists), () => setLists([]));
+    const load = () =>
+      api.chartLists().then(
+        (r) => setLists(withScreen(r.lists)),
+        () => setLists(withScreen([])),
+      );
     load();
     window.addEventListener("trading-os:refresh", load);
     return () => window.removeEventListener("trading-os:refresh", load);
   }, []);
   return lists;
+}
+
+/** "Last screener result": the stocks of the Screener's last result (opened from All stocks or a
+ * saved screen), as the Streamlit Chart lists them. Listed only once a screen has been opened. */
+function withScreen(lists: ChartListInfo[]): ChartListInfo[] {
+  const last = readLastScreen();
+  if (!last.length) return lists;
+  return [...lists, { id: "screen", label: "Last screener result", group: "Screener", count: last.length }];
 }
 
 export function useChartList(id: string): { list: ChartList | null; error: string | null } {
@@ -25,7 +37,7 @@ export function useChartList(id: string): { list: ChartList | null; error: strin
   useEffect(() => {
     let live = true;
     const load = () =>
-      api.chartList(id).then(
+      api.chartList(id, id === "screen" ? readLastScreen() : undefined).then(
         (list) => live && setState({ id, list, error: null }),
         (e: Error) => live && setState({ id, list: null, error: e.message }),
       );

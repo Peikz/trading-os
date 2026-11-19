@@ -121,7 +121,8 @@ test("the list panel: the picker, sorting, and Up / Down / J / K step through it
 test("the stock panel's tabs and collapsing the panels", async ({ page }) => {
   await open(page, `chart?s=${T}&list=hits`);
   const panel = page.getByRole("region", { name: "Stock panel" });
-  for (const tab of ["Plan", "Notes", "Position", "Journal", "Lines"]) {
+  await expect(panel.getByRole("tab")).toHaveText(["Plan", "Notes", "Position", "Lines"]); // one Notes tab
+  for (const tab of ["Plan", "Notes", "Position", "Lines"]) {
     await panel.getByRole("tab", { name: tab, exact: true }).click();
     await expect(panel.getByRole("tabpanel")).toBeVisible();
     await page.waitForLoadState("networkidle");
@@ -161,12 +162,16 @@ test("an anchored VWAP, a stock note, and search on / and on typed letters", asy
   await expect(anchors.getByRole("button").first()).toHaveClass("on");
   await page.keyboard.press("Escape");
 
+  // The Notes tab is the stock's notebook page: a note is written right there and saved by itself
   await page.getByRole("tab", { name: "Notes", exact: true }).click();
-  await page.getByLabel("New note").fill("e2e: chart note");
-  await page.getByRole("button", { name: "Save note" }).click();
-  await expect(page.locator(".note p.pre", { hasText: "e2e: chart note" })).toBeVisible();
-  await page.locator(".note", { hasText: "e2e: chart note" }).getByRole("button", { name: "Delete" }).click();
-  await expect(page.locator(".note p.pre", { hasText: "e2e: chart note" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open in Journal" })).toBeVisible();
+  const text = `e2e: chart note ${Date.now()}`;
+  await page.locator(".notes-tab .editor .ed-tail").first().click();
+  await page.keyboard.type(text);
+  await expect(page.locator(".nb-save.saved").first()).toHaveText("Saved");
+  const stored = (await (await request.get(`/api/chart/${T}/notes`)).json()) as { notes: { note_id: string; text: string }[] };
+  expect(stored.notes.map((n) => n.text)).toContain(text);
+  await request.delete(`/api/chart/${T}/notes/${stored.notes.find((n) => n.text === text)!.note_id}`);
 });
 
 test.describe("on a phone", () => {

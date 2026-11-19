@@ -304,26 +304,34 @@ export function TradePage({ trade, patch }: { trade: NbTrade; patch: Patch }) {
 
 // --- a stock
 
-function StockNoteBlock({
-  ticker, id, date, text, patch, onCreated,
-}: { ticker: string; id: string | null; date: string; text: string; patch: Patch; onCreated?: (id: string) => void }) {
+/** One note on a stock: live preview editor, a day you can change, saved by itself a moment after you
+ * stop typing (a new note is written on the first save). `meta` is a muted line under the day, like
+ * "written 2026-11-03 · edited 2026-11-05". */
+export function StockNoteBlock({
+  ticker, id, date, text, patch, onCreated, meta, autoFocus,
+}: {
+  ticker: string; id: string | null; date: string; text: string; patch: Patch;
+  onCreated?: (id: string) => void; meta?: string; autoFocus?: boolean;
+}) {
   const idRef = useRef<string | null>(id);
   const [gone, setGone] = useState(false);
-  const auto = useAutosave<string>(async (t) => {
+  const [day, setDay] = useState(date);
+  const body = useRef(text);
+  const auto = useAutosave<{ text: string; day: string }>(async ({ text: t, day: d }) => {
     if (!t.trim()) return;
     const tags = hashtags(t);
     if (idRef.current) {
       const nid = idRef.current;
-      await api.editChartNote(ticker, nid, t, date);
+      await api.editChartNote(ticker, nid, t, d);
       patch((i) => ({
         ...i,
-        stocks: i.stocks.map((s) => (s.ticker === ticker ? { ...s, notes: s.notes.map((n) => (n.note_id === nid ? { ...n, text: t, tags } : n)) } : s)),
+        stocks: i.stocks.map((s) => (s.ticker === ticker ? { ...s, notes: s.notes.map((n) => (n.note_id === nid ? { ...n, text: t, date: d, tags } : n)) } : s)),
       }));
     } else {
-      const made = await api.addChartNote(ticker, t, date);
+      const made = await api.addChartNote(ticker, t, d);
       idRef.current = made.note_id;
       onCreated?.(made.note_id);
-      const row = { note_id: made.note_id, date, text: t, tags };
+      const row = { note_id: made.note_id, date: d, text: t, tags };
       patch((i) => ({
         ...i,
         stocks: i.stocks.some((s) => s.ticker === ticker)
@@ -334,9 +342,20 @@ function StockNoteBlock({
   });
   if (gone) return null;
   return (
-    <section className="nb-stock-note" aria-label={`Note of ${date}`}>
+    <section className="nb-stock-note" aria-label={`Note of ${day}`}>
       <div className="nb-note-head">
-        <span className="nb-k">{date}</span>
+        <input
+          type="date"
+          className="nb-day"
+          aria-label={`Day of the note of ${date}`}
+          value={day}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            setDay(e.target.value);
+            auto.push({ text: body.current, day: e.target.value });
+          }}
+        />
+        {meta && <span className="muted nb-meta">{meta}</span>}
         <span className="grow" />
         <SaveLabel status={auto.status} error={auto.error} />
         {idRef.current && (
@@ -358,11 +377,14 @@ function StockNoteBlock({
       </div>
       <Editor
         value={text}
-        onChange={(t) => auto.push(t)}
+        onChange={(t) => {
+          body.current = t;
+          auto.push({ text: t, day });
+        }}
         imageRef={ticker}
         label={`Note on ${ticker} of ${date}`}
         placeholder={id ? undefined : "A note on this stock. Type / for commands."}
-        autoFocus={!id}
+        autoFocus={autoFocus ?? !id}
       />
     </section>
   );

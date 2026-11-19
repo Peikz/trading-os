@@ -4,6 +4,7 @@
 // every signal, blind against shown. Answers append to data/practice/answers/ through the same
 // function Streamlit uses; the bars after the entry are never sent before you answer.
 // On a phone the answers are big thumb buttons.
+import { Table } from "../components/Table";
 import { useCallback, useEffect, useState } from "react";
 import {
   api,
@@ -61,26 +62,17 @@ function StatsPanel({ s }: { s: PracticeStats }) {
       <p className="muted">
         {s.answered} answered, {s.remaining} left of {s.pool_size}.
       </p>
-      <div className="table-wrap">
-        <table aria-label={`${s.pool} answers by choice`}>
-          <thead>
-            <tr>
-              <th>Choice</th>
-              <th>Answers</th>
-              <th>Mean net R</th>
-            </tr>
-          </thead>
-          <tbody>
-            {["skip", "1", "2", "3"].map((c) => (
-              <tr key={c}>
-                <td>{c === "skip" ? "Skip" : `${c} (${MULTIPLIER[c]}x size)`}</td>
-                <td>{s.by_choice[c]?.count ?? 0}</td>
-                <td>{r(s.by_choice[c]?.mean_r)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        label={`${s.pool} answers by choice`}
+        columns={["choice", "answers", "mean_r"]}
+        headers={{ choice: "Choice", answers: "Answers", mean_r: "Mean net R" }}
+        rows={["skip", "1", "2", "3"].map((c) => ({
+          choice: c === "skip" ? "Skip" : `${c} (${MULTIPLIER[c]}x size)`,
+          answers: s.by_choice[c]?.count ?? 0,
+          mean_r: s.by_choice[c]?.mean_r ?? null,
+        }))}
+        render={(c, row) => (c === "mean_r" ? r(row.mean_r as number | null) : undefined)}
+      />
       <div className="metrics">
         <div className="metric">
           <span className="muted">Your picks, total</span>
@@ -95,33 +87,18 @@ function StatsPanel({ s }: { s: PracticeStats }) {
       </div>
       <p className="muted hint">Picks: net R times your size (skip 0, 1 = 0.5x, 2 = 1x, 3 = 1.5x).</p>
       <b>Blind vs shown</b>
-      <div className="table-wrap">
-        <table aria-label={`${s.pool} blind against shown`}>
-          <thead>
-            <tr>
-              <th>Answered with</th>
-              <th>Answers</th>
-              <th>Your picks / signal</th>
-              <th>Take all / signal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(
-              [
-                ["Blind (stock and date hidden)", s.by_shown.blind],
-                ["Shown", s.by_shown.shown],
-              ] as const
-            ).map(([name, part]) => (
-              <tr key={name}>
-                <td>{name}</td>
-                <td>{part.answered}</td>
-                <td>{r(part.picks_r_per_signal)}</td>
-                <td>{r(part.equal_r_per_signal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        label={`${s.pool} blind against shown`}
+        columns={["name", "answers", "picks", "all"]}
+        headers={{ name: "Answered with", answers: "Answers", picks: "Your picks / signal", all: "Take all / signal" }}
+        rows={(
+          [
+            ["Blind (stock and date hidden)", s.by_shown.blind],
+            ["Shown", s.by_shown.shown],
+          ] as const
+        ).map(([name, part]) => ({ name, answers: part.answered, picks: part.picks_r_per_signal, all: part.equal_r_per_signal }))}
+        render={(c, row) => (c === "picks" || c === "all" ? r(row[c] as number | null) : undefined)}
+      />
       <p>
         Trades of 5R or more: {s.big.total} shown, you took {s.big.taken} and skipped {s.big.skipped}. Losing trades:{" "}
         {s.losers.total} shown, you took {s.losers.taken} and skipped {s.losers.skipped}.
@@ -133,36 +110,24 @@ function StatsPanel({ s }: { s: PracticeStats }) {
 function Answered({ rows, onOpen }: { rows: PracticeAnswered[]; onOpen: (row: PracticeAnswered) => void }) {
   if (!rows.length) return <p className="muted">Nothing answered yet.</p>;
   return (
-    <div className="table-wrap">
-      <table aria-label="Your answered signals">
-        <thead>
-          <tr>
-            <th>Answered</th>
-            <th>Pool</th>
-            <th>Stock</th>
-            <th>Setup</th>
-            <th>Pick</th>
-            <th>Net R</th>
-            <th>Shown</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((a) => (
-            <tr key={a.signal_id} className="clickable" tabIndex={0} onClick={() => onOpen(a)} onKeyDown={(e) => e.key === "Enter" && onOpen(a)}>
-              <td>{a.answered}</td>
-              <td>{a.pool}</td>
-              <td>{a.ticker}</td>
-              <td>{a.setup_name}</td>
-              <td>{choiceName(a.choice)}</td>
-              <td className={a.net_r >= 0 ? "up" : "down"}>{r(a.net_r)}</td>
-              <td>{a.shown ? "shown" : "blind"}</td>
-              <td className="note-cell">{a.note}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table
+      label="Your answered signals"
+      columns={["answered", "pool", "ticker", "setup_name", "choice", "net_r", "shown", "note"]}
+      headers={{ answered: "Answered", pool: "Pool", ticker: "Stock", setup_name: "Setup", choice: "Pick", net_r: "Net R", shown: "Shown", note: "Note" }}
+      rows={rows.map((a) => ({ ...a }))}
+      onRow={(row) => onOpen(rows.find((a) => a.signal_id === row.signal_id)!)}
+      render={(c, row) =>
+        c === "choice" ? (
+          choiceName(String(row.choice))
+        ) : c === "net_r" ? (
+          <span className={(row.net_r as number) >= 0 ? "up" : "down"}>{r(row.net_r as number)}</span>
+        ) : c === "shown" ? (
+          row.shown ? "shown" : "blind"
+        ) : c === "note" ? (
+          <span className="note-cell">{String(row.note ?? "")}</span>
+        ) : undefined
+      }
+    />
   );
 }
 

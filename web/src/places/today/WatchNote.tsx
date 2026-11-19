@@ -1,4 +1,4 @@
-// Watch (the star puts the stock on Flag green, your watchlist; W), a note on the stock (N),
+// Watch (the star puts the stock on Flag green, your watchlist; F), a note on the stock (N),
 // and a price alert pushed to your phone when the alert watcher sees it trade there.
 import { type RefObject, useEffect, useState } from "react";
 import { api, type Alert, type StockNote } from "../../api";
@@ -20,12 +20,12 @@ export function WatchButton({
       className={`${compact ? "ghost icon-btn " : ""}${watching ? "star-on" : ""}`}
       aria-pressed={watching}
       aria-label={watching ? "Watching: remove from your watchlist" : "Watch: add to your watchlist"}
-      title="W"
+      title="F"
       onClick={onToggle}
     >
       <Icon name="star" filled={watching} />
       {!compact && (watching ? "Watching" : "Watch")}
-      {!compact && <kbd>W</kbd>}
+      {!compact && <kbd>F</kbd>}
     </button>
   );
 }

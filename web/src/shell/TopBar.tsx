@@ -9,7 +9,7 @@ import { hrefFor, MAIN_PLACES, PLACES, type Place, TABS } from "../routes";
 import { Icon } from "../ui/Icon";
 import { usePopover } from "../ui/kit";
 import { chartHref, useActive } from "./active";
-import { useArrowKeys } from "./prefs";
+import { useArrowKeys, useManualRuns } from "./prefs";
 import { ago, type Sync } from "./useSync";
 
 export function TopBar({
@@ -254,6 +254,11 @@ function SyncLines({ sync }: { sync: Sync }) {
 function SettingsMenu({ sync }: { sync: Sync }) {
   const { open, setOpen, ref } = usePopover();
   const [arrowKeys, setArrowKeys] = useArrowKeys();
+  const [manual, setManual] = useManualRuns();
+  const [folder, setFolder] = useState<string | null>(null);
+  useEffect(() => {
+    if (open && folder === null) api.settings().then((s) => setFolder(s.data_folder), () => setFolder(""));
+  }, [open, folder]);
   return (
     <div className="popover-wrap" ref={ref}>
       <button className="ghost icon-btn" aria-label="Settings" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -281,6 +286,24 @@ function SettingsMenu({ sync }: { sync: Sync }) {
               Save & push
             </button>
           </div>
+          <h4 style={{ marginTop: 16 }}>Data</h4>
+          <label className="check settings-row" style={{ justifyContent: "flex-start" }}>
+            <input
+              type="checkbox"
+              checked={manual}
+              onChange={(e) => {
+                setManual(e.target.checked);
+                window.dispatchEvent(new Event("trading-os:refresh")); // every list is read again
+              }}
+            />
+            Show manual test runs
+          </label>
+          <p className="muted settings-row" style={{ display: "block", wordBreak: "break-all" }}>
+            Data folder: <code>{folder === null ? "…" : folder || "not available"}</code>
+            <br />
+            <small>Set on the server (TRADING_OS_DATA); it is shown here, not changed.</small>
+          </p>
+          <FooterLine />
           <h4 style={{ marginTop: 16 }}>Keys</h4>
           <label className="check settings-row" style={{ justifyContent: "flex-start" }}>
             <input type="checkbox" checked={arrowKeys} onChange={(e) => setArrowKeys(e.target.checked)} />
@@ -288,10 +311,32 @@ function SettingsMenu({ sync }: { sync: Sync }) {
           </label>
           <p className="hotkeys">
             <kbd>/</kbd> or <kbd>Ctrl K</kbd> search, or just type a ticker · <kbd>↑</kbd> <kbd>↓</kbd>{" "}
-            or <kbd>J</kbd> <kbd>K</kbd> step through the list · on Today <kbd>W</kbd> watch, <kbd>N</kbd> note
+            or <kbd>J</kbd> <kbd>K</kbd> step through the list · on Today <kbd>F</kbd> watch, <kbd>N</kbd> note,{" "}
+            <kbd>T</kbd> the Saxo values, <kbd>W</kbd> bars (day, week, month)
           </p>
         </div>
       )}
     </div>
   );
+}
+
+/** "12 runs · session 2026-10-30": the muted line Streamlit ends every page with. */
+export function useRunsLine(): string {
+  const [line, setLine] = useState("");
+  useEffect(() => {
+    const load = () =>
+      api.health().then(
+        (h) => setLine(`${h.runs} runs${h.latest ? ` · session ${h.latest.slice(0, 10)}` : ""}`),
+        () => setLine(""),
+      );
+    load();
+    window.addEventListener("trading-os:refresh", load);
+    return () => window.removeEventListener("trading-os:refresh", load);
+  }, []);
+  return line;
+}
+
+function FooterLine() {
+  const line = useRunsLine();
+  return line ? <p className="muted settings-row">{line}</p> : null;
 }
