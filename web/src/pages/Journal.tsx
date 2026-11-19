@@ -14,8 +14,7 @@ import {
 } from "../api";
 import { DailyNote } from "../components/DailyNote";
 import { Notebook } from "../notebook/Notebook";
-import { Metric, Table } from "../components/Table";
-import { usd } from "../format";
+import { Table } from "../components/Table";
 import { Icon } from "../ui/Icon";
 import { ImportDialog } from "./journal/ImportDialog";
 import { Trades } from "./journal/Trades";
@@ -97,15 +96,9 @@ function OpenTab() {
   if (!data.rows.length) {
     return <p className="muted">No open positions. Log an entry under “Log a trade” or import fills.</p>;
   }
-  const t = data.totals;
-  const pct = t.at_risk_pct === null ? "" : ` · ${t.at_risk_pct.toFixed(1)}%`;
+  // The totals (count, P&L, at risk) are on the Positions cards above; only the rows are here.
   return (
     <section>
-      <div className="metrics">
-        <Metric label="Open positions" value={String(t.positions)} />
-        <Metric label="Open P&L" value={usd(t.open_pnl)} />
-        <Metric label="At risk to stops" value={`${usd(t.at_risk_usd)}${pct}`} />
-      </div>
       <Table label="Open positions" columns={OPEN_COLUMNS} rows={data.rows} />
       <p className="muted">Valued at the newest daily close in the data repo, not live prices.</p>
       {data.plan_day && (

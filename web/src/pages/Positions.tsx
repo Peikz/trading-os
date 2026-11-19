@@ -28,7 +28,10 @@ export function Positions() {
           <div className="metrics">
             <Metric label="Open positions" value={String(data.totals.positions)} />
             <Metric label="Open P&L (at the close)" value={usd(data.totals.open_pnl)} />
-            <Metric label="At risk to stops" value={usd(data.totals.at_risk_usd)} />
+            <Metric
+              label="At risk to stops"
+              value={`${usd(data.totals.at_risk_usd)}${data.totals.at_risk_pct == null ? "" : ` · ${data.totals.at_risk_pct.toFixed(1)}%`}`}
+            />
           </div>
           <p className="muted">Prices: {data.source}</p>
           <div className="cards">

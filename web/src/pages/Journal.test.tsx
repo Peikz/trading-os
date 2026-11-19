@@ -25,6 +25,7 @@ const plans = {
 
 function routes() {
   return mockApi({
+    "GET /api/positions": { source: "close", totals, cards: [{ ticker: A, setup: "ep_day", direction: "long", shares: 500, entry_date: "2026-10-01", entry: 10, price: 11, move_pct: 10, open_r: 8.1, pnl: 810, to_stop_pct: 5, stop: 9, facts: [] }], caption: "" },
     "GET /api/journal/open": {
       totals,
       rows: [{ ticker: A, open_pnl: 810, open_r: 8.1 }],
@@ -80,7 +81,9 @@ describe("Journal", () => {
     routes();
     render(<Journal tab="positions" />);
     expect(await screen.findByLabelText("Open positions")).toHaveTextContent("$810");
-    expect(screen.getByText("$910 · 0.9%")).toBeInTheDocument();
+    // The totals are shown once, on the Positions cards, not again above the journal table
+    expect(await screen.findByText("$910 · 0.9%")).toBeInTheDocument();
+    expect(screen.getAllByText("At risk to stops")).toHaveLength(1);
     expect(screen.getByLabelText("What each plan says")).toHaveTextContent("hold");
   });
 

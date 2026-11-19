@@ -157,7 +157,10 @@ export function CandleChart({ bars, levels, title, height = 520, showBars = 130 
           {title && <b>{title} </b>}
           <span className="ohlc">
             {" "}
-            O {fmt(legend.o)} H {fmt(legend.h)} L {fmt(legend.l)} C {fmt(legend.c)}
+            <span className="ohl">
+              O {fmt(legend.o)} H {fmt(legend.h)} L {fmt(legend.l)}{" "}
+            </span>
+            C {fmt(legend.c)}
             {legend.chg !== undefined && (
               <span style={{ color: legend.chg >= 0 ? "var(--up)" : "var(--down)" }}>
                 {" "}
