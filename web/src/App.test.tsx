@@ -45,8 +45,9 @@ describe("App", () => {
     render(<App />);
     const places = screen.getByRole("navigation", { name: "Places" });
     expect(within(places).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Today", "Chart", "Screener", "Market", "Journal", "Practice", "Lab",
+      "Today", "Chart", "Watchlists", "Screener", "Market", "Journal",
     ]);
+    expect(within(places).getByRole("button", { name: "More" })).toBeInTheDocument(); // Practice and Lab
     expect(within(places).getByText("Today")).toHaveAttribute("aria-current", "page");
     const pill = await screen.findByRole("button", { name: "Market: Mixed market. Show why" });
     fireEvent.click(pill);

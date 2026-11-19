@@ -54,7 +54,7 @@ MAX_SHOT_BYTES = 10 * 1024 * 1024
 WATCH_COLUMNS = [
     "ticker", "close", "chg_pct", "rvol50", "adr20_pct", "rs_pct", "pct_from_52w_high",
     "ret_22", "ret_63", "above_ma50", "above_ma200", "to_pivot_pct", "earnings_in_sessions",
-    "in_scans", "industry", "note",
+    "in_scans", "industry", "note", "added",
 ]  # fmt: skip
 
 
@@ -606,11 +606,14 @@ def register(app: FastAPI, ctx: Context) -> None:
         listing = ctx.exchanges(str(eod.universe)) if eod else {}
         view = view.assign(exchange=view["ticker"].map(listing))
         cols = [c for c in [*WATCH_COLUMNS, "exchange"] if c in view]
+        shown = view[cols].copy()
+        if "added" in shown:  # the date a stock was added: text, not a timestamp to round
+            shown["added"] = shown["added"].astype(str)
         return {
             "name": name,
             "label": eod.label if eod else None,
             "columns": cols,
-            "rows": records(view[cols].round(2)),
+            "rows": records(shown.round(2)),
             "tv_list": board_data.tradingview_list(view["ticker"], listing),
         }
 

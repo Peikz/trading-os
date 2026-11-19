@@ -3,6 +3,7 @@
 // drawn at once).
 import { useEffect, useMemo, useState } from "react";
 import { api, type ChartList, type ChartListInfo, type ChartListRow } from "../../api";
+import { readPref, writePref } from "../../shell/prefs";
 
 export function useChartLists(): ChartListInfo[] | null {
   const [lists, setLists] = useState<ChartListInfo[] | null>(null);
@@ -95,4 +96,47 @@ export function useSparks(tickers: string[]): Record<string, number[]> {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the cache is filled as calls return
     [key, sparkCache.size],
   );
+}
+
+/** The columns a list can show (the symbol is always there); the default is all of them. */
+export const LIST_COLUMNS = [
+  ["grade", "Grade"],
+  ["last", "Last"],
+  ["chg_pct", "Change %"],
+  ["spark", "20-day chart"],
+  ["rvol", "RVOL"],
+  ["setup", "Setup"],
+] as const;
+export type ListColumn = (typeof LIST_COLUMNS)[number][0];
+
+export interface ListView {
+  sort: Sort | null;
+  hidden: ListColumn[];
+}
+
+const viewKey = (listId: string) => `list-view.${listId}`;
+
+/** A list's own sort and visible columns, remembered per list in the browser (UX round 3). */
+export function useListView(listId: string): {
+  view: ListView;
+  setSort: (s: Sort | null | ((s: Sort | null) => Sort | null)) => void;
+  toggleColumn: (c: ListColumn) => void;
+} {
+  const [state, setState] = useState<{ id: string; view: ListView }>(() => ({
+    id: listId,
+    view: readPref<ListView>(viewKey(listId), { sort: null, hidden: [] }),
+  }));
+  // Another list: its own saved view (state is replaced during render, not in an effect)
+  if (state.id !== listId) setState({ id: listId, view: readPref<ListView>(viewKey(listId), { sort: null, hidden: [] }) });
+  const view = state.id === listId ? state.view : readPref<ListView>(viewKey(listId), { sort: null, hidden: [] });
+  const save = (next: ListView) => {
+    setState({ id: listId, view: next });
+    writePref(viewKey(listId), next);
+  };
+  return {
+    view,
+    setSort: (s) => save({ ...view, sort: typeof s === "function" ? s(view.sort) : s }),
+    toggleColumn: (c) =>
+      save({ ...view, hidden: view.hidden.includes(c) ? view.hidden.filter((x) => x !== c) : [...view.hidden, c] }),
+  };
 }

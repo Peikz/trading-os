@@ -29,7 +29,7 @@ export function MobileNav({ place }: { place: Place }) {
               aria-current={id === place ? "page" : undefined}
             >
               <Icon name={p.icon} size={22} />
-              {p.label}
+              {p.short ?? p.label}
             </a>
           );
         })}

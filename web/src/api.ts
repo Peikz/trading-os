@@ -62,6 +62,8 @@ export interface BoardRow {
   levels: Record<string, number>;
   decision?: Decision | null;
   why?: Why;
+  /** The slots of today's runs this stock was found in (with a run picked on Today). */
+  runs?: string[];
   [key: string]: unknown;
 }
 
@@ -81,6 +83,47 @@ export interface Today {
   hidden_c: number;
   total: number;
   next_scan?: NextScan | null;
+}
+
+/** One scan run of today: its time in New York and Copenhagen and the stocks to act on it found. */
+export interface TodayRun {
+  id: string;
+  slot: string;
+  name: string;
+  ny: string | null;
+  cph: string | null;
+  count: number;
+}
+
+export interface TodayRuns {
+  session: string | null;
+  all: { id: "all"; label: string; count: number };
+  runs: TodayRun[];
+}
+
+/** One scan hit of a run (a stock and a scan), as the Screener's "Scan hits" table shows it. */
+export interface ScanHit {
+  ticker: string;
+  scan: string;
+  scan_label: string;
+  grade: string;
+  runs: string[];
+  levels: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface ScanHits {
+  run: string;
+  label: string;
+  count: number;
+  scans: { id: string; label: string; count: number }[];
+  rows: ScanHit[];
+}
+
+/** `[ticker, company name]`, name empty when the data repo has none. */
+export interface SymbolList {
+  asof: string | null;
+  symbols: [string, string][];
 }
 
 export interface Candle {
@@ -152,6 +195,8 @@ export interface ScreenRequest extends ScreenSpec {
   run?: string | null;
   scan?: string | null;
   tiers?: string[];
+  /** More columns to bring back (screener fields), beside the usual ones. */
+  more?: string[];
 }
 
 export interface ScreenResult {
@@ -708,6 +753,8 @@ export interface ChartListRow {
   chg_pct: number | null;
   rvol: number | null;
   signal_id: string | null;
+  /** Today's runs it was a hit in (slots). */
+  runs?: string[];
 }
 
 export interface ChartList {
@@ -788,9 +835,10 @@ const post = <T>(path: string, body: unknown, method = "POST") =>
 const enc = encodeURIComponent;
 
 export const api = {
-  today: (scope: Scope, tickers?: string[], screen?: string | null, wl?: string | null) => {
+  today: (scope: Scope, tickers?: string[], screen?: string | null, wl?: string | null, run?: string | null) => {
     const q = new URLSearchParams({ scope });
     if (wl) q.set("wl", wl);
+    if (run) q.set("run", run);
     if (tickers?.length) q.set("t", tickers.join(","));
     if (screen) q.set("screen", screen);
     return request<Today>(`/api/today?${q}`);
@@ -841,6 +889,9 @@ export const api = {
     }),
   removeFromWatchlist: (name: string, tickers: string[]) =>
     post<WatchList>(`/api/watchlists/${enc(name)}/remove`, { tickers }),
+  todayRuns: () => request<TodayRuns>("/api/today-runs"),
+  scanHits: (run: string) => request<ScanHits>(`/api/scan-hits?run=${enc(run)}`),
+  symbols: () => request<SymbolList>("/api/symbols"),
   chartPicks: () => request<{ ticker: string; where: string }[]>("/api/chart/picks"),
   chartLists: () => request<{ lists: ChartListInfo[] }>("/api/chart-lists"),
   chartList: (id: string) => request<ChartList>(`/api/chart-lists/${enc(id)}`),

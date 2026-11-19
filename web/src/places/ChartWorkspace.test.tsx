@@ -63,6 +63,7 @@ function routes() {
 const urls = (calls: { method: string; url: string }[]) => calls.map((c) => c.url);
 
 beforeEach(() => {
+  window.localStorage.clear();
   window.location.hash = "#/chart";
   syncFromRoute(new URLSearchParams("s=&list="));
 });
@@ -175,5 +176,60 @@ describe("ChartWorkspace", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: `Open ${C}` }));
     await waitFor(() => expect(getActive().symbol).toBe(C));
     vi.unstubAllGlobals();
+  });
+});
+
+describe("ChartWorkspace, round 3", () => {
+  it("switches the arrows and lines on and off in one tap and remembers it", async () => {
+    const calls = routes();
+    const { unmount } = render(<ChartWorkspace params={new URLSearchParams({ s: A, list: "hits" })} />);
+    await screen.findByTestId("chart");
+    const group = screen.getByRole("group", { name: "On the chart" });
+    const hits = within(group).getByRole("button", { name: "Scan hits" });
+    expect(hits).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(hits);
+    fireEvent.click(within(group).getByRole("button", { name: "My trades" }));
+    await waitFor(() => expect(urls(calls).some((u) => u.includes("hits=false") && u.includes("fills=false"))).toBe(true));
+    expect(within(group).getByRole("button", { name: "Pivot and stops" })).toHaveAttribute("aria-pressed", "true");
+    unmount();
+    // a new visit starts with the same choice
+    render(<ChartWorkspace params={new URLSearchParams({ s: B, list: "hits" })} />);
+    await screen.findByTestId("chart");
+    const again = screen.getByRole("group", { name: "On the chart" });
+    expect(within(again).getByRole("button", { name: "Scan hits" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(again).getByRole("button", { name: "My trades" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("leaves the arrow keys alone when the setting is off", async () => {
+    routes();
+    window.localStorage.setItem("trading-os.arrow-keys", "false");
+    render(<ChartWorkspace params={new URLSearchParams({ s: A, list: "hits" })} />);
+    await screen.findByTestId("chart");
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(getActive().symbol).toBe(A);
+  });
+
+  it("narrows the list as you type in its filter box", async () => {
+    routes();
+    render(<ChartWorkspace params={new URLSearchParams({ s: A, list: "hits" })} />);
+    const table = await screen.findByRole("table", { name: "List: Today's hits" });
+    fireEvent.change(screen.getByLabelText("Filter this list"), { target: { value: B.slice(0, 2).toLowerCase() } });
+    expect(within(table).getAllByRole("button", { name: /^Open / }).map((b) => b.textContent)).toEqual([B]);
+    fireEvent.change(screen.getByLabelText("Filter this list"), { target: { value: "nothing" } });
+    expect(screen.getByText("No stock in this list matches.")).toBeInTheDocument();
+  });
+
+  it("remembers a list's sort and hidden columns", async () => {
+    routes();
+    const first = render(<ChartWorkspace params={new URLSearchParams({ s: A, list: "hits" })} />);
+    const table = await screen.findByRole("table", { name: "List: Today's hits" });
+    fireEvent.click(within(table).getByRole("button", { name: "%" }));
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "RVOL" }));
+    first.unmount();
+    render(<ChartWorkspace params={new URLSearchParams({ s: A, list: "hits" })} />);
+    const again = await screen.findByRole("table", { name: "List: Today's hits" });
+    expect(within(again).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Symbol", "Gr", "Last", "%", "20d", "Setup"]);
+    expect(within(again).getAllByRole("button", { name: /^Open / }).map((b) => b.textContent)).toEqual([C, A, B]);
   });
 });

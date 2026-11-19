@@ -33,7 +33,8 @@ def test_todays_hits_come_best_grade_first_with_the_snapshot_numbers(client):
     assert [r["grade"] for r in rows] == ["A+", "A"]
     assert rows[0]["last"] == 20.0
     assert rows[0]["setup"]
-    assert set(rows[0]) == {"ticker", "grade", "setup", "last", "chg_pct", "rvol", "signal_id"}
+    keys = {"ticker", "grade", "setup", "last", "chg_pct", "rvol", "signal_id", "runs"}
+    assert set(rows[0]) == keys
 
 
 def test_a_watchlist_shows_a_grade_only_for_stocks_that_hit_today(client):

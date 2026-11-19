@@ -182,7 +182,7 @@ test.describe("on a phone", () => {
     await open(page, "chart?list=hits");
     await expect(symbol(page)).toHaveText(rows[0].ticker);
     const tabs = page.getByRole("navigation", { name: "Places (phone)" });
-    await expect(tabs.getByRole("link")).toHaveText(["Today", "Chart", "Screener", "Market"]);
+    await expect(tabs.getByRole("link")).toHaveText(["Today", "Chart", "Lists", "Screener"]);
     await expect(tabs.getByRole("button", { name: "More" })).toBeVisible();
     const chart = await chartBox(page);
     expect(chart.width).toBeGreaterThanOrEqual(388);
@@ -206,7 +206,7 @@ test.describe("on a phone", () => {
     await more.getByRole("link", { name: "Guide" }).click();
     await expect(page.getByRole("tab", { name: "Guide", exact: true })).toHaveAttribute("aria-selected", "true");
 
-    for (const route of ["today", `chart?s=${T}`, "screener?src=all", "market/overview", "journal/positions"]) {
+    for (const route of ["today", `chart?s=${T}`, "screener/screen", "screener/hits", "watchlists", "market/overview", "journal/positions"]) {
       await open(page, route);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(wide, `${route}: sideways scroll`).toBeLessThanOrEqual(0);

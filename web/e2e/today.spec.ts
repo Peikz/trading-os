@@ -162,7 +162,8 @@ test.describe("on a phone", () => {
     await expect(page.getByLabel(`${rows[1].ticker} card`)).toBeVisible();
     const bar = page.getByRole("navigation", { name: "Places (phone)" });
     await expect(bar).toBeVisible();
-    await bar.getByRole("link", { name: "Market" }).click();
+    await bar.getByRole("button", { name: "More" }).click();
+    await page.getByRole("dialog", { name: "More pages" }).getByRole("link", { name: "Market" }).first().click();
     await expect(page.getByRole("heading", { level: 1, name: "Market" })).toBeVisible();
     await page.waitForLoadState("networkidle");
   });

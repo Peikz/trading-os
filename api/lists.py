@@ -11,9 +11,10 @@ from typing import Any
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
+from api import today_runs
 from api.pages import Context
 from api.serialize import scalar
-from trading_os import board_data, dashboard, my_watchlists, notify
+from trading_os import dashboard, my_watchlists, notify
 
 GRADED = ("A+++", "A++", "A+", "A", "B")
 RANK = {g: i for i, g in enumerate(("A+++", "A++", "A+", "A", "B", "C"))}
@@ -31,16 +32,41 @@ def register(app: FastAPI, ctx: Context) -> None:
         keep = [c for c in ("ticker", "close", "chg_pct", "rvol50") if c in uni]
         return uni[keep].drop_duplicates("ticker").set_index("ticker")
 
-    def today_hits() -> dict[str, tuple[str, str]]:
-        """Ticker -> (best grade, setup label) over the board's alert-tier hits."""
-        hits = board_data.collect(ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges)
+    def today_hits(run: str = today_runs.ALL) -> dict[str, tuple[str, str]]:
+        """Ticker -> (best grade, setup label) over the board's alert-tier hits of today's runs
+        (`run`: one run's id, or all of them)."""
+        hits = today_runs.hits(
+            run, ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges, everything=False
+        )
         out: dict[str, tuple[str, str]] = {}
-        if hits.empty:
+        if hits is None or hits.empty:
             return out
         for r in notify.best_first(hits).to_dict("records"):
             t = str(r["ticker"])
             if t not in out:
                 out[t] = (str(r.get("grade") or "C"), notify.SCAN_LABELS.get(r["scan"], r["scan"]))
+        return out
+
+    def hit_signals(run: str = today_runs.ALL) -> dict[str, str]:
+        """Ticker -> the best hit's signal id, for the grading form of a hit opened from today's
+        lists."""
+        hits = today_runs.hits(
+            run, ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges, everything=False
+        )
+        out: dict[str, str] = {}
+        if hits is None or hits.empty or "signal_id" not in hits:
+            return out
+        for r in notify.best_first(hits).to_dict("records"):
+            if isinstance(r.get("signal_id"), str):
+                out.setdefault(str(r["ticker"]), r["signal_id"])
+        return out
+
+    def run_tags() -> dict[str, list[str]]:
+        """Ticker -> the slots of today's runs it was a hit in (the Chart list's run tag)."""
+        out: dict[str, list[str]] = {}
+        for run in today_runs.todays_runs(ctx.runs()):
+            for t in today_hits(today_runs.run_key(run)):
+                out.setdefault(t, []).append(run.slot)
         return out
 
     def rows_for(
@@ -50,6 +76,7 @@ def register(app: FastAPI, ctx: Context) -> None:
         signals: dict[str, str] | None = None,
     ) -> list:
         nums = numbers()
+        tags = run_tags()
         out: list[dict[str, Any]] = []
         for t in dict.fromkeys(tickers):
             n = nums.loc[t] if t in nums.index else None
@@ -67,6 +94,7 @@ def register(app: FastAPI, ctx: Context) -> None:
                     "chg_pct": pick("chg_pct"),
                     "rvol": pick("rvol50"),
                     "signal_id": (signals or {}).get(t),
+                    "runs": tags.get(t, []),
                 }
             )
         return out
@@ -116,6 +144,19 @@ def register(app: FastAPI, ctx: Context) -> None:
                 "count": len(graded_hits(hits)),
             }
         ]
+        # One list per run of today: its hits, with the time in New York and Copenhagen
+        for run in today_runs.summary(
+            ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges, GRADED
+        )["runs"]:
+            when = f" {run['ny']} NY" if run["ny"] else ""
+            out.append(
+                {
+                    "id": f"run:{run['id']}",
+                    "label": f"{run['name']}{when}",
+                    "group": "Today",
+                    "count": run["count"],
+                }
+            )
         loaded = my_watchlists.load(ctx.root())
         cur = my_watchlists.current(loaded)
         for name in my_watchlists.lists(loaded):
@@ -147,7 +188,22 @@ def register(app: FastAPI, ctx: Context) -> None:
             return {
                 "id": list_id,
                 "label": "Today's hits",
-                "rows": rows_for(graded_hits(hits), hits),
+                "rows": rows_for(graded_hits(hits), hits, "", hit_signals()),
+            }
+        if kind == "run" and name:
+            if name not in {today_runs.run_key(r) for r in today_runs.todays_runs(ctx.runs())}:
+                raise HTTPException(404, "No such run today.")
+            hits = today_hits(name)
+            label = next(
+                (r["name"] for r in today_runs.summary(
+                    ctx.runs(), ctx.cfg(), ctx.scan_frames, ctx.exchanges, GRADED
+                )["runs"] if r["id"] == name),
+                name,
+            )  # fmt: skip
+            return {
+                "id": list_id,
+                "label": label,
+                "rows": rows_for(graded_hits(hits), hits, "", hit_signals(name)),
             }
         if kind == "wl" and name:
             return {"id": list_id, "label": name, "rows": rows_for(members(name), today_hits())}
