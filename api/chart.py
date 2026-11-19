@@ -207,8 +207,8 @@ def register(app: FastAPI, ctx: Context) -> None:
     def chart_note_add(ticker: str, body: NoteIn) -> dict:
         if not body.text.strip():
             raise HTTPException(400, "The note is empty.")
-        stock_notes.add(ctx.root(), _ticker(ticker), body.text, body.day)
-        return chart_notes(ticker)
+        note_id = stock_notes.add(ctx.root(), _ticker(ticker), body.text, body.day)
+        return chart_notes(ticker) | {"note_id": note_id}
 
     def note_known(t: str, note_id: str) -> None:
         notes = stock_notes.current(ctx.root(), t)

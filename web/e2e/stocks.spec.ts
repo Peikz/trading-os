@@ -58,8 +58,10 @@ test("Charts: the grid of mini charts draws its candles", async ({ page }) => {
 });
 
 test("Scan hits: today's runs, the scan and grade filters, the stock on the Chart and the grading form", async ({ page, request }) => {
-  const hits = (await (await request.get("/api/scan-hits?run=all")).json()) as Hits;
-  expect(hits.rows.length).toBeGreaterThan(0);
+  const all = (await (await request.get("/api/scan-hits?run=all")).json()) as Hits;
+  expect(all.rows.length).toBeGreaterThan(0);
+  // "All scans" lists a stock once, with its best grade (the API sends the hits best first)
+  const hits = { ...all, rows: all.rows.filter((r, i) => all.rows.findIndex((x) => x.ticker === r.ticker) === i) };
   await open(page, "screener/hits");
   const table = page.getByRole("table", { name: "Results" });
   await expect(table.locator("tbody tr")).toHaveCount(hits.rows.length);

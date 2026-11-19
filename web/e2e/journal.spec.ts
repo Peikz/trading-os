@@ -62,23 +62,6 @@ test("a CSV without the mapped columns says what is missing", async ({ page }) =
   await expect(dialog.getByRole("button", { name: /^Import \d+ new fills$/ })).toHaveCount(0);
 });
 
-test("a daily note with a stock, filtered by that stock", async ({ page, request }) => {
-  const t = TICKERS[2];
-  await open(page, "journal/notes");
-  await expect(page.locator(".note").first()).toBeVisible(); // the fixture's notes
-  await page.getByLabel("Stocks (comma or space separated)").fill(t);
-  const text = `e2e: breadth thrust ${Date.now()}`;
-  await page.getByLabel("Daily note").fill(text);
-  await page.getByRole("button", { name: "Save note" }).click();
-  await expect(page.locator(".note", { hasText: text })).toBeVisible();
-  const tagged = await json<{ notes: unknown[] }>(request, `/api/journal/daily-notes?tag=${t}`);
-  const all = await json<{ notes: unknown[] }>(request, "/api/journal/daily-notes");
-  expect(tagged.notes.length).toBeLessThan(all.notes.length); // the filter drops the others
-  await page.getByLabel("Show", { exact: true }).selectOption(t);
-  await expect(page.locator(".note")).toHaveCount(tagged.notes.length);
-  await expect(page.locator(".note", { hasText: text })).toBeVisible();
-});
-
 test("a trade opens beside the table: chart with the fills, and its conviction is saved", async ({ page, request }) => {
   type Closed = { trades: { trade_id: string; ticker: string; conviction: number | null }[] };
   const closed = await json<Closed>(request, "/api/journal/closed");

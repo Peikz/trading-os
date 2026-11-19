@@ -206,6 +206,44 @@ def test_sparks_give_many_stocks_last_candles(client):
     assert out[B] == []  # no bars for this one
 
 
+def test_sparks_look_each_bars_file_up_once_and_keep_the_request_order(client, monkeypatch):
+    from trading_os import board_data
+
+    looked = []
+    real = board_data.bars_file
+
+    def counting(data_dir, ticker):
+        looked.append(ticker[:1])
+        return real(data_dir, ticker)
+
+    monkeypatch.setattr(board_data, "bars_file", counting)
+    url = f"/api/sparks?t={B},{A},{A.lower()},{C}&n=5"
+    out = client.get(url).json()
+    assert list(out) == [B, A, C]  # the request's order, no repeats
+    assert len(out[A]) == 5
+    assert sorted(looked) == sorted({B[:1], A[:1], C[:1]})  # one lookup per first letter
+    client.get(url)
+    assert len(looked) == 3  # remembered: the next call asks GitHub about nothing
+
+
+def test_tickers_bars_reads_several_stocks_in_one_go(tmp_path):
+    from trading_os import board_data
+
+    days = [dt.date(2026, 10, d) for d in (26, 27, 28)]
+    rows = [
+        {"ticker": t, "session_date": d, "open": 1.0, "high": 2.0, "low": 0.5,
+         "close": base + k, "volume": 10.0}
+        for t, base in (("AAA", 1), ("BBB", 5))
+        for k, d in enumerate(days)
+    ]  # fmt: skip
+    path = tmp_path / "bars.parquet"
+    pd.DataFrame(rows).to_parquet(path)
+    out = board_data.tickers_bars(path, ["BBB", "AAA", "CCC"])
+    assert list(out["AAA"]["close"]) == [1, 2, 3] and list(out["BBB"]["close"]) == [5, 6, 7]
+    assert out["CCC"].empty
+    assert board_data.tickers_bars(None, ["AAA"])["AAA"].empty
+
+
 def test_a_screen_over_one_of_your_lists(data, client):
     from trading_os import my_watchlists
 

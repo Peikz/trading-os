@@ -10,7 +10,7 @@ const PLACES: [string, string[], boolean][] = [
   ["Watchlists", [], false],
   ["Screener", ["Scan hits", "Screener"], false],
   ["Market", ["Overview", "Heat & setups", "Sectors", "Breadth", "IBD"], false],
-  ["Journal", ["Trades", "Positions", "Plans", "Notes", "Live results"], false],
+  ["Journal", ["Notebook", "Trades", "Positions", "Plans", "Live results"], false],
   ["Practice", [], true],
   ["Lab", ["Research", "Runs", "Scans", "Health", "Guide"], true],
 ];

@@ -29,6 +29,7 @@ from trading_os import (
     dashboard,
     journal,
     my_watchlists,
+    pages,
     plans,
     practice,
     stock_notes,
@@ -310,6 +311,19 @@ def write_journal(root: Path, days: list[dt.date], daily: pd.DataFrame) -> None:
     daily_notes.add(root, f"Market strong; watching ${TICKERS[0]}.", days[-1])
     daily_notes.add(root, "Quiet day, no trades.", days[-2])
     dashboard.save_note(root, "signal", f"{days[-1]}-eod-ep_day-0", "A", "clean gap", "ep", [])
+    # The notebook: a graded trade with #tags in its notes, a tagged day and a free page
+    closed_trade = str(dashboard.latest_journal(root).iloc[0]["trade_id"])
+    dashboard.save_note(
+        root, "trade", closed_trade, "A",
+        "# Clean breakout\n\nHeld the 20-day line. #ep #winner\n\n- [ ] size up next time",
+        "late", [], conviction=2,
+    )  # fmt: skip
+    daily_notes.add(root, "Chop in the afternoon. #market-tone #ep", days[-3])
+    pages.create(
+        root, "Trading rules",
+        f"Wait for the close.\n\n- [ ] review #weekly\n\nSee ${TICKERS[0]}",
+        ["rules"], today=days[-1],
+    )  # fmt: skip
 
 
 def write_practice(root: Path) -> None:

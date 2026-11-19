@@ -338,6 +338,26 @@ def ticker_bars(path: Path | None, ticker: str) -> pd.DataFrame:
     return bars.drop_duplicates("session_date").sort_values("session_date")
 
 
+def tickers_bars(path: Path | None, tickers: list[str]) -> dict[str, pd.DataFrame]:
+    """Several stocks' daily bars from one compact bars file in a single read, oldest first; a
+    stock the file does not have gets an empty frame."""
+    import pyarrow.dataset as ds
+
+    empty = pd.DataFrame(columns=BAR_COLUMNS)
+    if path is None or not tickers:
+        return {t: empty for t in tickers}
+    table = ds.dataset(path, format="parquet").to_table(filter=ds.field("ticker").isin(tickers))
+    bars = table.to_pandas()
+    bars["session_date"] = pd.to_datetime(bars["session_date"]).dt.date
+    out = {}
+    for t in tickers:
+        mine = bars[bars["ticker"] == t]
+        out[t] = (
+            mine.drop_duplicates("session_date").sort_values("session_date") if len(mine) else empty
+        )
+    return out
+
+
 def daily_bars(data_dir: Path, ticker: str, live: bool = True) -> pd.DataFrame:
     """One stock's 2-year daily bars: the same source as the Streamlit charts. The bars file is
     refreshed each morning, so during a session `live` adds today's candle so far from

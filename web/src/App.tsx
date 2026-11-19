@@ -52,7 +52,7 @@ function PlaceView({ route }: { route: Route }) {
       </div>
       {place === "screener" && <Screener tab={tab} params={params} />}
       {place === "market" && <Market tab={tab} />}
-      {place === "journal" && <Journal tab={tab} />}
+      {place === "journal" && <Journal tab={tab} params={params} />}
       {place === "lab" && tab === "research" && <Research />}
       {place === "lab" && tab === "runs" && <Runs />}
       {place === "lab" && tab === "scans" && <Scans />}
@@ -107,7 +107,10 @@ export function App() {
   return (
     <div className="shell">
       <TopBar place={route.place} sync={sync} onSearch={() => setPalette("")} />
-      <main className={`place${["chart", "screener", "watchlists"].includes(route.place) ? " wide" : ""}`} key={version}>
+      <main
+        className={`place${["chart", "screener", "watchlists"].includes(route.place) ? " wide" : ""}${route.place === "journal" && route.tab === "notes" ? " notebook" : ""}`}
+        key={version}
+      >
         <PlaceView route={route} />
       </main>
       <MobileNav place={route.place} />

@@ -26,7 +26,8 @@ import { useRunPick, useTodayRuns } from "../shell/todayRun";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia, usePopover } from "../ui/kit";
 import { RunMenu } from "../ui/RunPicker";
-import { useSparks } from "./chart/lists";
+import { useVisibleSparks } from "./chart/lists";
+import { onePerStock } from "./screener/oneRow";
 import { Sparkline } from "./chart/WatchPanel";
 import { Preview, type Rec } from "./screener/Preview";
 
@@ -247,10 +248,11 @@ function HitsData({ setRows, setCount, setError, setBar, setTvList }: Common) {
       live = false;
     };
   }, [run, setRows, setError]);
-  const picked = useMemo(
-    () => (data?.rows ?? []).filter((r) => (scan === "all" || r.scan === scan) && gradeFilter(grade, r as Rec)),
-    [data, scan, grade],
-  );
+  const picked = useMemo(() => {
+    // One row per stock under "All scans" (best grade first, setups joined, runs listed)
+    const rows = scan === "all" ? onePerStock(data?.rows ?? []) : (data?.rows ?? []).filter((r) => r.scan === scan);
+    return rows.filter((r) => gradeFilter(grade, r as Rec));
+  }, [data, scan, grade]);
   useEffect(() => {
     if (!data) return;
     setRows(picked as Rec[]);
@@ -601,7 +603,8 @@ function DataTable({
   onSelect: (r: Rec) => void;
   onOpen: (r: Rec) => void;
 }) {
-  const sparks = useSparks(cols.some((c) => c.kind === "spark") ? rows.slice(0, 60).map((r) => String(r.ticker)) : []);
+  const wantSparks = cols.some((c) => c.kind === "spark");
+  const { sparks, watch } = useVisibleSparks();
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const row = box.current?.querySelector('tr[aria-selected="true"]');
@@ -633,7 +636,7 @@ function DataTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={keyOf(r)} aria-selected={current === keyOf(r)} className={current === keyOf(r) ? "active" : undefined} onClick={() => onSelect(r)} onDoubleClick={() => onOpen(r)}>
+            <tr key={keyOf(r)} ref={wantSparks ? watch(String(r.ticker)) : undefined} aria-selected={current === keyOf(r)} className={current === keyOf(r) ? "active" : undefined} onClick={() => onSelect(r)} onDoubleClick={() => onOpen(r)}>
               {cols.map((c) => (
                 <td key={c.key} className={`${NUMERIC.includes(c.kind) ? "r num" : ""}${c.key === "grade_why" ? " why" : ""}`}>
                   <Cell col={c} rec={r} sparks={sparks} />
@@ -649,14 +652,14 @@ function DataTable({
 
 /** The phone's rows (the approved mockup): grade, ticker with setup and RVOL, chart, last and change. */
 function PhoneRows({ rows, onOpen, page }: { rows: Rec[]; onOpen: (r: Rec) => void; page: Page }) {
-  const sparks = useSparks(rows.slice(0, 120).map((r) => String(r.ticker)));
+  const { sparks, watch } = useVisibleSparks();
   return (
     <ul className="plist screener" aria-label="Results">
       {rows.map((r) => {
         const chg = num(r.chg_pct);
         const grade = typeof r.grade === "string" ? r.grade : "";
         return (
-          <li key={`${r.ticker}|${r.scan ?? ""}`}>
+          <li key={`${r.ticker}|${r.scan ?? ""}`} ref={watch(String(r.ticker))}>
             <button className="prow" onClick={() => onOpen(r)} aria-label={`Open ${r.ticker}`}>
               {page === "hits" && (grade ? <GradeBadge grade={grade} /> : <span className="muted badge-gap">–</span>)}
               <span className="pl-main">
