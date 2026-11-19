@@ -9,7 +9,7 @@
 .menu > a:hover { text-decoration: none; background: var(--bg-1); }
 .menu > button:hover:not(:disabled) { background: var(--bg-1); border: 0; }
 .menu [aria-selected="true"] { background: var(--accent-tint); }
-.menu-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 8px 10px 2px; }
+.menu-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 8px 10px 2px; }
 .menu-row { display: flex; align-items: center; }
 .menu-row > button:first-child { flex: 1; }
 .menu-save { display: flex; gap: var(--s1); padding: 4px 4px 2px; }
@@ -26,8 +26,8 @@
 .run-chip[aria-pressed="true"] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-text); }
 .run-chip .run-top { display: flex; gap: var(--s1); align-items: baseline; font-size: 12px; }
 .run-chip .run-count { color: var(--text-2); }
-.run-chip .run-sub { font-size: 11px; color: var(--text-2); font-weight: 400; }
-.from-runs { display: block; font-size: 10px; color: var(--text-3); line-height: 1.2; }
+.run-chip .run-sub { font-size: 12px; color: var(--text-2); font-weight: 400; }
+.from-runs { display: block; font-size: 12px; color: var(--text-3); line-height: 1.2; }
 .queue .setup { display: flex; flex-direction: column; min-width: 0; }
 
 /* Chart: arrows toggles, search, filter box, company name */
@@ -64,7 +64,7 @@
 .wl th.col-chg_pct { width: 64px; }
 .wl th.col-spark { width: 68px; }
 .wl th.col-rvol { width: 46px; }
-.pl .co { display: block; font-size: 11px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.pl .co { display: block; font-size: 12px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
 
 /* Shared: filter buttons, segmented line, dense table */
 .fbtn { min-height: 30px; gap: 6px; background: var(--bg-1); }
@@ -87,7 +87,7 @@
 .dtable tbody tr { cursor: pointer; }
 .dtable tbody tr.active td, .dtable tbody tr.picked td { background: #182131; }
 .dtable tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
-.dtable .co { margin-left: 8px; font-size: 11px; display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.dtable .co { margin-left: 8px; font-size: 12px; display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .th-btn { border: 0; background: none; min-height: 0; padding: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; gap: 2px; }
 .th-btn:hover:not(:disabled) { background: none; border: 0; color: var(--text-1); }
 .today-hit { display: inline-flex; gap: 6px; align-items: center; color: var(--text-1); }
@@ -139,7 +139,7 @@ button.danger { background: #5a2020; border-color: #7a3030; color: #ffd6d6; }
 .pv-chart svg.mini { width: 100%; height: 200px; display: block; }
 .pv-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .pv-tiles > div { padding: 8px; border: 1px solid var(--line); border-radius: var(--r); }
-.pv-tiles span { font-size: 11px; color: var(--text-3); text-transform: uppercase; display: block; }
+.pv-tiles span { font-size: 12px; color: var(--text-3); text-transform: uppercase; display: block; }
 .pv-why { line-height: 1.5; margin: 0; }
 .pv-actions { display: flex; gap: 8px; }
 .pv-actions .primary { flex: 1; min-height: 36px; }
@@ -172,7 +172,7 @@ svg.mini { display: block; width: 100%; height: 96px; }
 .tm-tile:disabled { opacity: 1; cursor: default; }
 .tm-tile:hover:not(:disabled) { border-color: var(--text-1); }
 .tm-name { font-weight: 600; font-size: 12px; line-height: 1.2; }
-.tm-group { font-size: 10px; color: rgba(232, 234, 237, 0.6); }
+.tm-group { font-size: 12px; color: rgba(232, 234, 237, 0.6); }
 
 .about { border: 1px solid var(--line); border-radius: var(--r); padding: 0 var(--s1h); margin: var(--s1) 0; background: var(--bg-1); }
 .about summary { min-height: 32px; font-size: 12px; }
@@ -220,4 +220,4 @@ main.place.wide .place-tabs { margin: 0; padding: 0 16px; }
 
 .left-table th, .left-table td { text-align: left; }
 .left-table td { white-space: normal; max-width: 420px; }
-.menu > a.menu-head { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin-top: 6px; }
+.menu > a.menu-head { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin-top: 6px; }

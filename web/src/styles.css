@@ -11,7 +11,7 @@
   --grid: #1e2632; /* the chart's grid */
   --text-1: #e8eaed;
   --text-2: #9aa4b5;
-  --text-3: #657084;
+  --text-3: #8793a8; /* 5.6:1 on --bg-1 (was #657084, 3.6:1: failed AA for text) */
   --up: #26a69a;
   --down: #ef5350;
   --accent: #4c8dff;
@@ -223,7 +223,7 @@ button.on { background: var(--accent-tint); border-color: var(--accent); color: 
 }
 .search-btn kbd { margin-left: auto; }
 kbd {
-  font: 500 11px/1 "Inter Variable", Inter, system-ui, sans-serif;
+  font: 500 12px/1 "Inter Variable", Inter, system-ui, sans-serif;
   color: var(--text-2);
   border: 1px solid var(--line-2);
   border-radius: 5px;
@@ -327,7 +327,7 @@ main.place { flex: 1; width: 100%; max-width: 1680px; margin: 0 auto; padding: v
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--s2); }
 .cards > .card + .card { margin-top: 0; }
 .section-label {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text-3); margin: var(--s2) 0 6px; padding: 0 var(--s1);
   display: flex; justify-content: space-between; align-items: center;
 }
@@ -337,7 +337,7 @@ main.place { flex: 1; width: 100%; max-width: 1680px; margin: 0 auto; padding: v
 .badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 28px; height: 18px; padding: 0 6px; border-radius: var(--r-sm);
-  font-size: 11px; font-weight: 650; letter-spacing: 0.01em; flex: none;
+  font-size: 12px; font-weight: 650; letter-spacing: 0.01em; flex: none;
   background: var(--bg-2); color: var(--text-2);
 }
 .badge.g-aplus { background: var(--up); color: var(--accent-ink); }
@@ -502,7 +502,7 @@ table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-nu
 th, td { padding: 6px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 tr:last-child td { border-bottom: none; }
 th:first-child, td:first-child { text-align: left; }
-th { position: sticky; top: 0; background: var(--raised); color: var(--text-3); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+th { position: sticky; top: 0; background: var(--raised); color: var(--text-3); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 tbody tr:hover td { background: var(--bg-2); }
 tr.clickable { cursor: pointer; }
 .scroll-box { max-height: 420px; overflow: auto; }
@@ -589,7 +589,7 @@ summary:hover { color: var(--text); }
   }
   .tabbar a {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    color: var(--text-2); font-size: 11px; font-weight: 500; min-height: 44px;
+    color: var(--text-2); font-size: 12px; font-weight: 500; min-height: 44px;
   }
   .tabbar a:hover { text-decoration: none; }
   .tabbar a[aria-current="page"] { color: var(--accent-text); }
@@ -714,7 +714,7 @@ table.wl { table-layout: fixed; width: 100%; }
 /* Buttons that sit in the phone's bottom bar, the More sheet and the list sheet */
 .tabbar .more-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  color: var(--text-2); font-size: 11px; font-weight: 500; min-height: 44px;
+  color: var(--text-2); font-size: 12px; font-weight: 500; min-height: 44px;
   border: 0; border-radius: 0; background: none; padding: 0;
 }
 .tabbar .more-btn:hover:not(:disabled) { background: none; border: 0; }
@@ -825,7 +825,7 @@ table.wl { table-layout: fixed; width: 100%; }
 .trade-chart { height: 300px; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
 .facts-grid, .pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 4px var(--s2); margin: var(--s1) 0; }
 .fact, .pr-grid > div { border-bottom: 1px solid var(--grid); padding: 2px 0; }
-.fact small, .pr-grid small { display: block; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.fact small, .pr-grid small { display: block; color: var(--text-3); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
 .trade-detail .card { margin-top: var(--s1); background: var(--bg-0); }
 .dialog-back {
   position: fixed; inset: 0; z-index: 70; background: var(--scrim);
@@ -850,7 +850,7 @@ table.wl { table-layout: fixed; width: 100%; }
 .pr-next { margin-top: var(--s1); }
 .pr-stats { display: grid; gap: var(--s1); }
 .note-cell { text-align: left; white-space: normal; min-width: 160px; color: var(--text-2); }
-.metric small { font-size: 11px; }
+.metric small { font-size: 12px; }
 
 @media (max-width: 900px) {
   .journal-split { grid-template-columns: 1fr; }
@@ -882,7 +882,7 @@ table.wl { table-layout: fixed; width: 100%; }
 
 /* Sortable headers and the CSV button of the shared table (round 4) */
 .table-tools { display: flex; justify-content: flex-end; margin-bottom: 2px; }
-.table-csv { font-size: 11px; padding: 2px 8px; min-height: 0; height: 22px; color: var(--text-3); }
+.table-csv { font-size: 12px; padding: 2px 8px; min-height: 0; height: 24px; color: var(--text-3); }
 .th-sort { all: unset; cursor: pointer; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
 .th-sort:hover, .th-sort:focus-visible { color: var(--text); }
 th[aria-sort] .th-sort { color: var(--text); }

@@ -5,6 +5,7 @@ import { App } from "./App";
 import "./styles.css";
 import "./round3.css";
 import "./notebook/notebook.css";
+import "./audit.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
