@@ -437,7 +437,11 @@ def register(app: FastAPI, ctx: Context) -> None:
         """Closed trades with your grade and MFE/MAE, the stats and the R curve."""
         trades = journal_view.closed_trades(ctx.root())
         curve = journal_view.r_curve(trades)
-        rows = _frame(trades, ["trade_id", *journal_view.CLOSED_COLUMNS], 2) if len(trades) else []
+        rows = (
+            _frame(trades, ["trade_id", *journal_view.CLOSED_COLUMNS, "order_stop"], 2)
+            if len(trades)
+            else []
+        )  # the stop is for the trade chart
         for r, t in zip(rows, trades.to_dict("records"), strict=False):
             r["label"] = journal_view.trade_label(t)
         by_sure = journal_view.conviction_table(trades) if len(trades) else pd.DataFrame()
@@ -614,6 +618,9 @@ def register(app: FastAPI, ctx: Context) -> None:
             "label": eod.label if eod else None,
             "columns": cols,
             "rows": records(shown.round(2)),
+            "tv": {
+                str(t): board_data.tradingview_url(str(t), listing.get(t)) for t in view["ticker"]
+            },
             "tv_list": board_data.tradingview_list(view["ticker"], listing),
         }
 

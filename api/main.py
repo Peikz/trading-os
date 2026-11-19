@@ -10,6 +10,7 @@ writes (plans, fills, grades, notes, watchlists, alerts). No orders, no pushes, 
 
 from __future__ import annotations
 
+import contextvars
 import datetime as dt
 import os
 import threading
@@ -22,7 +23,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api import chart, lists, notebook, pages, research, scan_hits, symbols, today_runs
+from api import chart, lists, notebook, pages, research, round4, scan_hits, symbols, today_runs
 from api import market as market_page
 from api import practice as practice_page
 from api.serialize import records, scalar
@@ -37,6 +38,10 @@ SCOPES = {
     "all": "Every scan hit",
     "watchlists": "My watchlists",
 }
+# "Show manual test runs" (Settings, per browser; Streamlit's default is on): the browser sends
+# the header `X-Manual-Runs: 1` or `0` with every request and every route lists runs the same way.
+MANUAL_HEADER = "x-manual-runs"
+_manual: contextvars.ContextVar[bool] = contextvars.ContextVar("manual_runs", default=False)
 SPARK_FILES_TTL_S = 300  # a bars file's place is looked up at most every 5 minutes
 LIVE_EVERY_S = 300  # the Screener's live TradingView fetch: at most once per 5 minutes
 
@@ -118,8 +123,18 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
             cache.config = (version, load_config(cfg_path))
         return cache.config[1]
 
-    def runs(manual: bool = False) -> list[dashboard.Run]:
-        return dashboard.list_runs(root(), include_manual=manual)
+    @app.middleware("http")
+    async def manual_runs(request, call_next):
+        token = _manual.set(request.headers.get(MANUAL_HEADER, "0") == "1")
+        try:
+            return await call_next(request)
+        finally:
+            _manual.reset(token)
+
+    def runs(manual: bool | None = None) -> list[dashboard.Run]:
+        """The runs: with the manual test runs when the browser asked (`X-Manual-Runs`)."""
+        include = _manual.get() if manual is None else manual
+        return dashboard.list_runs(root(), include_manual=include)
 
     def find_run(rid: str) -> dashboard.Run:
         for r in runs(manual=True):
@@ -163,11 +178,11 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
 
     @app.get("/api/health")
     def health() -> dict:
-        found = runs(manual=False)
+        found = runs()
         return {"ok": True, "runs": len(found), "latest": run_id(found[0]) if found else None}
 
     @app.get("/api/runs")
-    def list_runs(manual: bool = False) -> list[dict]:
+    def list_runs(manual: bool | None = None) -> list[dict]:
         return [
             {
                 "id": run_id(r),
@@ -211,7 +226,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         your own lists' stocks; `wl` picks one list by name. `run`: one run of today (its id from
         `/api/today-runs`) or `all` (every run of the day, de-duplicated, each stock tagged with
         the runs it came from); without it, the newest run of each slot."""
-        found = runs(manual=False)
+        found = runs()
         wanted = [x for x in (t or "").split(",") if x]
         if (screen and wanted) or scope == "watchlists":
             if scope == "watchlists" and not (screen and wanted):
@@ -260,12 +275,12 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     def todays_runs() -> dict:
         """The scan runs of the newest session: each with its time in New York and Copenhagen,
         its name and how many stocks to act on it found; and the day as a whole."""
-        return today_runs.summary(runs(manual=False), cfg(), cache.scan_frames, exchanges, GRADED)
+        return today_runs.summary(runs(), cfg(), cache.scan_frames, exchanges, GRADED)
 
     @app.get("/api/market")
     def market() -> dict:
         """The market tiles: QQQ light, heat, IBD state, SPY, QQQ, VIX; and the full lines."""
-        row, ibd_info, heat_text = board_data.market_inputs(root(), runs(manual=False))
+        row, ibd_info, heat_text = board_data.market_inputs(root(), runs())
         if not row:
             return {"tiles": [], "details": [], "mood": board_data.market_mood(None, None, None)}
         tiles = board_data.tiles(row, ibd_info, heat_text)
@@ -364,7 +379,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     # --- Screener
 
     def snapshot() -> tuple[dashboard.Run, pd.DataFrame]:
-        eod = [r for r in runs(manual=False) if r.slot == "eod" and r.universe.exists()]
+        eod = [r for r in runs() if r.slot == "eod" and r.universe.exists()]
         if not eod:
             raise HTTPException(404, "No EOD universe snapshot yet.")
         return eod[0], cache.table(eod[0].universe)
@@ -458,6 +473,16 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
                 if scan and "signal_id" in result
                 else {}
             ),
+            "tv": {
+                str(t): board_data.tradingview_url(str(t), x if isinstance(x, str) else None)
+                for t, x in zip(
+                    result["ticker"].head(req.limit),
+                    result["exchange"].head(req.limit)
+                    if "exchange" in result
+                    else [None] * min(len(result), req.limit),
+                    strict=False,
+                )
+            },
             "tv_list": board_data.tradingview_list(
                 result["ticker"].head(1000),
                 dict(zip(result["ticker"], result["exchange"], strict=False))
@@ -496,6 +521,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     scan_hits.register(app, ctx)
     practice_page.register(app, ctx)
     notebook.register(app, ctx)
+    round4.register(app, ctx, find_run, run_id)
     return app
 
 

@@ -40,6 +40,12 @@ def todays_runs(runs: Iterable[dashboard.Run]) -> list[dashboard.Run]:
     return sorted((r for r in found if r.session == session), key=lambda r: SLOTS.index(r.slot))
 
 
+def pick(runs: Iterable[dashboard.Run], key: str) -> dashboard.Run | None:
+    """One scheduled run by its id: of today, or of an earlier day (the Run menu's "Earlier")."""
+    found = [r for r in runs if r.kind == "scheduled" and r.slot in SLOTS and r.candidates.exists()]
+    return next((r for r in found if run_key(r) == key), None)
+
+
 def times(run: dashboard.Run) -> dict[str, str | None]:
     """The run's scheduled start in New York and Copenhagen (`07:17`), or None when unknown."""
     start = dashboard.slot_start(run.slot, run.session)
@@ -93,13 +99,13 @@ def hits(
     everything: bool = False,
 ) -> pd.DataFrame | None:
     """The hits of one run of today (`run_id`) or of all of them (`ALL`). None: no such run."""
-    today = todays_runs(found)
     if run_id == ALL:
-        picked = today
+        picked = todays_runs(found)
     else:
-        picked = [r for r in today if run_key(r) == run_id]
-        if not picked:
+        one = pick(found, run_id)
+        if one is None:
             return None
+        picked = [one]
     frames = [(r, collect_run(r, found, cfg, scan_frames, exchanges, everything)) for r in picked]
     out = union(frames, everything)
     if out.empty and not frames:
