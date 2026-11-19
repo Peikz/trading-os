@@ -299,7 +299,10 @@ def test_chart_notes_show_old_notes_and_save_new_ones(data_repo, monkeypatch):
 def test_a_tagged_daily_note_shows_in_the_journal_and_on_the_chart(data_repo, monkeypatch):
     from trading_os import daily_notes
 
-    daily_notes.add(data_repo, "Gap held into the close on $AAA", dt.date(2026, 10, 19))
+    # Relative to today: the Journal lists the last 30 days, so a fixed date stops showing
+    # (this test failed from 19 Nov 2026 on, on every machine, for a note dated 19 Oct)
+    day = dt.date.today() - dt.timedelta(days=3)
+    daily_notes.add(data_repo, "Gap held into the close on $AAA", day)
     monkeypatch.setenv("TRADING_OS_DATA", str(data_repo))
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     goto(at, "Journal")

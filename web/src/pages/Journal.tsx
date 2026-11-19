@@ -7,13 +7,13 @@
 import { useEffect, useState } from "react";
 import {
   api,
-  type DailyNotes,
   type JournalOpen,
   type JournalPlans,
   type Suggestion,
   type Table as TableData,
 } from "../api";
 import { DailyNote } from "../components/DailyNote";
+import { Notebook } from "../notebook/Notebook";
 import { Metric, Table } from "../components/Table";
 import { usd } from "../format";
 import { Icon } from "../ui/Icon";
@@ -31,7 +31,7 @@ const PLAN_COLUMNS = [
   "risk_usd", "fill_date", "fill_price", "slippage_pct", "slippage_r", "note", "plan_id",
 ];
 
-export function Journal({ tab = "trades" }: { tab?: string }) {
+export function Journal({ tab = "trades", params }: { tab?: string; params?: URLSearchParams }) {
   const [importing, setImporting] = useState(false);
   return (
     <div>
@@ -69,7 +69,7 @@ export function Journal({ tab = "trades" }: { tab?: string }) {
         </>
       )}
       {tab === "plans" && <PlansTab />}
-      {tab === "notes" && <DailyTab />}
+      {tab === "notes" && <Notebook params={params ?? new URLSearchParams()} />}
       {tab === "live" && (
         <>
           <h3>Your real R per setup against the study</h3>
@@ -340,111 +340,6 @@ function RealTab() {
     <section>
       <Table label="Real vs study" columns={data.columns} rows={data.rows} />
       <p className="muted">{data.caption}</p>
-    </section>
-  );
-}
-
-const DAY_LABEL = (d: number) => (d === 3650 ? "all" : `${d} days`);
-
-function DailyTab() {
-  const [tag, setTag] = useState("");
-  const [days, setDays] = useState(30);
-  const [data, setData] = useState<DailyNotes | null>(null);
-  const [version, setVersion] = useState(0);
-  const [form, setForm] = useState({ day: today(), tags: "", text: "" });
-  const [editing, setEditing] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ day: "", tags: "", text: "" });
-  const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => {
-    api.dailyNotes(tag, days).then(setData, (e: Error) => setMessage(`Error: ${e.message}`));
-  }, [tag, days, version]);
-  const reload = () => setVersion((v) => v + 1);
-  const fail = (e: Error) => setMessage(`Error: ${e.message}`);
-  return (
-    <section className="form">
-      <p className="muted">{data?.caption}</p>
-      <div className="row">
-        <input aria-label="Day" type="date" value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
-        <input
-          aria-label="Stocks (comma or space separated)"
-          placeholder="Stocks (comma or space separated)"
-          value={form.tags}
-          onChange={(e) => setForm({ ...form, tags: e.target.value })}
-        />
-      </div>
-      <textarea aria-label="Daily note" rows={5} value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} />
-      <button
-        disabled={!form.text.trim()}
-        onClick={() =>
-          api.addDailyNote(form).then(() => {
-            setForm({ day: today(), tags: "", text: "" });
-            reload();
-          }, fail)
-        }
-      >
-        Save note
-      </button>
-      <div className="row">
-        <select aria-label="Show" value={tag} onChange={(e) => setTag(e.target.value)}>
-          <option value="">All notes</option>
-          {(data?.tags ?? []).map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
-        <div className="pills" role="group" aria-label="From the last">
-          {(data?.days ?? [7, 30, 90, 365, 3650]).map((d) => (
-            <button key={d} className={days === d ? "on" : ""} onClick={() => setDays(d)}>
-              {DAY_LABEL(d)}
-            </button>
-          ))}
-        </div>
-      </div>
-      {message && <p className="error">{message}</p>}
-      {data && data.notes.length === 0 && <p className="muted">No daily notes here yet.</p>}
-      {data?.notes.map((n) => (
-        <div key={n.note_id} className="note">
-          <b>{n.note_date}</b>
-          {n.tags.length > 0 && <span className="muted"> · {n.tags.join(" · ")}</span>}
-          {editing === n.note_id ? (
-            <div>
-              <div className="row">
-                <input aria-label="Edit day" type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} />
-                <input aria-label="Edit stocks" value={edit.tags} onChange={(e) => setEdit({ ...edit, tags: e.target.value })} />
-              </div>
-              <textarea aria-label="Edit note" rows={4} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} />
-              <button
-                disabled={!edit.text.trim()}
-                onClick={() =>
-                  api.editDailyNote(n.note_id, edit).then(() => {
-                    setEditing(null);
-                    reload();
-                  }, fail)
-                }
-              >
-                Save
-              </button>
-              <button onClick={() => setEditing(null)}>Cancel</button>
-            </div>
-          ) : (
-            <>
-              <p className="pre">{n.text}</p>
-              <button
-                className="link"
-                onClick={() => {
-                  setEditing(n.note_id);
-                  setEdit({ day: n.note_date, tags: n.tags.join(", "), text: n.text });
-                }}
-              >
-                Edit
-              </button>
-              <button className="link" onClick={() => api.removeDailyNote(n.note_id).then(reload, fail)}>
-                Delete
-              </button>
-            </>
-          )}
-        </div>
-      ))}
-      <p className="muted">{data?.kept}</p>
     </section>
   );
 }

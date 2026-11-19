@@ -14,6 +14,7 @@ import datetime as dt
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,7 +22,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api import chart, lists, pages, research, scan_hits, symbols, today_runs
+from api import chart, lists, notebook, pages, research, scan_hits, symbols, today_runs
 from api import market as market_page
 from api import practice as practice_page
 from api.serialize import records, scalar
@@ -36,6 +37,7 @@ SCOPES = {
     "all": "Every scan hit",
     "watchlists": "My watchlists",
 }
+SPARK_FILES_TTL_S = 300  # a bars file's place is looked up at most every 5 minutes
 LIVE_EVERY_S = 300  # the Screener's live TradingView fetch: at most once per 5 minutes
 
 
@@ -308,34 +310,56 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
         lines = chart_series.indicator_lines(b, picked, anchor, bench)
         return {"ticker": ticker, "tf": tf, "candles": candles, "lines": lines}
 
+    spark_files: dict[str, tuple[float, Path | None]] = {}
+    spark_lock = threading.Lock()
+
+    def bars_files(first: dict[str, str]) -> dict[str, Path | None]:
+        """The bars file per first letter (`first`: letter -> one ticker with it). Each lookup asks
+        GitHub about the release (about a second), so the letters are looked up side by side
+        and remembered for five minutes; a file that has gone from the cache is looked up again."""
+        now = time.monotonic()
+        with spark_lock:
+            todo = [
+                s for s in first
+                if s not in spark_files
+                or now - spark_files[s][0] > SPARK_FILES_TTL_S
+                or (spark_files[s][1] is not None and not spark_files[s][1].exists())
+            ]  # fmt: skip
+        if todo:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                found = list(pool.map(lambda s: board_data.bars_file(root(), first[s]), todo))
+            with spark_lock:
+                spark_files.update({s: (now, p) for s, p in zip(todo, found, strict=True)})
+        with spark_lock:
+            return {s: spark_files[s][1] for s in first}
+
     @app.get("/api/sparks")
     def sparks(t: str, n: int = Query(60, ge=5, le=260)) -> dict:
         """The last `n` daily candles of up to 60 stocks at once: the Stocks grid's mini charts
-        (Nov 2026). Stocks without bars come back empty."""
-        tickers = [x.strip().upper() for x in t.split(",") if x.strip()][:60]
-        out = {}
-        board_data.today_bars([x for x in tickers if len(x) <= 12])  # one TradingView call for all
+        and the lists' 20-day column (Nov 2026). Stocks without bars come back empty. One read
+        of the bars file per first letter, the letters looked up side by side."""
         from trading_os.bars_pack import shard_of
 
-        files: dict[
-            str, Path | None
-        ] = {}  # the bars file per first letter: looked up once per call
-        for ticker in dict.fromkeys(tickers):
-            if len(ticker) > 12:
-                continue
-            shard = shard_of(ticker)
-            if shard not in files:
-                files[shard] = board_data.bars_file(root(), ticker)
-            b = board_data.ticker_bars(files[shard], ticker)
-            b = board_data.with_today(b, ticker).tail(n)
-            out[ticker] = [
-                {"time": f"{d}", "open": float(o), "high": float(h), "low": float(lo),
-                 "close": float(c)}
-                for d, o, h, lo, c in zip(
-                    b["session_date"], b["open"], b["high"], b["low"], b["close"], strict=True
-                )
-            ]  # fmt: skip
-        return out
+        tickers = [x for x in dict.fromkeys(x.strip().upper() for x in t.split(",") if x.strip())]
+        tickers = [x for x in tickers[:60] if len(x) <= 12]
+        board_data.today_bars(tickers)  # one TradingView call for all
+        by_shard: dict[str, list[str]] = {}
+        for ticker in tickers:
+            by_shard.setdefault(shard_of(ticker), []).append(ticker)
+        files = bars_files({s: members[0] for s, members in by_shard.items()})
+        out = {}
+        for shard, members in by_shard.items():
+            frames = board_data.tickers_bars(files[shard], members)
+            for ticker in members:
+                b = board_data.with_today(frames[ticker], ticker).tail(n)
+                out[ticker] = [
+                    {"time": f"{d}", "open": float(o), "high": float(h), "low": float(lo),
+                     "close": float(c)}
+                    for d, o, h, lo, c in zip(
+                        b["session_date"], b["open"], b["high"], b["low"], b["close"], strict=True
+                    )
+                ]  # fmt: skip
+        return {ticker: out[ticker] for ticker in tickers}
 
     # --- Screener
 
@@ -471,6 +495,7 @@ def create_app(data_dir: Path | str | None = None, config_path: Path | str | Non
     symbols.register(app, ctx)
     scan_hits.register(app, ctx)
     practice_page.register(app, ctx)
+    notebook.register(app, ctx)
     return app
 
 

@@ -1,7 +1,7 @@
 // The Chart's lists: the picker's catalog, one list's rows (sortable), and the 20-day sparklines
 // (one `/api/sparks` call per 60 stocks, kept for the visit so a list you come back to is
 // drawn at once).
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ChartList, type ChartListInfo, type ChartListRow } from "../../api";
 import { readPref, writePref } from "../../shell/prefs";
 
@@ -68,34 +68,96 @@ export function sortRows(rows: ChartListRow[], sort: Sort | null): ChartListRow[
 }
 
 const sparkCache = new Map<string, number[]>();
+const sparkTries = new Map<string, number>();
+const SPARK_TRIES = 3;
 
-/** Closing prices of the last 20 sessions per ticker. */
+/** Closing prices of the last 20 sessions per ticker. A call that fails is tried again a couple
+ *  of times (a slow or briefly unavailable API must not leave the column empty for good). */
 export function useSparks(tickers: string[]): Record<string, number[]> {
   const [, bump] = useState(0);
+  const [again, setAgain] = useState(0);
   const key = tickers.join(",");
   useEffect(() => {
-    const want = key.split(",").filter((t) => t && !sparkCache.has(t));
+    const want = key.split(",").filter((t) => t && !sparkCache.has(t) && (sparkTries.get(t) ?? 0) < SPARK_TRIES);
     if (!want.length) return;
     let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     for (let i = 0; i < want.length; i += 60) {
       const batch = want.slice(i, i + 60);
+      for (const t of batch) sparkTries.set(t, (sparkTries.get(t) ?? 0) + 1);
       api.sparks(batch, 20).then(
         (s) => {
           for (const t of batch) sparkCache.set(t, (s[t] ?? []).map((c) => c.close));
           if (live) bump((n) => n + 1);
         },
-        () => {},
+        () => {
+          if (live && !timer) timer = setTimeout(() => setAgain((n) => n + 1), 2500);
+        },
       );
     }
     return () => {
       live = false;
+      if (timer) clearTimeout(timer);
     };
-  }, [key]);
+  }, [key, again]);
   return useMemo(
     () => Object.fromEntries(key.split(",").filter((t) => sparkCache.has(t)).map((t) => [t, sparkCache.get(t)!])),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the cache is filled as calls return
     [key, sparkCache.size],
   );
+}
+
+/** The 20-day lines of the rows that are on screen (and a screenful either side): a long table
+ *  fetches as it is scrolled instead of drawing only its first rows. `watch(ticker)` is the ref of
+ *  a row. Without IntersectionObserver (a test) every row counts as visible. */
+export function useVisibleSparks(max = 600) {
+  const [seen, setSeen] = useState<string[]>([]);
+  const known = useRef(new Set<string>());
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const watcher = useRef<IntersectionObserver | null>(null);
+  const flush = useCallback(() => {
+    if (timer.current) return;
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      setSeen([...known.current]);
+    }, 60);
+  }, []);
+  const add = useCallback(
+    (ticker: string) => {
+      if (known.current.has(ticker) || known.current.size >= max) return;
+      known.current.add(ticker);
+      flush();
+    },
+    [flush, max],
+  );
+  useEffect(
+    () => () => {
+      watcher.current?.disconnect();
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const watch = useCallback(
+    (ticker: string) => (el: Element | null) => {
+      if (!el || known.current.has(ticker)) return;
+      if (typeof IntersectionObserver === "undefined") return add(ticker);
+      watcher.current ??= new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const t = (e.target as HTMLElement).dataset.spark;
+            if (t) add(t);
+            watcher.current?.unobserve(e.target);
+          }
+        },
+        { rootMargin: "400px 0px" },
+      );
+      (el as HTMLElement).dataset.spark = ticker;
+      watcher.current.observe(el);
+    },
+    [add],
+  );
+  return { sparks: useSparks(seen), watch };
 }
 
 /** The columns a list can show (the symbol is always there); the default is all of them. */

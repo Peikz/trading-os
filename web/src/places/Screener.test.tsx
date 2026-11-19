@@ -73,6 +73,32 @@ describe("Screener, Scan hits", () => {
     expect(screen.getByText("1 hit")).toBeInTheDocument();
   });
 
+  it("shows a stock found by two scans once, with both setups and every run", async () => {
+    mockApi({
+      "GET /api/today-runs": { session: "2026-11-18", all: { id: "all", label: "All today", count: 2 }, runs: [] },
+      "GET /api/scan-hits": {
+        run: "all", label: "All today", count: 3,
+        scans: [{ id: "ep", label: "EP 10:30", count: 2 }, { id: "bo", label: "Breakout", count: 1 }],
+        rows: [hit(A, "ep", "A+", { runs: ["am"] }), hit(A, "bo", "B", { runs: ["eod", "am"] }), hit(B, "bo", "B")],
+      },
+      "GET /api/sparks": {},
+      "GET /api/symbols": { asof: "2026-11-18", symbols: [] },
+      "GET /api/chart/picks": [],
+    });
+    render(<Screener tab="hits" params={new URLSearchParams()} />);
+    const table = await screen.findByRole("table", { name: "Results" });
+    expect(within(table).getAllByRole("row")).toHaveLength(3); // header + two stocks, not three rows
+    expect(screen.getByText("2 hits")).toBeInTheDocument();
+    const first = within(table).getAllByRole("row")[1];
+    expect(first).toHaveTextContent(A);
+    expect(first).toHaveTextContent("EP 10:30 · Breakout");
+    expect(first).toHaveTextContent("am · eod");
+    // A single scan keeps its own rows
+    fireEvent.click(screen.getByRole("button", { name: /Scan\s*All scans/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Breakout/ }));
+    expect(screen.getByText("2 hits")).toBeInTheDocument();
+  });
+
   it("previews the selected row with its entry and stop, and Enter opens it on the Chart", async () => {
     routes();
     render(<Screener tab="hits" params={new URLSearchParams()} />);

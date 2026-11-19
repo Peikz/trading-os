@@ -41,10 +41,10 @@ export const TABS: Record<Place, readonly (readonly [string, string])[]> = {
     ["ibd", "IBD"],
   ],
   journal: [
+    ["notes", "Notebook"],
     ["trades", "Trades"],
     ["positions", "Positions"],
     ["plans", "Plans"],
-    ["notes", "Notes"],
     ["live", "Live results"],
   ],
   lab: [

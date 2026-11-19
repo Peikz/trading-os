@@ -4,7 +4,7 @@ describe("routes", () => {
   it("reads the seven places and their tabs, the first tab by default", () => {
     expect(parseHash("")).toMatchObject({ place: "today", tab: "" });
     expect(parseHash("#/market/sectors")).toMatchObject({ place: "market", tab: "sectors" });
-    expect(parseHash("#/journal")).toMatchObject({ place: "journal", tab: "trades" });
+    expect(parseHash("#/journal")).toMatchObject({ place: "journal", tab: "notes" });
     expect(parseHash("#/practice")).toMatchObject({ place: "practice", tab: "" });
     expect(parseHash("#/lab/nope")).toMatchObject({ place: "lab", tab: "research" });
     expect(parseHash("#/nowhere")).toMatchObject({ place: "today" });
@@ -31,7 +31,7 @@ describe("routes", () => {
     expect(parseHash("#/guide")).toMatchObject({ place: "lab", tab: "guide" });
     expect(parseHash("#/research")).toMatchObject({ place: "lab", tab: "research" });
     expect(parseHash("#/market")).toMatchObject({ place: "market", tab: "overview" });
-    expect(parseHash("#/journal")).toMatchObject({ place: "journal", tab: "trades" });
+    expect(parseHash("#/journal")).toMatchObject({ place: "journal", tab: "notes" });
   });
 
   it("writes links", () => {

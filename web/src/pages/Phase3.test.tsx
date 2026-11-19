@@ -88,34 +88,6 @@ describe("Guide", () => {
 });
 
 describe("Journal, phase 3", () => {
-  it("adds, filters and deletes daily notes", async () => {
-    const notes = {
-      notes: [{ note_id: "d1", note_date: "2026-10-30", text: `Watching $${X}`, tags: [X] }],
-      tags: [X],
-      days: [7, 30, 90, 365, 3650],
-      caption: "A note about the day.",
-      kept: "Kept for good.",
-    };
-    const calls = mockApi({
-      "GET /api/journal/open": { totals: { positions: 0, open_pnl: 0, at_risk_usd: 0, at_risk_pct: null }, rows: [], plan: [], plan_day: null },
-      "GET /api/journal/daily-notes": notes,
-      "POST /api/journal/daily-notes": { note_id: "d2" },
-      "DELETE /api/journal/daily-notes/": { removed: "d1" },
-    });
-    render(<Journal tab="notes" />);
-    expect(await screen.findByText(`Watching $${X}`)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Daily note"), { target: { value: "Quiet day" } });
-    fireEvent.change(screen.getByLabelText("Stocks (comma or space separated)"), { target: { value: X } });
-    fireEvent.click(screen.getByText("Save note"));
-    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
-    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ text: "Quiet day", tags: X });
-    fireEvent.change(screen.getByLabelText("Show"), { target: { value: X } });
-    fireEvent.click(screen.getByText("all"));
-    await waitFor(() => expect(calls.some((c) => c.url.includes(`tag=${X}`) && c.url.includes("days=3650"))).toBe(true));
-    fireEvent.click(screen.getByText("Delete"));
-    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
-  });
-
   it("imports a broker export: the preview first, then the import", async () => {
     const calls = mockApi({
       "GET /api/journal/open": { totals: { positions: 0, open_pnl: 0, at_risk_usd: 0, at_risk_pct: null }, rows: [], plan: [], plan_day: null },

@@ -3,11 +3,11 @@
 // the list is the screen and a tap opens the trade full screen with a back button. Facts from
 // trading_os/journal_view.py; the grade and conviction are yours (append-only in the data repo).
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type ChartData, type JournalClosed, type Row } from "../../api";
-import { DrawChart } from "../../components/DrawChart";
+import { api, type JournalClosed, type Row } from "../../api";
 import { GradeBadge } from "../../components/Card";
 import { GradeForm } from "../../components/GradeForm";
 import { RCurve } from "../../components/RCurve";
+import { TradeChart } from "../../components/TradeChart";
 import { Metric, Table } from "../../components/Table";
 import { signed, usd } from "../../format";
 import { stockLink } from "../../routes";
@@ -17,11 +17,6 @@ import { PHONE, useMedia } from "../../ui/kit";
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 const text = (v: unknown): string => (typeof v === "string" ? v : "");
 const dayOf = (v: unknown): string => text(v).slice(0, 10);
-const addDays = (day: string, n: number): string => {
-  const d = new Date(`${day}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
 
 export function Conviction({ value }: { value: unknown }) {
   const c = num(value);
@@ -38,54 +33,6 @@ function RValue({ v }: { v: unknown }) {
   const r = num(v);
   if (r === null) return <span className="muted">–</span>;
   return <span className={r >= 0 ? "up" : "down"}>{signed(r, 2, "R")}</span>;
-}
-
-/** The trade's chart: the stock's bars around the trade, with your fills as arrows. */
-function TradeChart({ trade }: { trade: Row }) {
-  const [data, setData] = useState<ChartData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const ticker = text(trade.ticker);
-  const entry = dayOf(trade.entry_date);
-  const exit = dayOf(trade.exit_date);
-  useEffect(() => {
-    let live = true;
-    setData(null);
-    setError(null);
-    const old = entry && Date.now() - Date.parse(entry) > 600 * 86400000; // beyond the 2-year file's reach
-    api
-      .chart(ticker, {
-        period: old ? "10y" : "2y",
-        timeframe: "Daily",
-        span: "All",
-        lines: ["MA10", "MA20", "MA50"],
-        hits: false,
-        fills: true,
-        levels: false,
-        anchors: [],
-      })
-      .then(
-        (d) => {
-          if (!live) return;
-          // Around the trade: three months before the entry to six weeks after the exit
-          const days = d.candles.map((c) => c.time);
-          const from = days.find((t) => t >= addDays(entry, -90)) ?? days[0];
-          const to = [...days].reverse().find((t) => t <= addDays(exit || entry, 45)) ?? days[days.length - 1];
-          setData(from && to ? { ...d, visible: { from, to }, levels: [] } : d);
-        },
-        (e: Error) => live && setError(e.message),
-      );
-    return () => {
-      live = false;
-    };
-  }, [ticker, entry, exit]);
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return <p className="muted">Loading the chart…</p>;
-  if (!data.candles.length) return <p className="muted">No daily bars for {ticker} in the data repo.</p>;
-  return (
-    <div className="trade-chart" aria-label={`${ticker} trade chart`}>
-      <DrawChart data={data} height={300} tool="none" markerText={false} />
-    </div>
-  );
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -127,7 +74,7 @@ function TradeDetail({
         <Conviction value={trade.conviction} />
         <a href={stockLink(ticker)}>Full chart</a>
       </div>
-      <TradeChart trade={trade} />
+      <TradeChart ticker={ticker} entry={dayOf(trade.entry_date)} exit={dayOf(trade.exit_date)} />
       <div className="facts-grid">
         <Fact label="R">
           <RValue v={trade.r_multiple} />

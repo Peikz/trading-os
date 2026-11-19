@@ -736,6 +736,77 @@ export interface DailyNotes {
   kept: string;
 }
 
+// The Journal notebook (`/api/notebook`): every note the sidebar lists, with its text.
+export interface NbDaily {
+  id: string;
+  date: string;
+  text: string;
+  /** Stocks the note is about ($TICKER in the text, or typed) */
+  stocks: string[];
+  tags: string[];
+}
+
+export interface NbTrade {
+  /** A closed trade's id, or `open-TICKER-DATE` while it is still open */
+  id: string;
+  status: "open" | "closed";
+  ticker: string;
+  direction: string;
+  entry_date: string | null;
+  exit_date: string | null;
+  setup: string;
+  r: number | null;
+  pnl: number | null;
+  entry: number | null;
+  exit: number | null;
+  stop: number | null;
+  grade: string;
+  conviction: number | null;
+  text: string;
+  tags: string[];
+  typed_tags: string[];
+}
+
+export interface NbStockNote {
+  note_id: string;
+  date: string;
+  text: string;
+  tags: string[];
+}
+
+export interface NbStock {
+  ticker: string;
+  notes: NbStockNote[];
+  tags: string[];
+}
+
+export interface NbPage {
+  slug: string;
+  title: string;
+  created: string;
+  updated: string;
+  text: string;
+  /** Front-matter tags and the #tags in the text */
+  tags: string[];
+  typed_tags: string[];
+}
+
+export interface NbIndex {
+  today: string;
+  daily: NbDaily[];
+  trades: NbTrade[];
+  stocks: NbStock[];
+  pages: NbPage[];
+  tags: { tag: string; count: number }[];
+  tickers: string[];
+}
+
+export interface NbCard {
+  last: number | null;
+  chg_pct: number | null;
+  grade: string;
+}
+
 /** One list in the Chart's picker (`/api/chart-lists`). */
 export interface ChartListInfo {
   id: string;
@@ -918,7 +989,7 @@ export const api = {
     request<{ removed: string }>(`/api/chart/${enc(ticker)}/marks/${enc(id)}`, { method: "DELETE" }),
   chartNotes: (ticker: string) => request<ChartNotes>(`/api/chart/${enc(ticker)}/notes`),
   addChartNote: (ticker: string, text: string, day: string) =>
-    post<ChartNotes>(`/api/chart/${enc(ticker)}/notes`, { text, day }),
+    post<ChartNotes & { note_id: string }>(`/api/chart/${enc(ticker)}/notes`, { text, day }),
   editChartNote: (ticker: string, id: string, text: string, day: string) =>
     post<ChartNotes>(`/api/chart/${enc(ticker)}/notes/${enc(id)}`, { text, day }, "PUT"),
   removeChartNote: (ticker: string, id: string) =>
@@ -998,6 +1069,17 @@ export const api = {
     post<{ note_id: string }>(`/api/journal/daily-notes/${enc(id)}`, body, "PUT"),
   removeDailyNote: (id: string) =>
     request<{ removed: string }>(`/api/journal/daily-notes/${enc(id)}`, { method: "DELETE" }),
+  notebook: () => request<NbIndex>("/api/notebook"),
+  createPage: (body: { title?: string; text?: string; tags?: string[] }) =>
+    post<NbPage>("/api/notebook/pages", body),
+  savePage: (slug: string, body: { title?: string; text?: string; tags?: string[] }) =>
+    post<NbPage>(`/api/notebook/pages/${enc(slug)}`, body, "PUT"),
+  deletePage: (slug: string) =>
+    request<{ removed: string }>(`/api/notebook/pages/${enc(slug)}`, { method: "DELETE" }),
+  noteImage: (ref: string, name: string, data: string) =>
+    post<{ path: string; url: string }>("/api/notebook/images", { ref, name, data }),
+  noteCards: (tickers: string[]) =>
+    request<Record<string, NbCard>>(`/api/notebook/cards?t=${tickers.map(enc).join(",")}`),
   scanWatchlists: (all: boolean) =>
     request<ScanWatchlists>(`/api/scan-watchlists?include_ended=${all}`),
   market: () => request<Market>("/api/market"),
