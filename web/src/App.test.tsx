@@ -73,13 +73,16 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: "Guide" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("jumps to a stock from search", async () => {
+  it("never opens a typed ticker that is not a known stock", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Search stocks, pages and tabs" }));
     expect(await screen.findByText("EP 10:30 · A+")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "vzqv" } });
-    fireEvent.click(screen.getByText("VZQV"));
-    expect(window.location.hash).toBe("#/chart?s=VZQV");
+    const before = window.location.hash;
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "vzqv" } });
+    expect(screen.queryByText("VZQV")).not.toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(window.location.hash).toBe(before);
   });
 
   it("opens the search on / and on a typed letter, and Enter on an exact ticker opens its chart", async () => {
