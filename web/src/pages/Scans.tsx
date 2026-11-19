@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { api, type ScanForm, type ScansPage } from "../api";
 import { Table } from "../components/Table";
+import { About } from "../ui/kit";
 
 const ROW_COLUMNS = ["scan", "on", "runs (NY · CPH)", "pushed", "grade", "settings", "note"];
 
@@ -24,8 +25,12 @@ export function Scans() {
   if (!page) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
   return (
     <div>
-      <p className="muted">{page.caption}</p>
-      <Table label="Scans" columns={ROW_COLUMNS} rows={page.rows} />
+      <About>
+        <p className="muted">{page.caption}</p>
+      </About>
+      <div className="left-table">
+        <Table label="Scans" columns={ROW_COLUMNS} rows={page.rows.map((r) => ({ ...r, settings: String(r.settings ?? "").replace(/_/g, " ") }))} />
+      </div>
       <h3>Edit a scan</h3>
       {page.note && <p className="warn">{page.note}</p>}
       <select aria-label="Scan" value={pick} onChange={(e) => setPick(e.target.value)}>
@@ -100,7 +105,7 @@ function Editor({ name, writable, onSaved }: { name: string; writable: boolean; 
       <div className="numbers">
         {form.numbers.map((n) => (
           <label key={n.key}>
-            {n.key}{" "}
+            {n.key.replace(/_/g, " ")}{" "}
             <input
               aria-label={n.key}
               type="number"
@@ -114,7 +119,7 @@ function Editor({ name, writable, onSaved }: { name: string; writable: boolean; 
       {form.flags.map((f) => (
         <label key={f.key} className="check">
           <input type="checkbox" checked={Boolean(values[f.key])} onChange={(e) => set(f.key, e.target.checked)} />
-          {f.key}
+          {f.key.replace(/_/g, " ")}
         </label>
       ))}
       <input

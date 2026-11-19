@@ -24,6 +24,9 @@ import { signed, usd } from "../format";
 import { stripIcons } from "../plain";
 import { hrefFor, stockLink } from "../routes";
 import { setActive } from "../shell/active";
+import { useArrowKeys } from "../shell/prefs";
+import { useRunPick, useTodayRuns } from "../shell/todayRun";
+import { RunPicker } from "../ui/RunPicker";
 import { Icon } from "../ui/Icon";
 import { PHONE, typing, useMedia } from "../ui/kit";
 import { FocusChart } from "./today/FocusChart";
@@ -68,7 +71,7 @@ function rowItem(kind: Kind, r: BoardRow): Item {
   return { key: `${kind}:${r.ticker}:${r.scan}`, kind, ticker: r.ticker, row: r };
 }
 
-function useToday() {
+function useToday(run: string) {
   const fromPush = useMemo(() => pushTickers(window.location.search), []);
   const screen = useMemo(() => screenName(window.location.search), []);
   const [act, setAct] = useState<BoardRow[] | null>(null);
@@ -84,18 +87,29 @@ function useToday() {
     () => api.today("watchlists", [], null, GREEN).then((d) => setWatch(d.rows), () => setWatch([])),
     [],
   );
+  // The run picked at the top of "To act on": every run of today, or one of them
   useEffect(() => {
-    api.today("graded").then(
+    let live = true;
+    setCRows(null);
+    api.today("graded", [], null, null, run).then(
       (d) => {
+        if (!live) return;
         setAct(d.rows);
         setHiddenC(d.hidden_c);
         setNext(d.next_scan ?? null);
+        setError(null);
       },
       (e: Error) => {
+        if (!live) return;
         setAct([]);
         setError(e.message);
       },
     );
+    return () => {
+      live = false;
+    };
+  }, [run]);
+  useEffect(() => {
     if (fromPush.length) api.today("all", fromPush, screen).then((d) => setPush(d.rows), () => setPush([]));
     api.positions().then(setPositions, () => setPositions(null));
     loadWatch();
@@ -103,19 +117,33 @@ function useToday() {
 
   const showC = useCallback(
     () =>
-      api.today("pushed").then(
+      api.today("pushed", [], null, null, run).then(
         (d) => setCRows(d.rows.filter((r) => r.grade === "C")),
         () => setCRows([]),
       ),
-    [],
+    [run],
   );
   return { fromPush, screen, act, hiddenC, next, push, cRows, showC, positions, watch, loadWatch, error };
 }
 
 export function Today() {
-  const d = useToday();
+  const [run, setRun] = useRunPick();
+  const runs = useTodayRuns();
+  const d = useToday(run);
+  const [arrowKeys] = useArrowKeys();
   const phone = useMedia(PHONE);
   const [sel, setSel] = useState<string | null>(null);
+  const slotNames = useMemo(() => Object.fromEntries((runs?.runs ?? []).map((r) => [r.slot, r.name])), [runs]);
+  const picker = (
+    <RunPicker
+      runs={runs}
+      value={run}
+      onPick={(id) => {
+        setRun(id);
+        setSel(null);
+      }}
+    />
+  );
   const [tf, setTf] = useState<Timeframe>("1D");
   const [picked, setPicked] = useState<string[]>(DEFAULT_INDICATORS);
   const [flash, setFlash] = useState<string | null>(null);
@@ -145,9 +173,12 @@ export function Today() {
 
   // The stock on screen is the active one: the Chart opens on it
   const currentTicker = current?.ticker;
+  const currentKind = current?.kind;
   useEffect(() => {
-    if (currentTicker) setActive(currentTicker);
-  }, [currentTicker]);
+    // A scan hit brings today's list with it, so the Chart steps through the same stocks
+    const today = currentKind === "act" || currentKind === "push" || currentKind === "c";
+    if (currentTicker) setActive(currentTicker, today ? "hits" : undefined);
+  }, [currentTicker, currentKind]);
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(null), 4000);
@@ -186,8 +217,8 @@ export function Today() {
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector(".palette-back")) return;
       const key = e.key.toLowerCase();
-      if (e.key === "ArrowDown" || e.key === "ArrowRight") step(1);
-      else if (e.key === "ArrowUp" || e.key === "ArrowLeft") step(-1);
+      if (arrowKeys && (e.key === "ArrowDown" || e.key === "ArrowRight")) step(1);
+      else if (arrowKeys && (e.key === "ArrowUp" || e.key === "ArrowLeft")) step(-1);
       else if (key === "w" && current) toggleWatch(current.ticker);
       else if (key === "n" && current) setFocusNote((k) => k + 1);
       else return;
@@ -195,7 +226,7 @@ export function Today() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, current, toggleWatch]);
+  }, [step, current, toggleWatch, arrowKeys]);
 
   const nAct = (d.act ?? []).length;
   const title = titleLine(nAct, d.positions?.cards.length ?? 0, d.watch.length);
@@ -216,6 +247,7 @@ export function Today() {
         </div>
         {d.error && <p className="error">{d.error}</p>}
         <DailyNote />
+        {picker}
         {quiet && !current && <Quiet d={d} onPick={setSel} items={items} />}
         {current && (
           <PhoneCards
@@ -248,13 +280,14 @@ export function Today() {
                 <span>{s.label}</span>
                 <span>{s.items.length || ""}</span>
               </div>
+              {s.id === "act" && picker}
               {s.items.length === 0 ? (
                 <p className="queue-note">{EMPTY[s.id]}</p>
               ) : (
                 <ul className="queue">
                   {s.items.map((i) => (
                     <li key={i.key}>
-                      <QueueRow item={i} active={current?.key === i.key} onPick={() => setSel(i.key)} />
+                      <QueueRow item={i} active={current?.key === i.key} onPick={() => setSel(i.key)} slotNames={slotNames} />
                     </li>
                   ))}
                 </ul>
@@ -317,8 +350,20 @@ const EMPTY: Record<Kind, string> = {
   watch: "Star a stock to watch it here.",
 };
 
-function QueueRow({ item, active, onPick }: { item: Item; active: boolean; onPick: () => void }) {
+function QueueRow({
+  item,
+  active,
+  onPick,
+  slotNames,
+}: {
+  item: Item;
+  active: boolean;
+  onPick: () => void;
+  slotNames: Record<string, string>;
+}) {
   const chg = changeOf(item);
+  const many = Object.keys(slotNames).length > 1;
+  const from = (item.row?.runs ?? []).map((s) => slotNames[s] ?? s).join(" · ");
   const setup = item.row ? (item.kind === "watch" ? sectorOf(item.row) : item.row.scan_label) : item.pos!.setup;
   return (
     <button aria-current={active} className={active ? "active" : ""} onClick={onPick}>
@@ -330,7 +375,10 @@ function QueueRow({ item, active, onPick }: { item: Item; active: boolean; onPic
         <GradeBadge grade={item.row!.grade} />
       )}
       <span className="tk">{item.ticker}</span>
-      <span className="setup">{setup}</span>
+      <span className="setup">
+        {setup}
+        {from && many && <small className="from-runs">{from}</small>}
+      </span>
       {typeof chg === "number" && (
         <span className={`chg num ${chg >= 0 ? "up" : "down"}`}>
           {chg >= 0 ? "+" : ""}
@@ -496,11 +544,11 @@ function Quiet({
         {firstWatch ? (
           <button onClick={() => onPick(firstWatch.key)}>Your watchlist ({d.watch.length})</button>
         ) : (
-          <a className="muted" href={hrefFor("screener", "", { src: "lists" })}>
+          <a className="muted" href={hrefFor("watchlists")}>
             Your watchlists
           </a>
         )}
-        <a href={hrefFor("screener", "", { src: "scans" })}>Every scan hit</a>
+        <a href={hrefFor("screener", "hits")}>Every scan hit</a>
       </div>
     </section>
   );

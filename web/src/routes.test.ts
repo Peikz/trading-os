@@ -14,9 +14,9 @@ describe("routes", () => {
     const chart = parseHash("#/chart?t=WZQW");
     expect(chart.place).toBe("chart");
     expect(chart.params.get("s")).toBe("WZQW");
-    expect(parseHash("#/watchlists")).toMatchObject({ place: "screener" });
-    expect(parseHash("#/watchlists").params.get("src")).toBe("lists");
-    expect(parseHash("#/screener").params.get("src")).toBe("all");
+    expect(parseHash("#/watchlists")).toMatchObject({ place: "watchlists" });
+    expect(parseHash("#/screener")).toMatchObject({ place: "screener", tab: "hits" });
+    expect(parseHash("#/screener/screen")).toMatchObject({ place: "screener", tab: "screen" });
     // Stocks, the place before the Chart and the Screener were split
     expect(parseHash("#/stocks?src=all")).toMatchObject({ place: "screener" });
     const stock = parseHash("#/stocks?src=list:Mine&t=wzqw");
@@ -26,8 +26,8 @@ describe("routes", () => {
     expect(parseHash("#/positions")).toMatchObject({ place: "journal", tab: "positions" });
     expect(parseHash("#/live")).toMatchObject({ place: "journal", tab: "live" });
     expect(parseHash("#/health")).toMatchObject({ place: "lab", tab: "health" });
-    expect(parseHash("#/scans")).toMatchObject({ place: "lab", tab: "runs" });
-    expect(parseHash("#/lab/scans")).toMatchObject({ place: "lab", tab: "runs" });
+    expect(parseHash("#/scans")).toMatchObject({ place: "lab", tab: "scans" });
+    expect(parseHash("#/lab/scans")).toMatchObject({ place: "lab", tab: "scans" });
     expect(parseHash("#/guide")).toMatchObject({ place: "lab", tab: "guide" });
     expect(parseHash("#/research")).toMatchObject({ place: "lab", tab: "research" });
     expect(parseHash("#/market")).toMatchObject({ place: "market", tab: "overview" });
@@ -36,7 +36,7 @@ describe("routes", () => {
 
   it("writes links", () => {
     expect(hrefFor("market", "ibd")).toBe("#/market/ibd");
-    expect(hrefFor("screener", "", { src: "list:My list" })).toBe("#/screener?src=list%3AMy+list");
+    expect(hrefFor("screener", "screen", { sector: "A,B" })).toBe("#/screener/screen?sector=A%2CB");
     expect(stockLink("WZQW")).toBe("#/chart?s=WZQW");
     expect(stockLink("WZQW", "wl:Mine")).toBe("#/chart?s=WZQW&list=wl%3AMine");
   });

@@ -46,14 +46,15 @@ describe("Market", () => {
   it("shows the tiles, the setups at the heat, sectors and industries, and asks for another band", async () => {
     const calls = mockApi({ "GET /api/market/page": page });
     const { rerender } = render(<Market tab="overview" />);
-    expect(await screen.findByText("GREEN")).toBeInTheDocument(); // the tile, without its icon
+    expect(await screen.findByText("Green")).toBeInTheDocument(); // the tile: a dot and the word
+    expect(screen.getByLabelText("Indexes, sectors and themes")).toHaveTextContent(X); // the table under the heatmap
+    expect(screen.getByRole("list", { name: /Sectors by change/ })).toBeInTheDocument();
     rerender(<Market tab="heat" />);
     expect(await screen.findByText("Cool market: scan count 12 (under 20)")).toBeInTheDocument();
     const heat = screen.getByLabelText("Setups at this heat", { selector: "table" });
     expect(heat).toHaveTextContent("held");
     expect(within(heat).getByRole("img", { name: "yes" })).toHaveClass("green"); // ✅ as a green dot
     rerender(<Market tab="sectors" />);
-    expect(screen.getByLabelText("Indexes, sectors and themes")).toHaveTextContent(X);
     expect(screen.getByLabelText("Top 15 industries")).toHaveTextContent("Software");
     rerender(<Market tab="heat" />);
     fireEvent.click(screen.getByText("hot (60+)"));

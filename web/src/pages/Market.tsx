@@ -11,9 +11,12 @@ import { IconText } from "../components/IconText";
 import { plain, stripIcons } from "../plain";
 import { ApiTableView } from "../components/Table";
 import { LAYOUT, T } from "../components/chartTheme";
+import { Treemap, type TreeItem } from "./market/Treemap";
+
+const PERIODS: [string, string, number][] = [["Today", "1D", 3], ["1 week", "1W", 6], ["1 month", "1M", 12], ["3 months", "3M", 20]];
 
 export function Market({ tab = "overview" }: { tab?: string }) {
-  const [p, setP] = useState<Record<string, string>>({});
+  const [p, setP] = useState<Record<string, string>>({ period: "Today" });
   const [data, setData] = useState<MarketPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = JSON.stringify(p);
@@ -38,19 +41,12 @@ export function Market({ tab = "overview" }: { tab?: string }) {
     <div>
       {tab === "overview" && (
         <>
-          <div className="metrics">
+          <div className="tiles-row" aria-label="Market tiles">
             {data.tiles!.map((t) => (
-              <div className="metric" key={t.label}>
-                <span className="muted">{plain(t.label).text}</span>
-                <b className="num">{stripIcons(t.value)}</b>
-                {t.delta && (
-                  <span className="num" style={{ color: deltaColour(t.label, t.delta) }}>
-                    {t.delta}
-                  </span>
-                )}
-              </div>
+              <Tile key={t.label} tile={t} />
             ))}
           </div>
+          {data.sectors ? <Heatmap data={data} onPeriod={(v) => set("period", v)} /> : <p className="muted">No sector data yet: it comes from TradingView, and with each EOD run.</p>}
           <Overview />
         </>
       )}
@@ -90,13 +86,6 @@ export function Market({ tab = "overview" }: { tab?: string }) {
           {data.sectors ? (
             <>
               <div className="row">
-                <div className="pills wrap" role="group" aria-label="Return over">
-                  {data.periods!.map((x) => (
-                    <button key={x} className={data.period === x ? "on" : ""} onClick={() => set("period", x)}>
-                      {x}
-                    </button>
-                  ))}
-                </div>
                 <div className="pills" role="group" aria-label="Show">
                   {data.groups!.map((g) => (
                     <button
@@ -111,8 +100,6 @@ export function Market({ tab = "overview" }: { tab?: string }) {
                   ))}
                 </div>
               </div>
-              <ApiTableView label="Indexes, sectors and themes" table={data.sectors} />
-              <p className="muted">{data.sector_caption}</p>
               <Rotation points={data.rotation!} />
             </>
           ) : (
@@ -153,6 +140,68 @@ export function Market({ tab = "overview" }: { tab?: string }) {
         </>
       )}
     </div>
+  );
+}
+
+const DOTS: Record<string, string> = { "🟢": "green", "🟡": "amber", "🔴": "red" };
+
+/** A market tile: a word as a dot and the word, a number as a number with its move. */
+function Tile({ tile }: { tile: { label: string; value: string; delta: string | null } }) {
+  const first = [...tile.value][0] ?? "";
+  const level = DOTS[first];
+  const text = stripIcons(tile.value);
+  const isNumber = /^[\d,.]+$/.test(text);
+  const word = level ? text[0] + text.slice(1).toLowerCase() : text;
+  return (
+    <div className="mtile">
+      <span className="muted">{plain(tile.label).text}</span>
+      {isNumber ? (
+        <b className="num">{text}</b>
+      ) : (
+        <b className="word">
+          <span className={`dot ${level ?? ""}`} aria-hidden="true" /> {word}
+        </b>
+      )}
+      {tile.delta && (
+        <span className="num" style={{ color: deltaColour(tile.label, tile.delta) }}>
+          {tile.delta}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The sector treemap with its period chips, and the sector table under it. */
+function Heatmap({ data, onPeriod }: { data: MarketPage; onPeriod: (period: string) => void }) {
+  const table = data.sectors!;
+  const col = table.columns.find((c) => c.endsWith(" %")) ?? "";
+  const items: TreeItem[] = table.rows
+    .filter((r) => (data.picked ?? []).includes(String(r.group)))
+    .map((r) => ({
+      key: String(r.ticker),
+      name: String(r.name),
+      ticker: String(r.ticker),
+      group: String(r.group),
+      value: typeof r[col] === "number" ? (r[col] as number) : null,
+    }));
+  const meta = PERIODS.find(([k]) => k === data.period) ?? PERIODS[0];
+  return (
+    <section aria-label="Sector heatmap">
+      <div className="row heat-head">
+        <h3 style={{ margin: 0 }}>Sectors</h3>
+        <div className="seg-line" role="group" aria-label="Change over">
+          {PERIODS.map(([k, label]) => (
+            <button key={k} aria-pressed={data.period === k} onClick={() => onPeriod(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="muted legend">Equal tiles · colour is the change · click a sector to screen its stocks</span>
+      </div>
+      <Treemap items={items} period={meta[1]} scale={meta[2]} />
+      <ApiTableView label="Indexes, sectors and themes" table={table} />
+      <p className="muted">{data.sector_caption}</p>
+    </section>
   );
 }
 

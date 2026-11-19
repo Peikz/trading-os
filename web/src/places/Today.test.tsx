@@ -202,9 +202,9 @@ describe("Today", () => {
     expect(await screen.findByText("Nothing to buy today")).toBeInTheDocument();
     expect(screen.getByText("Nothing to act on · 1 position · 1 on watch")).toBeInTheDocument();
     expect(screen.getByText(/Next scan: the 10:15 check, Wed 04 Nov, 10:10 New York/)).toBeInTheDocument();
-    expect(screen.getByText("Every scan hit").closest("a")).toHaveAttribute("href", "#/screener?src=scans");
+    expect(screen.getByText("Every scan hit").closest("a")).toHaveAttribute("href", "#/screener/hits");
     fireEvent.click(screen.getByRole("button", { name: "See the 3 C setups" }));
-    await waitFor(() => expect(urls()).toContain("/api/today?scope=pushed"));
+    await waitFor(() => expect(urls().some((u) => u.startsWith("/api/today?scope=pushed"))).toBe(true));
     expect(await screen.findByText("C setups · no tested edge")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Look at the C setups" }));
     const plan = await screen.findByLabelText(`${E} plan`);
@@ -255,5 +255,32 @@ describe("Today's helpers", () => {
     expect(pushTickers("")).toEqual([]);
     expect(screenName(`?screen=Mine&t=${A}`)).toBe("Mine");
     expect(screenName(`?t=${A}`)).toBeNull();
+  });
+});
+
+describe("Today, the scan runs of the day", () => {
+  const runs = {
+    session: "2026-11-18",
+    all: { id: "all", label: "All today", count: 2 },
+    runs: [
+      { id: "2026-11-18_am", slot: "am", name: "10:15", ny: "10:17", cph: "16:17", count: 1 },
+      { id: "2026-11-18_mid", slot: "mid", name: "12:00", ny: "12:03", cph: "18:03", count: 1 },
+    ],
+  };
+
+  it("shows a chip per run with its times and hit count, and asks for the run picked", async () => {
+    routes([row(B, "A+", { runs: ["am", "mid"] }), row(A, "A", { runs: ["mid"] })], {
+      "GET /api/today-runs": runs,
+      "GET /api/today?scope=graded&run=2026-11-18_mid": { scope: "graded", rows: [row(A, "A", { runs: ["mid"] })], hidden_c: 0, total: 1, next_scan: NEXT },
+    });
+    render(<Today />);
+    const picker = await screen.findByRole("group", { name: "Scan run" });
+    expect(within(picker).getByRole("button", { name: /All today/ })).toHaveAttribute("aria-pressed", "true");
+    const mid = within(picker).getByRole("button", { name: /12:00.*12:03 NY · 18:03 CPH/ });
+    expect(urls().some((u) => u.includes("run=all"))).toBe(true);
+    expect(await screen.findByText("10:15 · 12:00")).toBeInTheDocument(); // the stock found in both runs
+    fireEvent.click(mid);
+    await waitFor(() => expect(urls().some((u) => u.includes("run=2026-11-18_mid"))).toBe(true));
+    expect(await screen.findByText("1 setup to act on · 1 position · 1 on watch")).toBeInTheDocument();
   });
 });

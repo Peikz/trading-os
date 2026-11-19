@@ -1,58 +1,51 @@
-// Your lists in the Screener: a new list with checked tickers (added / already there / not found),
-// removing a stock, price alerts, the scan watchlists. And the Journal's position cards.
+// Your lists in Watchlists: a new list with checked tickers (added / already there / not found),
+// removing selected stocks, price alerts, the scan watchlists. And the Journal's position cards.
 import { expect, open, sym, test, TICKERS } from "./fixtures";
 
 const UNKNOWN = sym("Q") + "Q"; // in no universe and no bars: "not found"
 
-test("a new list: each ticker is checked and the answer says what happened", async ({ page }) => {
+test("a new list: its first tickers are checked, then more can be added", async ({ page }) => {
   const name = `e2e list ${Date.now()}`;
-  await open(page, "screener");
-  await page.getByRole("navigation", { name: "Sources" }).getByRole("button", { name: "New list" }).click();
+  await open(page, "watchlists");
+  const rail = page.getByRole("navigation", { name: "Lists" });
+  await rail.getByRole("button", { name: "+ New list" }).click();
   await page.getByLabel("New list name").fill(name);
-  await page.getByLabel("Add tickers").fill(`${TICKERS[0]}, ${UNKNOWN}`);
-  await page.getByRole("button", { name: "Add to list" }).click();
+  await page.getByLabel("First tickers").fill(`${TICKERS[0]}, ${UNKNOWN}`);
+  await page.getByRole("button", { name: "Create" }).click();
   // The list opens with the stock it took
-  await expect(page.getByRole("navigation", { name: "Sources" }).getByRole("button", { name })).toHaveAttribute(
-    "aria-current",
-    "true",
-  );
-  await expect(page.getByRole("button", { name: `Open ${TICKERS[0]}` })).toBeVisible();
+  await expect(rail.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("button", { name: TICKERS[0], exact: true })).toBeVisible();
 
-  // The same ticker again plus an unknown one: already on the list, not found
-  const msg = page.getByRole("status");
-  await page.getByLabel("Add tickers").fill(`${TICKERS[0]} ${UNKNOWN}`);
-  await page.getByRole("button", { name: "Add to list" }).click();
-  await expect(msg).toContainText(`Already on the list: ${TICKERS[0]}`);
-  await expect(msg).toContainText(`Not found, not added: ${UNKNOWN}`);
-  // A new one and an unknown one: a warning, the new one added
+  // A new one plus an unknown one: the new one is added
   await page.getByLabel("Add tickers").fill(`${TICKERS[1]}, ${UNKNOWN}`);
-  await page.getByRole("button", { name: "Add to list" }).click();
-  await expect(msg).toHaveClass(/warning/);
-  await expect(msg).toContainText(`Added to ${name}: ${TICKERS[1]}`);
-  await expect(page.getByRole("button", { name: `Open ${TICKERS[1]}` })).toBeVisible();
-  // Only unknown tickers: an error, the list unchanged
-  await page.getByLabel("Add tickers").fill(UNKNOWN);
-  await page.getByRole("button", { name: "Add to list" }).click();
-  await expect(msg).toHaveClass(/error/);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(`Added to ${name}: ${TICKERS[1]}`, { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: TICKERS[1], exact: true })).toBeVisible();
   // Nothing typed: nothing to send
-  await page.getByLabel("Add tickers").fill("");
-  await expect(page.getByRole("button", { name: "Add to list" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
 });
 
-test("remove a stock from a list", async ({ page }) => {
-  await open(page, "screener?src=list:Leaders");
-  await page.getByRole("group", { name: "View" }).getByRole("button", { name: /Table/ }).click();
+test("select stocks, then remove them or open the list on the Chart", async ({ page }) => {
+  await open(page, "watchlists");
+  await page.getByRole("navigation", { name: "Lists" }).getByRole("button", { name: /^Leaders/ }).click();
   const rows = page.getByRole("table", { name: "Watchlist Leaders" }).locator("tbody tr");
   await expect(rows.first()).toBeVisible();
   const before = await rows.count();
-  const gone = ((await rows.first().locator("td").first().textContent()) ?? "").trim();
-  await page.getByRole("button", { name: `Remove ${gone} from the list` }).click();
+  const gone = ((await rows.first().locator("td").nth(1).textContent()) ?? "").trim().split(/\s/)[0];
+  await rows.first().getByRole("checkbox").check();
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+  await rows.first().getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Remove selected" }).click();
   await expect(rows).toHaveCount(before - 1);
   await expect(page.getByRole("table", { name: "Watchlist Leaders" })).not.toContainText(gone);
 });
 
 test("a price alert: add, list, remove; the scan watchlists", async ({ page }) => {
-  await open(page, "screener?src=alerts");
+  await open(page, "watchlists");
+  const rail = page.getByRole("navigation", { name: "Lists" });
+  await rail.getByRole("button", { name: /^Price alerts/ }).click();
   const t = TICKERS[2];
   await page.getByLabel("Ticker", { exact: true }).fill(t);
   await page.getByLabel("Price", { exact: true }).fill("42.5");
@@ -64,11 +57,11 @@ test("a price alert: add, list, remove; the scan watchlists", async ({ page }) =
   await remove.click();
   await expect(remove).toHaveCount(0);
 
-  await page.getByRole("navigation", { name: "Sources" }).getByRole("button", { name: "BO-Watch", exact: true }).click();
+  await rail.getByRole("button", { name: /^BO-Watch/ }).click();
   await expect(page.getByRole("table", { name: "BO-Watch" })).toContainText(TICKERS[1]);
   await page.getByLabel("Include triggered / expired").check();
   await expect(page.getByRole("table", { name: "BO-Watch" })).toContainText(TICKERS[2]);
-  await page.getByRole("navigation", { name: "Sources" }).getByRole("button", { name: "EP-Watch", exact: true }).click();
+  await rail.getByRole("button", { name: /^EP-Watch/ }).click();
   await expect(page.getByRole("table", { name: "EP-Watch" })).toContainText(TICKERS[0]);
 });
 

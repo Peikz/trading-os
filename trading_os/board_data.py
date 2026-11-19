@@ -44,11 +44,17 @@ def exchanges_of(universe_path: str | Path) -> dict[str, str]:
 
 
 def collect(
-    runs, cfg, scan_frames: Callable[[str], dict], exchanges=None, everything: bool = False
+    runs,
+    cfg,
+    scan_frames: Callable[[str], dict],
+    exchanges=None,
+    everything: bool = False,
+    lookup=None,
 ) -> pd.DataFrame:
     """The pushed scans' alert-tier hits of the newest pre-market, 10:15, 12:00 and EOD runs,
     newest first, one row per ticker and scan. `everything`: every scan's hits, all tiers, one
-    row per ticker (its best grade)."""
+    row per ticker (its best grade). `lookup`: the runs to take the exchange and sector from
+    (default `runs`), for a call that passes one run (the board's run picker)."""
     latest = []
     for slot in ("pm", "am", "mid", "eod", "ah"):  # ah: EP-AH (Emil, 27 Oct 2026)
         run = next((r for r in runs if r.slot == slot), None)
@@ -57,7 +63,9 @@ def collect(
     # The exchange per ticker from the newest run with a universe file (intraday runs have none)
     listing: dict = {}
     info = pd.DataFrame()
-    with_universe = next((r for r in runs if r.universe.exists()), None)
+    with_universe = next(
+        (r for r in (runs if lookup is None else lookup) if r.universe.exists()), None
+    )
     if exchanges is not None and with_universe is not None:
         listing = exchanges(str(with_universe.universe))
     if with_universe is not None:
