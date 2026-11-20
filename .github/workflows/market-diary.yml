@@ -19,6 +19,14 @@ on:
         description: "Skip the trading-day guard"
         type: boolean
         default: false
+      from:
+        description: "Backfill from this session (YYYY-MM-DD, with `to`)"
+        type: string
+        default: ""
+      to:
+        description: "Backfill to this session (YYYY-MM-DD, with `from`)"
+        type: string
+        default: ""
 
 concurrency:
   group: data-repo            # every job that writes trading-os-data shares this group
@@ -51,8 +59,13 @@ jobs:
         env:
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           FORCE: ${{ inputs.force && '--force' || '' }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
           RUN_TRIGGER: ${{ inputs.timer && 'timer' || '' }}
-        run: uv run --frozen --no-dev python scripts/market_diary.py --data-dir data-repo $FORCE
+        run: |
+          RANGE=""
+          if [ -n "$FROM" ] || [ -n "$TO" ]; then RANGE="--from $FROM --to $TO"; fi
+          uv run --frozen --no-dev python scripts/market_diary.py --data-dir data-repo $FORCE $RANGE
 
       - name: Commit data
         if: always()
