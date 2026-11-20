@@ -33,6 +33,9 @@ runs:
   - {key: ah, workflow: intraday.yml, name: Intraday, at: "16:50", days: weekdays, inputs: {slot: ah}, enabled: true}
   - {key: ah, workflow: intraday.yml, name: Intraday, at: "16:56", days: weekdays, inputs: {slot: ah}, retry: true, enabled: true}
   - {key: outcomes, workflow: outcomes.yml, name: Outcomes, at: "18:00", days: weekdays, enabled: true}
+  # Market diary (Emil, 20 Nov 2026): the day's market context as data, after Outcomes
+  - {key: diary, workflow: market-diary.yml, name: Market diary, at: "18:20", days: weekdays, enabled: true}
+  - {key: diary, workflow: market-diary.yml, name: Market diary, at: "18:50", days: weekdays, retry: true, enabled: true}
   # Price alerts (Emil, 22 Oct 2026): the session in two runs (a job may run 6 hours at most)
   - {key: alerts, workflow: alerts.yml, name: Price alerts, at: "09:25", days: weekdays, inputs: {until: "12:44"}, enabled: true}
   - {key: alerts, workflow: alerts.yml, name: Price alerts, at: "12:45", days: weekdays, inputs: {until: "16:00"}, enabled: true}
