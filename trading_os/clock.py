@@ -84,6 +84,14 @@ def sessions_after(
     return [s.date() for s in cal.sessions_in_range(start, pd.Timestamp(until))][:count]
 
 
+def sessions_between(schedule: Schedule, first: dt.date, last: dt.date) -> list[dt.date]:
+    """The sessions from `first` to `last`, both inclusive when they are sessions."""
+    cal = _calendar(schedule.calendar)
+    if first > last:
+        return []
+    return [s.date() for s in cal.sessions_in_range(pd.Timestamp(first), pd.Timestamp(last))]
+
+
 def sessions_until(schedule: Schedule, session: dt.date, days: pd.Series) -> pd.Series:
     """Trading sessions from `session` to each date: 0 on the session itself, NaN for a date
     already past or unknown. Used for "earnings in N days"."""

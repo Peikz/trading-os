@@ -197,6 +197,32 @@ class MassiveClient:
             for item in body.get("results") or []
         ]
 
+    def news_window(
+        self, start: str, end: str, ticker: str | None = None, limit: int = 20
+    ) -> list[dict]:
+        """Newest headlines published between two ISO timestamps (one call). `ticker` None:
+        market-wide, no ticker filter. Title, publisher, time, url and the tickers tagged."""
+        params = {
+            "published_utc.gte": start,
+            "published_utc.lte": end,
+            "order": "desc",
+            "sort": "published_utc",
+            "limit": limit,
+        }
+        if ticker:
+            params["ticker"] = ticker
+        body = self._get(NEWS, params)
+        return [
+            {
+                "title": item.get("title", ""),
+                "publisher": (item.get("publisher") or {}).get("name", ""),
+                "published_utc": item.get("published_utc", ""),
+                "url": item.get("article_url", ""),
+                "tickers": list(item.get("tickers") or []),
+            }
+            for item in body.get("results") or []
+        ]
+
     def probe(self, path: str, params: dict | None = None) -> tuple[int, int]:
         """(HTTP status, number of results) for an endpoint; to see what the plan includes."""
         self._limiter.wait()

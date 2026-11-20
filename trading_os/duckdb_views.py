@@ -21,6 +21,7 @@ VIEWS = {
     "breadth_pm": "data/breadth_pm/*/*.parquet",
     "watchlists": "data/watchlists/*/*.parquet",
     "market_light_count": "data/market_light_count/*/*.parquet",
+    "diary": "data/diary/*/*.parquet",
     "manual_candidates": "data/manual/*/candidates.parquet",
 }
 
