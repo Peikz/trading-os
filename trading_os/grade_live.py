@@ -206,6 +206,7 @@ POINT_NAMES = {
     "near_52w_high": "near 52w high",
     "tight_5d": "tight 5d",
     "spy_over_ma200": "SPY > 200-day",
+    "rs_80": "RS 80+",
 }
 
 
@@ -280,6 +281,8 @@ def grade_hits(
             feats.update(extra.loc[ticker].dropna().to_dict())
         if "base_days" in rec:
             feats["sig_base_days"] = rec.get("base_days")
+        if "rs_pct" in rec:  # the scan's own RS percentile (MA-surf's rs_80 point)
+            feats.setdefault("rs_pct", rec.get("rs_pct"))
         adr_pct = rec.get("adr20_pct")
         if rule.get("stop") == "order":  # its own plan: buy-stop at the pivot, its order stop
             entry, stop, basis = sizing.plan(rec, scan, cfg.sizing)

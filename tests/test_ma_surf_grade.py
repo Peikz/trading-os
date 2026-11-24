@@ -1,5 +1,6 @@
-"""MA-surf graded A with SPY over its 200-day, at 0.75 % risk (Emil, 23 Oct 2026). Its own
-plan: buy-stop at the pivot, the scan's order stop, trail the 20-day MA. Synthetic data only."""
+"""MA-surf graded A at 0.75 % risk (Emil, 23 Oct 2026) only with all four points (Emil, 24 Nov
+2026): SPY over its 200-day, revenue growth accelerating, EPS up y/y, RS 80+. Its own plan:
+buy-stop at the pivot, the scan's order stop, trail the 20-day MA. Synthetic data only."""
 
 import copy
 
@@ -14,7 +15,7 @@ from trading_os.sizing import Account
 A = "".join(["S", "R", "F"])
 
 
-def hits():
+def hits(rs: float | None = 90.0):
     return pd.DataFrame(
         [
             {
@@ -26,18 +27,26 @@ def hits():
                 "adr20_usd": 0.8,
                 "adr20_pct": 4.0,
                 "avg_dollar_volume_20d": 3e7,
+                "rs_pct": rs,
             }
         ]
     )
 
 
-def graded(spy_above: float) -> pd.DataFrame:
+def growth(accel: float | None = 5.0, eps: float | None = 20.0) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"revenue_growth_accel": [accel], "eps_yoy_pct": [eps]}, index=pd.Index([A], name="ticker")
+    )
+
+
+def graded(spy_above: float, rs=90.0, accel=5.0, eps=20.0, extra=True) -> pd.DataFrame:
     cfg = load_config()
     market = {"mkt_spy_above_ma200": spy_above}
-    return grade_live.grade_hits(hits(), "ma_surf", cfg, market, pd.DataFrame(), slot="eod")
+    more = growth(accel, eps) if extra else None
+    return grade_live.grade_hits(hits(rs), "ma_surf", cfg, market, pd.DataFrame(), more, slot="eod")
 
 
-def test_a_with_spy_over_its_200_day_on_its_own_plan():
+def test_a_with_all_four_points_on_its_own_plan():
     row = graded(1.0).iloc[0]
     assert row["grade"] == "A" and row["grade_strategy"] == "qm_surf"
     assert row["grade_risk_mult"] == 1.5  # A: 1.5 x the account's 0.5 % = 0.75 %
@@ -50,6 +59,29 @@ def test_a_with_spy_over_its_200_day_on_its_own_plan():
 def test_c_with_spy_under_it():
     row = graded(0.0).iloc[0]
     assert row["grade"] == "C" and row["grade_risk_mult"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        {"rs": 79.0},
+        {"accel": -1.0},
+        {"accel": 0.0},
+        {"eps": -3.0},
+        {"rs": None},
+        {"accel": None},
+        {"extra": False},  # no fundamentals fetched: missing counts as no
+    ],
+)
+def test_c_when_a_fundamentals_point_fails_or_is_missing(kw):
+    row = graded(1.0, **kw).iloc[0]
+    assert row["grade"] == "C" and row["grade_risk_mult"] == 0.0
+
+
+def test_rs_80_is_inclusive_and_the_grade_reads_growth():
+    assert graded(1.0, rs=80.0).iloc[0]["grade"] == "A"
+    cfg = load_config()
+    assert grade_live.uses_growth("ma_surf", cfg.grading)
 
 
 def test_the_plan_is_sized_at_the_pivot_with_the_order_stop():
@@ -67,7 +99,7 @@ def test_the_plan_is_sized_at_the_pivot_with_the_order_stop():
 def test_the_push_names_the_point_the_entry_and_the_trail():
     row = graded(1.0).iloc[0].to_dict()
     text = " ".join(notify.grade_lines(row))
-    assert "🅰 Study A · 1 of 1 quality points" in text
+    assert "🅰 Study A · 4 of 4 quality points" in text
     assert "✅ SPY > 200-day" in text
     assert notify.ENTRY_TEXT["pivot_1000"] in text
     assert "trail the 20-day MA" in text and "sessions" not in text
