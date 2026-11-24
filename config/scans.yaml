@@ -473,6 +473,7 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
     near_52w_high: {feature: d_from_52w_high, above: -20}
     tight_5d: {feature: d_tight5_adr, below: 3}
     spy_over_ma200: {feature: mkt_spy_above_ma200, equals: 1}
+    rs_80: {feature: rs_pct, min: 80}       # RS percentile 1-99 (21/63/126-day returns)
   quality:                                  # points at least -> grade; the plan per live scan
     ep:
       parts: [earnings, sideways_1_2m, market_cool_lt45, revenue_accel, eps_yoy_pos, near_52w_high]
@@ -534,12 +535,15 @@ grading:                                    # Study grades (Emil, 20 Oct 2026; S
       stop: signal_low                      # decides A or C. Stop under the signal day's low
       exit: hold_21                         # (at most 2 ADR), out after 21 sessions
     qm_surf:                                # Qullamaggie's MA-surf (Emil, 23 Oct 2026: A at
-      parts: [spy_over_ma200]               # 0.75 % risk): A only with SPY over its 200-day at
-      grades: [[1, "A"]]                    # the signal close. Added to the live package: 14.4 ->
-      live_scans: [ma_surf]                 # 18.1 %/yr on 2022-26, 26.2 -> 32.2 % on 2016-21;
-      entries: {ma_surf: pivot_1000}        # with SPY under it, lower in both (data repo
-      stop: order                           # docs/research/2026-10-23-heat-grades.md). Its own
-      exit: trail_ma20                      # plan: buy-stop at the pivot, order stop, MA 20 trail
+      parts: [spy_over_ma200, revenue_accel, eps_yoy_pos, rs_80]  # 0.75 % risk). A needs all
+      grades: [[4, "A"]]                    # four (Emil, 24 Nov 2026): SPY over its 200-day at
+      live_scans: [ma_surf]                 # the signal close, revenue growth accelerating, EPS
+      entries: {ma_surf: pivot_1000}        # up y/y, RS 80+. The 23 Oct study trades already
+      stop: order                           # had the last three (rule picked on 2016-21);
+      exit: trail_ma20                      # without them MA-surf A lost money a trade and cut
+                                            # the package's return in both periods. Missing
+                                            # fundamentals count as no. Its own plan: buy-stop
+                                            # at the pivot, order stop, MA 20 trail.
   costs:                                    # Saxo lowest tier, USD account; cost in R = % / stop %
     commission_pct: 0.08                    # per order
     slip_by_dvol: [[50000000, 0.05], [10000000, 0.10], [2000000, 0.25], [0, 0.50]]
