@@ -188,3 +188,8 @@ main.place.notebook { max-width: none; padding: var(--s2) var(--s2) 0; }
   .nb.no-side { grid-template-columns: minmax(0, 1fr); }
   .nb-right { display: none; }
 }
+
+/* "Note on a stock" in the Stocks section */
+.nb-stock-start { padding: 4px 8px 6px; }
+.nb-stock-start input { width: 100%; box-sizing: border-box; }
+.nb-stock-hits { margin-top: 4px; }
