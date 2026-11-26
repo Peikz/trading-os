@@ -1,6 +1,8 @@
 // The notebook's left side: search (filters as you type), Today, then Daily notes by month,
 // Trades (open and closed, filterable), Stocks, Pages and Tags with their counts, and "New page".
 // Every row is a link to its page (`#/journal/notes?p=...`), so the browser's back button works.
+// "Note on a stock" opens any stock's page from its ticker or name, so a stock can get its first
+// note right here (before 26 Nov 2026 it needed a note written somewhere else first).
 import { type ReactNode, useMemo, useState } from "react";
 import type { NbDaily, NbIndex, NbTrade } from "../api";
 import { GradeBadge } from "../components/Card";
@@ -8,6 +10,48 @@ import { signed } from "../format";
 import { Icon } from "../ui/Icon";
 import { dayTitle, type Entry, monthOf, monthTitle, search, snippet, tagCounts } from "./model";
 import { noteHref } from "./env";
+import { matchSymbols, useSymbols } from "../shell/symbols";
+
+const TICKER = /^\$?[A-Za-z][A-Za-z0-9.-]{0,9}$/;
+
+/** Type a ticker or a company, Enter or a click opens that stock's page to write a note. */
+function StockStart() {
+  const symbols = useSymbols();
+  const [q, setQ] = useState("");
+  const hits = useMemo(() => (symbols && q.trim() ? matchSymbols(symbols, q, 6) : []), [symbols, q]);
+  const open = (ticker: string) => {
+    window.location.hash = noteHref(`stock:${ticker.toUpperCase()}`);
+    setQ("");
+  };
+  return (
+    <div className="nb-stock-start">
+      <input
+        type="text"
+        aria-label="Note on a stock"
+        placeholder="Note on a stock: ticker or name"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const text = q.trim();
+          if (hits.length) open(hits[0].ticker);
+          else if (TICKER.test(text)) open(text.replace(/^\$/, ""));
+        }}
+      />
+      {hits.length > 0 && (
+        <div className="nb-stock-hits" aria-label="Stocks to write a note on">
+          {hits.map((h) => (
+            <Row key={h.ticker} href={noteHref(`stock:${h.ticker}`)} title={h.name}>
+              <b className="nb-tk">${h.ticker}</b>
+              <span className="nb-sub nb-snip">{h.name}</span>
+            </Row>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function remembered(key: string, fallback: boolean): boolean {
   try {
@@ -101,6 +145,12 @@ export function Sidebar({
   const [filtering, setFiltering] = useState(false);
   const tags = useMemo(() => tagCounts(entries), [entries]);
   const found = useMemo(() => (query.trim() ? search(entries, query) : []), [entries, query]);
+  // A ticker typed in the search also offers that stock's page (to write its first note)
+  const symbols = useSymbols();
+  const stockHits = useMemo(
+    () => (symbols && TICKER.test(query.trim()) ? matchSymbols(symbols, query, 20).filter((h) => h.ticker === query.trim().replace(/^\$/, "").toUpperCase()) : []),
+    [symbols, query],
+  );
   const months = useMemo(() => {
     const by = new Map<string, NbDaily[]>();
     for (const d of index.daily) by.set(monthOf(d.date), [...(by.get(monthOf(d.date)) ?? []), d]);
@@ -140,7 +190,15 @@ export function Sidebar({
 
       {query.trim() ? (
         <div className="nb-results" aria-label="Search results">
-          {found.length === 0 && <p className="muted nb-empty">No note matches “{query.trim()}”.</p>}
+          {stockHits.map((h) => (
+            <Row key={`stock-${h.ticker}`} href={noteHref(`stock:${h.ticker}`)} active={selected === `stock:${h.ticker}`}>
+              <span className="nb-col">
+                <span className="nb-title">Note on ${h.ticker}</span>
+                <span className="nb-sub nb-snip">{h.name}</span>
+              </span>
+            </Row>
+          ))}
+          {found.length === 0 && stockHits.length === 0 && <p className="muted nb-empty">No note matches “{query.trim()}”.</p>}
           {found.slice(0, 60).map((e, i) => (
             <Row key={`${e.ref}-${i}`} href={noteHref(e.ref)} active={selected === e.ref}>
               <span className="nb-col">
@@ -230,7 +288,8 @@ export function Sidebar({
           </Section>
 
           <Section id="stocks" title="Stocks" count={index.stocks.length}>
-            {index.stocks.length === 0 && <p className="muted nb-empty">A stock gets a page when you write a note on it.</p>}
+            <StockStart />
+            {index.stocks.length === 0 && <p className="muted nb-empty">No stock notes yet. Type a ticker above to write the first.</p>}
             {index.stocks.map((s) => (
               <Row key={s.ticker} href={noteHref(`stock:${s.ticker}`)} active={selected === `stock:${s.ticker}`}>
                 <b className="nb-tk">${s.ticker}</b>
